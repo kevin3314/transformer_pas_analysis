@@ -1,4 +1,3 @@
-import os
 import argparse
 import torch
 from tqdm import tqdm
@@ -6,10 +5,12 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from train import get_instance
+from parse_config import ConfigParser
 
 
 def main(config, resume):
+    logger = config.get_logger('test')
+
     # setup data_loader instances
     data_loader = getattr(module_data, config['data_loader']['type'])(
         config['data_loader']['args']['data_dir'],
@@ -21,14 +22,14 @@ def main(config, resume):
     )
 
     # build model architecture
-    model = get_instance(module_arch, 'arch', config)
-    model.summary()
+    model = config.initialize('arch', module_arch)
+    logger.info(model)
 
     # get function handles of loss and metrics
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    # load state dict
+    logger.info('Loading checkpoint: {} ...'.format(resume))
     checkpoint = torch.load(resume)
     state_dict = checkpoint['state_dict']
     if config['n_gpu'] > 1:
@@ -47,6 +48,7 @@ def main(config, resume):
         for i, (data, target) in enumerate(tqdm(data_loader)):
             data, target = data.to(device), target.to(device)
             output = model(data)
+
             #
             # save sample images, or do something with output here
             #
@@ -60,8 +62,10 @@ def main(config, resume):
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}
-    log.update({met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)})
-    print(log)
+    log.update({
+        met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
+    })
+    logger.info(log)
 
 
 if __name__ == '__main__':
@@ -73,10 +77,5 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: all)')
 
     args = parser.parse_args()
-
-    if args.resume:
-        config = torch.load(args.resume)['config']
-    if args.device:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-
+    config = ConfigParser(args)
     main(config, args.resume)
