@@ -1,19 +1,22 @@
+from typing import NamedTuple, List, Tuple, Dict, Optional
+
+
 class InputFeatures:
     """A single set of features of data."""
 
     def __init__(self,
-                 unique_id,
-                 example_index,
-                 tokens,
-                 orig_to_tok_index,
-                 tok_to_orig_index,
-                 input_ids,
-                 input_mask,
-                 segment_ids,
+                 unique_id: int,
+                 example_index: int,
+                 tokens: List[str],
+                 orig_to_tok_index: List[int],
+                 tok_to_orig_index: List[int],
+                 input_ids: List[int],
+                 input_mask: List[int],
+                 segment_ids: List[int],
                  heads=None,
-                 arguments_set=None,
-                 ng_arg_ids_set=None,
-                 token_tag_indices=None,
+                 arguments_set: List[List[int]] = None,
+                 ng_arg_ids_set: List[List[int]] = None,
+                 token_tag_indices: dict = None,
                  spans=None,
                  span_labels=None,
                  is_mention_labels=None,
