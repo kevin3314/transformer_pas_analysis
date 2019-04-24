@@ -8,6 +8,9 @@ ipython = "*"
 
 [packages]
 torch = "*"
+numpy = "*"
+tqdm = "*"
+torchvision = "*"
 
 [requires]
 python_version = "3.6"
