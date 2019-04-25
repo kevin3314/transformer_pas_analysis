@@ -50,7 +50,7 @@ class PASDataset(Dataset):
         self.features = self._convert_examples_to_features(pas_examples,
                                                            tokenizer,
                                                            max_seq_length=128,
-                                                           vocab_size=len(tokenizer.vocab),
+                                                           vocab_size=len(tokenizer.vocab) + 1,  # なぜ+1？bert_configでは32006
                                                            is_training=is_training,
                                                            pas_analysis=True,
                                                            num_case=4,
@@ -63,10 +63,12 @@ class PASDataset(Dataset):
 
     def __getitem__(self, idx):
         feature = self.features[idx]
-        input_ids = np.array(feature.input_ids)
-        input_mask = np.array(feature.input_mask)
-        segment_ids = np.array(feature.segment_ids)
-        return input_ids, input_mask, segment_ids
+        input_ids = np.array(feature.input_ids)            # (seq)
+        input_mask = np.array(feature.input_mask)          # (seq)
+        segment_ids = np.array(feature.segment_ids)        # (seq)
+        arguments_set = np.array(feature.arguments_set)    # (seq, case)
+        ng_arg_ids_set = np.array(feature.ng_arg_ids_set)  # (seq, seq)
+        return input_ids, input_mask, segment_ids, arguments_set, ng_arg_ids_set
 
     @staticmethod
     def _read_pas_examples(input_file: str, is_training: bool, num_case: int, cases: List[str], coreference: bool):

@@ -8,6 +8,8 @@ import model.model as module_arch
 from parse_config import ConfigParser
 from trainer import Trainer
 
+from model.model import BertPASAnalysisModel
+
 
 def main(config):
     logger = config.get_logger('train')
@@ -17,7 +19,10 @@ def main(config):
     valid_data_loader = data_loader.split_validation()
 
     # build model architecture, then print to console
-    model = config.initialize('arch', module_arch)
+    # model = config.initialize('arch', module_arch)
+    model = BertPASAnalysisModel.from_pretrained('/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+                                                 num_case=4 + 1, parsing_algorithm='zhang')
+    model.expand_vocab(num_expand_vocab=5)  # same as that in dataset.py
     logger.info(model)
 
     # get function handles of loss and metrics

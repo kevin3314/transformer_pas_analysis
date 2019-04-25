@@ -10,5 +10,5 @@ class ConlluDataLoader(BaseDataLoader):
         #     transforms.Normalize((0.1307,), (0.3081,))
         # ])
         self.data_dir = data_dir
-        self.dataset = PASDataset(self.data_dir, training, num_case=3, cases=['ガ', 'ヲ', 'ニ', 'ガ２'], coreference=True)
+        self.dataset = PASDataset(self.data_dir, training, num_case=4, cases=['ガ', 'ヲ', 'ニ', 'ガ２'], coreference=True)
         super(ConlluDataLoader, self).__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)

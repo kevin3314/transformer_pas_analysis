@@ -1,22 +1,99 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import CrossEntropyLoss
+from pytorch_pretrained_bert.modeling import BertModel, BertPreTrainedModel
+
 from base import BaseModel
 
 
-class BertPASModel(BaseModel):
-    def __init__(self, num_classes=10):
-        super(BertPASModel, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
-        self.fc2 = nn.Linear(50, num_classes)
+class BertPASAnalysisModel(BertPreTrainedModel, BaseModel):
+    def __init__(self, config, parsing_algorithm="zhang", num_case=1, num_topk_heads=70,
+                 arc_representation_dim=400, tag_representation_dim=400):
+        super(BertPASAnalysisModel, self).__init__(config)
+        self.bert = BertModel(config)
+        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 320)
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+        self.num_case = num_case
+        self.num_topk_heads = num_topk_heads
+        self.parsing_algorithm = parsing_algorithm
+
+        # Deep Biaffine [Dozart+ 17]
+        if self.parsing_algorithm == "biaffine":
+            self.head_arc_linear = nn.Linear(config.hidden_size, arc_representation_dim)
+            self.child_arc_linear = nn.Linear(config.hidden_size, arc_representation_dim)
+
+            self.arc_W = nn.Parameter(torch.tensor(arc_representation_dim, arc_representation_dim))
+            self.arc_b = nn.Linear(arc_representation_dim, 1, bias=False)
+
+        # head selection [Zhang+ 16]
+        elif self.parsing_algorithm == "zhang":
+            self.W_a = nn.Linear(config.hidden_size, config.hidden_size)
+            self.U_a = nn.Linear(config.hidden_size, config.hidden_size)
+            self.v_a = nn.Linear(config.hidden_size, num_case, bias=False)
+
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids, attention_mask, heads=None, arguments_set=None, ng_arg_ids_set=None,
+                token_tags=None):
+        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+
+        g_logits = torch.Tensor()
+        if self.parsing_algorithm == "biaffine":
+            h_i = torch.relu(self.child_arc_linear(sequence_output))
+            h_j = torch.relu(self.head_arc_linear(sequence_output))
+
+            inter = torch.matmul(h_j, self.arc_W)
+            g_logits = torch.matmul(inter, h_i.transpose(1, 2))
+            bias = self.arc_b(h_j).squeeze(2).unsqueeze(1)  # (b, 1, seq)
+            g_logits = g_logits + bias  # (b, seq, seq)
+
+        elif self.parsing_algorithm == "zhang":
+            h_i = self.W_a(sequence_output)  # (b, seq, hid)
+            h_j = self.U_a(sequence_output)  # (b, seq, hid)
+            g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2)))  # (b, seq, seq)
+
+        # (b, seq, seq, case) -> (b, seq, case, seq)
+        g_logits = g_logits.transpose(2, 3).contiguous()
+
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+        ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)
+        # (b, seq, 1, seq)
+        ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        ng_arg_ids_mask = ng_arg_ids_mask * -10000.0
+
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+
+        g_logits += extended_attention_mask
+
+        g_logits += ng_arg_ids_mask
+
+        ret_dict = {}
+        # training
+        if arguments_set is not None:
+            sequence_length = input_ids.size(1)
+
+            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss = loss_fct(g_logits.view(-1, sequence_length), arguments_set.view(-1))
+            return loss
+        # testing
+        else:
+            _, arguments_set = torch.max(g_logits, dim=3)
+            ret_dict["arguments_set"] = arguments_set
+
+            return ret_dict
+
+    def expand_vocab(self, num_expand_vocab):
+        """Add special tokens to vocab."""
+
+        bert_word_embeddings = self.bert.embeddings.word_embeddings
+
+        old_word_embeddings_numpy = bert_word_embeddings.weight.detach().numpy()
+        vocab_size = bert_word_embeddings.weight.shape[0]
+        new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
+        new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
+        new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
+        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        self.bert.embeddings.word_embeddings = new_word_embeddings
