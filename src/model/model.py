@@ -2,16 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
-from pytorch_pretrained_bert.modeling import BertModel, BertPreTrainedModel
+from pytorch_pretrained_bert.modeling import BertModel
 
 from base import BaseModel
 
 
-class BertPASAnalysisModel(BertPreTrainedModel, BaseModel):
-    def __init__(self, config, parsing_algorithm="zhang", num_case=1, num_topk_heads=70,
-                 arc_representation_dim=400, tag_representation_dim=400):
-        super(BertPASAnalysisModel, self).__init__(config)
-        self.bert = BertModel(config)
+class BertPASAnalysisModel(BaseModel):
+    def __init__(self,
+                 bert_model: BertModel,
+                 parsing_algorithm: str,
+                 num_case: int,
+                 num_topk_heads: int,
+                 arc_representation_dim: int) -> None:
+        super(BertPASAnalysisModel, self).__init__()
+
+        self.bert = BertModel.from_pretrained(bert_model)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -19,21 +24,20 @@ class BertPASAnalysisModel(BertPreTrainedModel, BaseModel):
         self.num_topk_heads = num_topk_heads
         self.parsing_algorithm = parsing_algorithm
 
+        bert_hidden_size = self.bert.config.hidden_size
         # Deep Biaffine [Dozart+ 17]
         if self.parsing_algorithm == "biaffine":
-            self.head_arc_linear = nn.Linear(config.hidden_size, arc_representation_dim)
-            self.child_arc_linear = nn.Linear(config.hidden_size, arc_representation_dim)
+            self.head_arc_linear = nn.Linear(bert_hidden_size, arc_representation_dim)
+            self.child_arc_linear = nn.Linear(bert_hidden_size, arc_representation_dim)
 
-            self.arc_W = nn.Parameter(torch.tensor(arc_representation_dim, arc_representation_dim))
+            self.arc_W = nn.Parameter(torch.randn((arc_representation_dim, arc_representation_dim), requires_grad=True))
             self.arc_b = nn.Linear(arc_representation_dim, 1, bias=False)
 
         # head selection [Zhang+ 16]
         elif self.parsing_algorithm == "zhang":
-            self.W_a = nn.Linear(config.hidden_size, config.hidden_size)
-            self.U_a = nn.Linear(config.hidden_size, config.hidden_size)
-            self.v_a = nn.Linear(config.hidden_size, num_case, bias=False)
-
-        self.apply(self.init_bert_weights)
+            self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size)
+            self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size)
+            self.v_a = nn.Linear(bert_hidden_size, num_case, bias=False)
 
     def forward(self, input_ids, token_type_ids, attention_mask, heads=None, arguments_set=None, ng_arg_ids_set=None,
                 token_tags=None):
@@ -61,10 +65,10 @@ class BertPASAnalysisModel(BertPreTrainedModel, BaseModel):
         ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)
         # (b, seq, 1, seq)
         ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        ng_arg_ids_mask = ng_arg_ids_mask * -10000.0
+        ng_arg_ids_mask = ng_arg_ids_mask * -1024.0
 
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = (1.0 - extended_attention_mask) * -1024.0
 
         g_logits += extended_attention_mask
 
