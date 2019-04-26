@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_pretrained_bert.modeling import BertConfig
 
 from data_loader.input_features import InputFeatures
 
@@ -43,17 +44,24 @@ class PasExample:
 
 
 class PASDataset(Dataset):
-    def __init__(self, path: str, num_case: int, cases: List[str], coreference: bool, training: bool):
+    def __init__(self,
+                 path: str,
+                 num_case: int,
+                 cases: List[str],
+                 special_tokens: List[str],
+                 coreference: bool,
+                 training: bool,
+                 bert_model: str) -> None:
         pas_examples = self._read_pas_examples(path, training, num_case, cases, coreference)
-        tokenizer = BertTokenizer.from_pretrained('/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE', do_lower_case=False)
-        special_tokens = ['著者', '読者', '不特定:人', 'NULL', 'NA']
+        tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
+        bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
         self.features = self._convert_examples_to_features(pas_examples,
                                                            tokenizer,
                                                            max_seq_length=128,
-                                                           vocab_size=len(tokenizer.vocab) + 1,  # vocab.txtの中に空行が2行あるためtokenizer.vocabではuniqされて語彙数が一つ減っている
+                                                           vocab_size=bert_config.vocab_size,
                                                            is_training=training,
                                                            pas_analysis=True,
-                                                           num_case=4,
+                                                           num_case=num_case,
                                                            num_expand_vocab=len(special_tokens),
                                                            special_tokens=special_tokens,
                                                            coreference=coreference)
