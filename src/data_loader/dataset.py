@@ -43,15 +43,15 @@ class PasExample:
 
 
 class PASDataset(Dataset):
-    def __init__(self, path: str, is_training: bool, num_case: int, cases: List[str], coreference=False):
-        pas_examples = self._read_pas_examples(path, is_training, num_case, cases, coreference)
+    def __init__(self, path: str, num_case: int, cases: List[str], coreference: bool, training: bool):
+        pas_examples = self._read_pas_examples(path, training, num_case, cases, coreference)
         tokenizer = BertTokenizer.from_pretrained('/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE', do_lower_case=False)
         special_tokens = ['著者', '読者', '不特定:人', 'NULL', 'NA']
         self.features = self._convert_examples_to_features(pas_examples,
                                                            tokenizer,
                                                            max_seq_length=128,
                                                            vocab_size=len(tokenizer.vocab) + 1,  # vocab.txtの中に空行が2行あるためtokenizer.vocabではuniqされて語彙数が一つ減っている
-                                                           is_training=is_training,
+                                                           is_training=training,
                                                            pas_analysis=True,
                                                            num_case=4,
                                                            num_expand_vocab=len(special_tokens),

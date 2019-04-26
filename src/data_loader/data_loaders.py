@@ -1,14 +1,7 @@
-# from torchvision import datasets, transforms
 from base import BaseDataLoader
 from data_loader.dataset import PASDataset
 
 
 class ConlluDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1, training=True):
-        # trsfm = transforms.Compose([
-        #     transforms.ToTensor(),
-        #     transforms.Normalize((0.1307,), (0.3081,))
-        # ])
-        self.data_dir = data_dir
-        self.dataset = PASDataset(self.data_dir, training, num_case=4, cases=['ガ', 'ヲ', 'ニ', 'ガ２'], coreference=True)
-        super(ConlluDataLoader, self).__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
+    def __init__(self, dataset: PASDataset, batch_size: int, shuffle=True, validation_split=0.0, num_workers=1):
+        super(ConlluDataLoader, self).__init__(dataset, batch_size, shuffle, validation_split, num_workers)
