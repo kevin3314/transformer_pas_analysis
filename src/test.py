@@ -41,27 +41,30 @@ def main(config, resume):
     model = model.to(device)
     model.eval()
 
-    total_loss = 0.0
+    # total_loss = 0.0
     total_metrics = torch.zeros(len(metric_fns))
 
     with torch.no_grad():
-        for i, (data, target) in enumerate(tqdm(data_loader)):
-            data, target = data.to(device), target.to(device)
-            output = model(data)
+        for batch_idx, (input_ids, input_mask, segment_ids, arguments_set, ng_arg_ids_set) in enumerate(data_loader):
+            input_ids = input_ids.to(device)  # (b, seq)
+            input_mask = input_mask.to(device)  # (b, seq)
+            segment_ids = segment_ids.to(device)  # (b, seq)
+            arguments_set = arguments_set.to(device)  # (b, seq, case)
+            ng_arg_ids_set = ng_arg_ids_set.to(device)  # (b, seq, seq)
 
-            #
-            # save sample images, or do something with output here
-            #
+            ret_dict = model(input_ids, input_mask, segment_ids, ng_arg_ids_set=ng_arg_ids_set)
+            arguments_set = ret_dict["arguments_set"][i].detach().cpu().tolist()
 
             # computing loss, metrics on test set
-            loss = loss_fn(output, target)
-            batch_size = data.shape[0]
-            total_loss += loss.item() * batch_size
+            # loss = loss_fn(output, target)
+            batch_size = input_ids.size(0)
+            # total_loss += loss.item() * batch_size
             for i, metric in enumerate(metric_fns):
-                total_metrics[i] += metric(output, target) * batch_size
+                total_metrics[i] += metric(ret_dict) * batch_size
 
     n_samples = len(data_loader.sampler)
-    log = {'loss': total_loss / n_samples}
+    # log = {'loss': total_loss / n_samples}
+    log = {}
     log.update({
         met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
     })

@@ -50,7 +50,7 @@ class PASDataset(Dataset):
         self.features = self._convert_examples_to_features(pas_examples,
                                                            tokenizer,
                                                            max_seq_length=128,
-                                                           vocab_size=len(tokenizer.vocab) + 1,  # なぜ+1？bert_configでは32006
+                                                           vocab_size=len(tokenizer.vocab) + 1,  # vocab.txtの中に空行が2行あるためtokenizer.vocabではuniqされて語彙数が一つ減っている
                                                            is_training=is_training,
                                                            pas_analysis=True,
                                                            num_case=4,

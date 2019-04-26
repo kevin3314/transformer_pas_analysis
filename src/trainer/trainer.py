@@ -43,7 +43,7 @@ class Trainer(BaseTrainer):
         self.model.train()
 
         total_loss = 0
-        total_metrics = np.zeros(len(self.metrics))
+        # total_metrics = np.zeros(len(self.metrics))
         for batch_idx, (input_ids, input_mask, segment_ids, arguments_set, ng_arg_ids_set) in enumerate(self.data_loader):
             input_ids = input_ids.to(self.device)            # (b, seq)
             input_mask = input_mask.to(self.device)          # (b, seq)
@@ -53,14 +53,15 @@ class Trainer(BaseTrainer):
 
             self.optimizer.zero_grad()
             output = self.model(input_ids, input_mask, segment_ids, arguments_set=arguments_set, ng_arg_ids_set=ng_arg_ids_set)
-            loss = self.loss(output, input_ids)
+            # loss = self.loss(output, input_ids)
+            loss = output
             loss.backward()
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
             self.writer.add_scalar('loss', loss.item())
             total_loss += loss.item()
-            total_metrics += self._eval_metrics(output, target)
+            # total_metrics += self._eval_metrics(output, target)
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Loss: {:.6f}'.format(
@@ -73,7 +74,7 @@ class Trainer(BaseTrainer):
 
         log = {
             'loss': total_loss / len(self.data_loader),
-            'metrics': (total_metrics / len(self.data_loader)).tolist()
+            # 'metrics': (total_metrics / len(self.data_loader)).tolist()
         }
 
         if self.do_validation:
@@ -93,22 +94,25 @@ class Trainer(BaseTrainer):
             The validation metrics in log must have the key 'val_metrics'.
         """
         self.model.eval()
-        total_val_loss = 0
+        # total_val_loss = 0
         total_val_metrics = np.zeros(len(self.metrics))
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, segment_ids) in enumerate(self.data_loader):
+            for batch_idx, (input_ids, input_mask, segment_ids, ng_arg_ids_set) in enumerate(
+                    self.valid_data_loader):
                 input_ids = input_ids.to(self.device)  # (b, seq)
                 input_mask = input_mask.to(self.device)  # (b, seq)
                 segment_ids = segment_ids.to(self.device)  # (b, seq)
+                ng_arg_ids_set = ng_arg_ids_set.to(self.device)  # (b, seq, seq)
+                #
+                # ret_dict = self.model(input_ids, input_mask, segment_ids, ng_arg_ids_set=ng_arg_ids_set)
+                # arguments_set = ret_dict["arguments_set"][i].detach().cpu().tolist()
 
-                self.optimizer.zero_grad()
-                output = self.model(input_ids, input_mask, segment_ids)
-                loss = self.loss(output, input_ids)
+                # loss = self.loss(output, input_ids)
 
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                self.writer.add_scalar('loss', loss.item())
-                total_val_loss += loss.item()
-                total_val_metrics += self._eval_metrics(output, target)
+                # self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                # self.writer.add_scalar('loss', loss.item())
+                # total_val_loss += loss.item()
+                # total_val_metrics += self._eval_metrics(output, target)
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
@@ -116,6 +120,6 @@ class Trainer(BaseTrainer):
             self.writer.add_histogram(name, p, bins='auto')
 
         return {
-            'val_loss': total_val_loss / len(self.valid_data_loader),
+            # 'val_loss': total_val_loss / len(self.valid_data_loader),
             'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist()
         }
