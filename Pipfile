@@ -7,7 +7,7 @@ verify_ssl = true
 ipython = "*"
 
 [packages]
-torch = "*"
+torch = "==1.0.1.post2"
 numpy = "*"
 tqdm = "*"
 torchvision = "*"
