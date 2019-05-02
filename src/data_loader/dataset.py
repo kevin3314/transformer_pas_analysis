@@ -60,7 +60,6 @@ class PASDataset(Dataset):
                                                            max_seq_length=max_seq_length,
                                                            vocab_size=bert_config.vocab_size,
                                                            is_training=training,
-                                                           pas_analysis=True,
                                                            num_case=len(cases),
                                                            num_expand_vocab=len(special_tokens),
                                                            special_tokens=special_tokens,
@@ -168,10 +167,8 @@ class PASDataset(Dataset):
         return examples
 
     @staticmethod
-    def _convert_examples_to_features(examples, tokenizer, max_seq_length, vocab_size,
-                                     is_training, pas_analysis=False, word_segmentation=False,
-                                     use_gold_segmentation_in_test=False,
-                                     num_case=None, num_expand_vocab=1, special_tokens=None, coreference=False):
+    def _convert_examples_to_features(examples, tokenizer, max_seq_length, vocab_size, is_training,
+                                      num_case=None, num_expand_vocab=1, special_tokens=None, coreference=False):
         """Loads a data file into a list of `InputBatch`s."""
 
         unique_id = 1000000000
@@ -187,92 +184,59 @@ class PASDataset(Dataset):
 
             tokens = []
             segment_ids = []
-            heads = []
             arguments_set = []
             ng_arg_ids_set = []
             token_tag_indices = defaultdict(list)
 
             all_tokens, tok_to_orig_index, orig_to_tok_index = PASDataset._get_tokenized_tokens(example.words, tokenizer)
 
-            ## CLS
+            # CLS
             tokens.append("[CLS]")
             segment_ids.append(0)
-            if pas_analysis is True:
-                arguments_set.append([-1 for _ in range(num_case_w_coreference)])
-                ng_arg_ids_set.append([])
-            else:
-                heads.append(-1)
-            if word_segmentation is True or use_gold_segmentation_in_test is True:
-                for namespace in example.token_tag_indices:
-                    token_tag_indices[namespace].append(-1)
-            ##
+            arguments_set.append([-1] * num_case_w_coreference)
+            ng_arg_ids_set.append([])
 
             for j, token in enumerate(all_tokens):
                 tokens.append(token)
-                if word_segmentation is True or use_gold_segmentation_in_test is True:
-                    for namespace in example.token_tag_indices:
-                        token_tag_indices[namespace].append(example.token_tag_indices[namespace][tok_to_orig_index[j]])
 
-                if pas_analysis is True:
-                    arguments = []
-                    if is_training is False or token.startswith("##") is True:
-                        arguments_set.append([-1 for _ in range(num_case_w_coreference)])
-                    else:
-                        for argument_index in example.arguments_set[tok_to_orig_index[j]]:
-                            # -1 or normal
-                            if isinstance(argument_index, int) or argument_index.isdigit() is True:
-                                # normal
-                                if isinstance(argument_index, int) is False:
-                                    argument_index = int(argument_index)
-                                    argument_index = orig_to_tok_index[argument_index - 1] + 1
-                                else:
-                                    argument_index = -1
-                            else:
-                                if "%C" in argument_index:
-                                    argument_index = -1
-                                # special token
-                                else:
-                                    argument_index = max_seq_length - num_expand_vocab + special_tokens.index(
-                                        argument_index)
-                            arguments.append(argument_index)
-
-                        arguments_set.append(arguments)
-
-                    # ng_arg_ids
-                    if token.startswith("##") is True:
-                        ng_arg_ids_set.append([])
-                    else:
-                        ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] + 1 for ng_arg_id in
-                                               example.ng_arg_ids_set[tok_to_orig_index[j]]])
-                # parsing
+                arguments = []
+                if is_training is False or token.startswith("##"):
+                    arguments_set.append([-1] * num_case_w_coreference)
                 else:
-                    if is_training is False:
-                        head_id = -1
-                    else:
-                        head = example.heads[tok_to_orig_index[j]]
-                        # ROOT
-                        if head == 0:
-                            head_id = max_seq_length - 1
-                        elif token.startswith("##") is True or head == -1:
-                            head_id = -1
+                    for argument_index in example.arguments_set[tok_to_orig_index[j]]:
+                        # -1 or normal
+                        if isinstance(argument_index, int) or argument_index.isdigit() is True:
+                            # normal
+                            if isinstance(argument_index, int) is False:
+                                argument_index = int(argument_index)
+                                argument_index = orig_to_tok_index[argument_index - 1] + 1
+                            else:
+                                argument_index = -1
                         else:
-                            head_id = orig_to_tok_index[head - 1] + 1
-                    heads.append(head_id)
+                            if "%C" in argument_index:
+                                argument_index = -1
+                            # special token
+                            else:
+                                argument_index = max_seq_length - num_expand_vocab + special_tokens.index(
+                                    argument_index)
+                        arguments.append(argument_index)
+
+                    arguments_set.append(arguments)
+
+                # ng_arg_ids
+                if token.startswith("##") is True:
+                    ng_arg_ids_set.append([])
+                else:
+                    ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] + 1 for ng_arg_id in
+                                           example.ng_arg_ids_set[tok_to_orig_index[j]]])
 
                 segment_ids.append(0)
 
-            ## SEP
+            # SEP
             tokens.append("[SEP]")
-            if pas_analysis is True:
-                arguments_set.append([-1 for _ in range(num_case_w_coreference)])
-                ng_arg_ids_set.append([])
-            else:
-                heads.append(-1)
-            if word_segmentation is True or use_gold_segmentation_in_test is True:
-                for namespace in example.token_tag_indices:
-                    token_tag_indices[namespace].append(-1)
+            arguments_set.append([-1] * num_case_w_coreference)
+            ng_arg_ids_set.append([])
             segment_ids.append(0)
-            ##
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -284,49 +248,27 @@ class PASDataset(Dataset):
             while len(input_ids) < max_seq_length - num_expand_vocab:
                 input_ids.append(0)
                 input_mask.append(0)
-                if pas_analysis is True:
-                    arguments_set.append([-1 for _ in range(num_case_w_coreference)])
-                    ng_arg_ids_set.append([])
-                else:
-                    heads.append(-1)
-                if word_segmentation is True or use_gold_segmentation_in_test is True:
-                    for namespace in example.token_tag_indices:
-                        token_tag_indices[namespace].append(-1)
+                arguments_set.append([-1] * num_case_w_coreference)
+                ng_arg_ids_set.append([])
                 segment_ids.append(0)
 
-            if pas_analysis is True:
-                for i in range(num_expand_vocab):
-                    input_ids.append(vocab_size + i)
-                    input_mask.append(1)
-                    arguments_set.append([-1 for _ in range(num_case_w_coreference)])
-                    ng_arg_ids_set.append([])
-                    segment_ids.append(0)
-            else:
-                # ROOT
-                input_ids.append(vocab_size)
+            for i in range(num_expand_vocab):
+                input_ids.append(vocab_size + i)
                 input_mask.append(1)
-                heads.append(-1)
+                arguments_set.append([-1 for _ in range(num_case_w_coreference)])
+                ng_arg_ids_set.append([])
                 segment_ids.append(0)
-                if word_segmentation is True or use_gold_segmentation_in_test is True:
-                    for namespace in example.token_tag_indices:
-                        token_tag_indices[namespace].append(-1)
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
-            if pas_analysis is True:
-                assert len(arguments_set) == max_seq_length
-                assert len(ng_arg_ids_set) == max_seq_length
-            else:
-                for namespace in token_tag_indices:
-                    assert len(token_tag_indices[namespace]) == max_seq_length
-
-                assert len(heads) == max_seq_length
+            assert len(arguments_set) == max_seq_length
+            assert len(ng_arg_ids_set) == max_seq_length
 
             if example_index < 20:
                 logger.info("*** Example ***")
-                logger.info("unique_id: %s" % (unique_id))
-                logger.info("example_index: %s" % (example_index))
+                logger.info("unique_id: %s" % unique_id)
+                logger.info("example_index: %s" % example_index)
                 logger.info("tokens: %s" % " ".join(
                     [x for x in tokens]))
                 logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
@@ -334,16 +276,12 @@ class PASDataset(Dataset):
                     "input_mask: %s" % " ".join([str(x) for x in input_mask]))
                 logger.info(
                     "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-                if pas_analysis is True:
-                    logger.info(
-                        "arguments: %s" % " ".join(
-                            [",".join([str(arg) for arg in arguments]) for arguments in arguments_set]))
-                    logger.info(
-                        "ng_arg_ids_set: %s" % " ".join(
-                            [",".join([str(x) for x in ng_arg_ids]) for ng_arg_ids in ng_arg_ids_set]))
-                else:
-                    logger.info(
-                        "heads: %s" % " ".join([str(x) for x in heads]))
+                logger.info(
+                    "arguments: %s" % " ".join(
+                        [",".join([str(arg) for arg in arguments]) for arguments in arguments_set]))
+                logger.info(
+                    "ng_arg_ids_set: %s" % " ".join(
+                        [",".join([str(x) for x in ng_arg_ids]) for ng_arg_ids in ng_arg_ids_set]))
                 for namespace in token_tag_indices:
                     logger.info(
                         "%s_tags: %s" % (namespace, " ".join([str(x) for x in token_tag_indices[namespace]])))
@@ -358,10 +296,10 @@ class PASDataset(Dataset):
                     input_ids=input_ids,
                     input_mask=input_mask,
                     segment_ids=segment_ids,
-                    heads=heads if pas_analysis is False else None,
-                    arguments_set=arguments_set if pas_analysis is True else None,
+                    heads=None,
+                    arguments_set=arguments_set,
                     ng_arg_ids_set=[[1 if x in ng_arg_ids else 0 for x in range(max_seq_length)] for ng_arg_ids in
-                                    ng_arg_ids_set] if pas_analysis is True else None,
+                                    ng_arg_ids_set],
                     token_tag_indices=token_tag_indices))
             unique_id += 1
 
