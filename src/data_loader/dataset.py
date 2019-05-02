@@ -46,25 +46,26 @@ class PasExample:
 class PASDataset(Dataset):
     def __init__(self,
                  path: str,
-                 num_case: int,
+                 max_seq_length: int,
                  cases: List[str],
                  special_tokens: List[str],
                  coreference: bool,
                  training: bool,
                  bert_model: str) -> None:
-        pas_examples = self._read_pas_examples(path, training, num_case, cases, coreference)
+        self.pas_examples = self._read_pas_examples(path, training, len(cases), cases, coreference)
         tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
         bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
-        self.features = self._convert_examples_to_features(pas_examples,
+        self.features = self._convert_examples_to_features(self.pas_examples,
                                                            tokenizer,
-                                                           max_seq_length=128,
+                                                           max_seq_length=max_seq_length,
                                                            vocab_size=bert_config.vocab_size,
                                                            is_training=training,
                                                            pas_analysis=True,
-                                                           num_case=num_case,
+                                                           num_case=len(cases),
                                                            num_expand_vocab=len(special_tokens),
                                                            special_tokens=special_tokens,
                                                            coreference=coreference)
+        self.training = training
 
     def __len__(self) -> int:
         return len(self.features)
@@ -75,8 +76,12 @@ class PASDataset(Dataset):
         input_mask = np.array(feature.input_mask)          # (seq)
         segment_ids = np.array(feature.segment_ids)        # (seq)
         arguments_set = np.array(feature.arguments_set)    # (seq, case)
+        example_index = np.array(idx)                      # ()
         ng_arg_ids_set = np.array(feature.ng_arg_ids_set)  # (seq, seq)
-        return input_ids, input_mask, segment_ids, arguments_set, ng_arg_ids_set
+        if self.training:
+            return input_ids, input_mask, segment_ids, arguments_set, ng_arg_ids_set
+        else:
+            return input_ids, input_mask, segment_ids, example_index, ng_arg_ids_set
 
     @staticmethod
     def _read_pas_examples(input_file: str, is_training: bool, num_case: int, cases: List[str], coreference: bool):
