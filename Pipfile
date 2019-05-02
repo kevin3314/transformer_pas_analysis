@@ -5,6 +5,7 @@ verify_ssl = true
 
 [dev-packages]
 ipython = "*"
+ipdb = "*"
 
 [packages]
 torch = "==1.0.1.post2"
