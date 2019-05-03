@@ -1,4 +1,4 @@
-from typing import NamedTuple, List, Tuple, Dict, Optional
+from typing import NamedTuple, List
 
 
 class InputFeatures:
@@ -8,19 +8,14 @@ class InputFeatures:
                  unique_id: int,
                  example_index: int,
                  tokens: List[str],
-                 orig_to_tok_index: List[int],
-                 tok_to_orig_index: List[int],
-                 input_ids: List[int],
-                 input_mask: List[int],
-                 segment_ids: List[int],
-                 heads=None,
-                 arguments_set: List[List[int]] = None,
-                 ng_arg_ids_set: List[List[int]] = None,
-                 token_tag_indices: dict = None,
-                 spans=None,
-                 span_labels=None,
-                 is_mention_labels=None,
-                 metadata=None):
+                 orig_to_tok_index: List[int],  # use for output
+                 tok_to_orig_index: List[int],  # use for output
+                 input_ids: List[int],  # use for model
+                 input_mask: List[int],  # use for model
+                 segment_ids: List[int],  # use for model
+                 arguments_set: List[List[int]] = None,  # use for model
+                 ng_arg_ids_set: List[List[int]] = None,  # use for model
+                 ):
         self.unique_id = unique_id
         self.example_index = example_index
         self.tokens = tokens
@@ -29,11 +24,5 @@ class InputFeatures:
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
-        self.heads = heads
         self.arguments_set = arguments_set
         self.ng_arg_ids_set = ng_arg_ids_set
-        self.token_tag_indices = token_tag_indices
-        self.spans = spans
-        self.span_labels = span_labels
-        self.is_mention_labels = is_mention_labels
-        self.metadata = metadata

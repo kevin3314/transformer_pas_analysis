@@ -1,10 +1,9 @@
 import os
 import logging
 from typing import NamedTuple, List, Tuple, Dict, Optional
-from collections import defaultdict
+# from collections import defaultdict
 
 import numpy as np
-from tqdm import tqdm
 from torch.utils.data import Dataset
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertConfig
@@ -52,11 +51,10 @@ class PASDataset(Dataset):
                  coreference: bool,
                  training: bool,
                  bert_model: str) -> None:
-        self.pas_examples = self._read_pas_examples(path, training, len(cases), cases, coreference)
-        tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
+        self.pas_examples = self._read_pas_examples(path, training, cases, coreference)
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
         bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
         self.features = self._convert_examples_to_features(self.pas_examples,
-                                                           tokenizer,
                                                            max_seq_length=max_seq_length,
                                                            vocab_size=bert_config.vocab_size,
                                                            is_training=training,
@@ -83,7 +81,7 @@ class PASDataset(Dataset):
             return input_ids, input_mask, segment_ids, example_index, ng_arg_ids_set
 
     @staticmethod
-    def _read_pas_examples(input_file: str, is_training: bool, num_case: int, cases: List[str], coreference: bool):
+    def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool):
         """Read a file into a list of PasExample."""
 
         examples: List[PasExample] = []
@@ -120,7 +118,7 @@ class PASDataset(Dataset):
                 argument_string = items[5]
                 ng_arg_string = items[8]
                 if argument_string == "_":
-                    arguments = [-1] * num_case
+                    arguments = [-1] * len(cases)
                     ng_arg_ids = []
                 else:
                     arguments = []
@@ -166,9 +164,9 @@ class PASDataset(Dataset):
 
         return examples
 
-    @staticmethod
-    def _convert_examples_to_features(examples, tokenizer, max_seq_length, vocab_size, is_training,
-                                      num_case=None, num_expand_vocab=1, special_tokens=None, coreference=False):
+    def _convert_examples_to_features(self, examples: List[PasExample], max_seq_length: int, vocab_size: int,
+                                      is_training: bool, num_case: int, num_expand_vocab: int,
+                                      special_tokens: List[str], coreference: bool):
         """Loads a data file into a list of `InputBatch`s."""
 
         unique_id = 1000000000
@@ -178,7 +176,7 @@ class PASDataset(Dataset):
         if coreference is True:
             num_case_w_coreference += 1
 
-        for (example_index, example) in enumerate(examples):
+        for example_index, example in enumerate(examples):
             # The -3 accounts for [CLS], [SEP], ROOT
             # max_tokens_for_doc = max_seq_length - 3
 
@@ -186,9 +184,9 @@ class PASDataset(Dataset):
             segment_ids = []
             arguments_set = []
             ng_arg_ids_set = []
-            token_tag_indices = defaultdict(list)
+            # token_tag_indices = defaultdict(list)
 
-            all_tokens, tok_to_orig_index, orig_to_tok_index = PASDataset._get_tokenized_tokens(example.words, tokenizer)
+            all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
 
             # CLS
             tokens.append("[CLS]")
@@ -238,7 +236,7 @@ class PASDataset(Dataset):
             ng_arg_ids_set.append([])
             segment_ids.append(0)
 
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
@@ -255,7 +253,7 @@ class PASDataset(Dataset):
             for i in range(num_expand_vocab):
                 input_ids.append(vocab_size + i)
                 input_mask.append(1)
-                arguments_set.append([-1 for _ in range(num_case_w_coreference)])
+                arguments_set.append([-1] * num_case_w_coreference)
                 ng_arg_ids_set.append([])
                 segment_ids.append(0)
 
@@ -282,9 +280,9 @@ class PASDataset(Dataset):
                 logger.info(
                     "ng_arg_ids_set: %s" % " ".join(
                         [",".join([str(x) for x in ng_arg_ids]) for ng_arg_ids in ng_arg_ids_set]))
-                for namespace in token_tag_indices:
-                    logger.info(
-                        "%s_tags: %s" % (namespace, " ".join([str(x) for x in token_tag_indices[namespace]])))
+                # for namespace in token_tag_indices:
+                #     logger.info(
+                #         "%s_tags: %s" % (namespace, " ".join([str(x) for x in token_tag_indices[namespace]])))
 
             features.append(
                 InputFeatures(
@@ -296,24 +294,22 @@ class PASDataset(Dataset):
                     input_ids=input_ids,
                     input_mask=input_mask,
                     segment_ids=segment_ids,
-                    heads=None,
                     arguments_set=arguments_set,
                     ng_arg_ids_set=[[1 if x in ng_arg_ids else 0 for x in range(max_seq_length)] for ng_arg_ids in
                                     ng_arg_ids_set],
-                    token_tag_indices=token_tag_indices))
+                    ))
             unique_id += 1
 
         return features
 
-    @staticmethod
-    def _get_tokenized_tokens(words, tokenizer):
+    def _get_tokenized_tokens(self, words):
         all_tokens = []
         tok_to_orig_index = []
         orig_to_tok_index = []
 
         for i, token in enumerate(words):
             orig_to_tok_index.append(len(all_tokens))
-            sub_tokens = tokenizer.tokenize(token)
+            sub_tokens = self.tokenizer.tokenize(token)
             for sub_token in sub_tokens:
                 all_tokens.append(sub_token)
                 tok_to_orig_index.append(i)

@@ -5,7 +5,6 @@ from typing import List, Optional
 from logging import Logger
 
 import torch
-from tqdm import tqdm
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
