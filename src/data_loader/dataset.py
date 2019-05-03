@@ -67,7 +67,7 @@ class PASDataset(Dataset):
     def __len__(self) -> int:
         return len(self.features)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> tuple:
         feature = self.features[idx]
         input_ids = np.array(feature.input_ids)            # (seq)
         input_mask = np.array(feature.input_mask)          # (seq)
@@ -215,8 +215,8 @@ class PASDataset(Dataset):
                                 argument_index = -1
                             # special token
                             else:
-                                argument_index = max_seq_length - num_expand_vocab + special_tokens.index(
-                                    argument_index)
+                                argument_index =\
+                                    max_seq_length - num_expand_vocab + special_tokens.index(argument_index)
                         arguments.append(argument_index)
 
                     arguments_set.append(arguments)

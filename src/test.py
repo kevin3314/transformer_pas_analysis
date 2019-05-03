@@ -16,8 +16,7 @@ from data_loader.dataset import PasExample
 from data_loader.input_features import InputFeatures
 
 from collections import namedtuple
-RawResult = namedtuple("RawResult",
-                       ["unique_id", "heads", "topk_heads", "topk_dep_labels", "arguments_set", "token_tags", "top_spans", "antecedent_indices", "predicted_antecedents"])
+RawResult = namedtuple("RawResult", ["unique_id", "arguments_set"])
 
 
 def output_pas_analysis(items, cases, all_results, all_features, example_index, line_num,
@@ -50,7 +49,7 @@ def output_pas_analysis(items, cases, all_results, all_features, example_index, 
         argument_string = all_results[example_index].arguments_set[all_features[example_index].orig_to_tok_index[line_num] + 1][-1]
         # special
         if argument_string >= max_seq_length - num_expand_vocab:
-            argument_string = special_tokens[argument_string - max_seq_length + num_expand_vocab ]
+            argument_string = special_tokens[argument_string - max_seq_length + num_expand_vocab]
         else:
             argument_string = all_features[example_index].tok_to_orig_index[argument_string - 1] + 1
         items[6] = str(argument_string)
@@ -130,15 +129,7 @@ def main(config, resume):
             eval_feature = dataset.features[example_index.item()]
             unique_id = int(eval_feature.unique_id)
 
-            all_results.append(RawResult(unique_id=unique_id,
-                                         heads=None,
-                                         topk_heads=None,
-                                         topk_dep_labels=None,
-                                         arguments_set=arguments_set,
-                                         token_tags=None,
-                                         top_spans=None,
-                                         antecedent_indices=None,
-                                         predicted_antecedents=None))
+            all_results.append(RawResult(unique_id=unique_id, arguments_set=arguments_set))
 
         # computing loss, metrics on test set
         # loss = loss_fn(output, target)
@@ -172,6 +163,4 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
 
-    args = parser.parse_args()
-    config = ConfigParser(parser)
-    main(config, args.resume)
+    main(config=ConfigParser(parser), resume=parser.parse_args().resume)

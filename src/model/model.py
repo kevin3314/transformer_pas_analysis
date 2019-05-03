@@ -39,7 +39,7 @@ class BertPASAnalysisModel(BaseModel):
             self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size)
             self.v_a = nn.Linear(bert_hidden_size, num_case, bias=False)
 
-    def forward(self, input_ids, token_type_ids, attention_mask, heads=None, arguments_set=None, ng_arg_ids_set=None,
+    def forward(self, input_ids, token_type_ids, attention_mask, arguments_set=None, ng_arg_ids_set=None,
                 token_tags=None):
         sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
 
@@ -80,7 +80,7 @@ class BertPASAnalysisModel(BaseModel):
             sequence_length = input_ids.size(1)
 
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(g_logits.view(-1, sequence_length), arguments_set.view(-1))
+            loss = loss_fct(g_logits.view((-1, sequence_length)), arguments_set.view(-1))
             return loss
         # testing
         else:
