@@ -140,7 +140,7 @@ def main(config, resume):
                       cases=cases, num_expand_vocab=len(special_tokens), special_tokens=special_tokens,
                       coreference=config['test_dataset']['args']['coreference'], logger=logger)
 
-    n_samples = len(data_loader.sampler)
+    # n_samples = len(data_loader.sampler)
     # log = {'loss': total_loss / n_samples}
     log = {}
     # log.update({
