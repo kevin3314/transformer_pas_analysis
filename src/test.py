@@ -15,11 +15,8 @@ from parse_config import ConfigParser
 from data_loader.dataset import PasExample
 from data_loader.input_features import InputFeatures
 
-from collections import namedtuple
-RawResult = namedtuple("RawResult", ["unique_id", "arguments_set"])
 
-
-def output_pas_analysis(items, cases, all_results, all_features, example_index, line_num,
+def output_pas_analysis(items, cases, arguments_sets, all_features, example_index, line_num,
                         max_seq_length, num_expand_vocab, special_tokens,
                         coreference=False):
     if items[5] != "_":
@@ -28,7 +25,7 @@ def output_pas_analysis(items, cases, all_results, all_features, example_index, 
                           for arg_string in items[5].split(",")}
         argument_strings = []
 
-        for case, argument_string in zip(cases, all_results[example_index].arguments_set[all_features[example_index].orig_to_tok_index[line_num] + 1]):
+        for case, argument_string in zip(cases, arguments_sets[example_index][all_features[example_index].orig_to_tok_index[line_num] + 1]):
             if coreference is True and case == "=":
                 continue
 
@@ -46,7 +43,7 @@ def output_pas_analysis(items, cases, all_results, all_features, example_index, 
         items[5] = ",".join(argument_strings)
 
     if coreference is True and items[6] == "MASKED":
-        argument_string = all_results[example_index].arguments_set[all_features[example_index].orig_to_tok_index[line_num] + 1][-1]
+        argument_string = arguments_sets[example_index][all_features[example_index].orig_to_tok_index[line_num] + 1][-1]
         # special
         if argument_string >= max_seq_length - num_expand_vocab:
             argument_string = special_tokens[argument_string - max_seq_length + num_expand_vocab]
@@ -57,7 +54,7 @@ def output_pas_analysis(items, cases, all_results, all_features, example_index, 
     return items
 
 
-def write_predictions(all_examples: List[PasExample], all_features: List[InputFeatures], all_results: List[RawResult],
+def write_predictions(all_examples: List[PasExample], all_features: List[InputFeatures], arguments_sets: List[List[int]],
                       output_prediction_file: Optional[str], max_seq_length: int, cases: List[str],
                       num_expand_vocab: int, special_tokens: List[str], coreference: bool, logger: Logger):
     """Write final predictions to the file."""
@@ -74,7 +71,7 @@ def write_predictions(all_examples: List[PasExample], all_features: List[InputFe
 
             for line_num, line in enumerate(example.lines):
                 items = line.split("\t")
-                items = output_pas_analysis(items, cases, all_results, all_features, example_index, line_num,
+                items = output_pas_analysis(items, cases, arguments_sets, all_features, example_index, line_num,
                                             max_seq_length, num_expand_vocab, special_tokens,
                                             coreference=coreference)
                 writer.write("{}\n".format("\t".join(items)))
@@ -96,7 +93,7 @@ def main(config, resume):
 
     # get function handles of loss and metrics
     # loss_fn = getattr(module_loss, config['loss'])
-    metric_fns = [getattr(module_metric, met) for met in config['metrics']]
+    # metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     logger.info('Loading checkpoint: {} ...'.format(resume))
     checkpoint = torch.load(resume)
@@ -113,7 +110,7 @@ def main(config, resume):
     # total_loss = 0.0
     # total_metrics = torch.zeros(len(metric_fns))
 
-    all_results = []
+    arguments_sets = []
     for batch_idx, (input_ids, input_mask, segment_ids, example_indices, ng_arg_ids_set) in enumerate(data_loader):
         input_ids = input_ids.to(device)  # (b, seq)
         input_mask = input_mask.to(device)  # (b, seq)
@@ -126,10 +123,7 @@ def main(config, resume):
         for i, example_index in enumerate(example_indices):
             arguments_set = ret_dict["arguments_set"][i].detach().cpu().tolist()
 
-            eval_feature = dataset.features[example_index.item()]
-            unique_id = int(eval_feature.unique_id)
-
-            all_results.append(RawResult(unique_id=unique_id, arguments_set=arguments_set))
+            arguments_sets.append(arguments_set)
 
         # computing loss, metrics on test set
         # loss = loss_fn(output, target)
@@ -141,7 +135,7 @@ def main(config, resume):
     output_prediction_file = os.path.join(config.save_dir, 'predictions.txt')
     special_tokens = config['test_dataset']['args']['special_tokens']
     cases = config['test_dataset']['args']['cases']
-    write_predictions(dataset.pas_examples, dataset.features, all_results, output_prediction_file,
+    write_predictions(dataset.pas_examples, dataset.features, arguments_sets, output_prediction_file,
                       config['test_dataset']['args']['max_seq_length'],
                       cases=cases, num_expand_vocab=len(special_tokens), special_tokens=special_tokens,
                       coreference=config['test_dataset']['args']['coreference'], logger=logger)

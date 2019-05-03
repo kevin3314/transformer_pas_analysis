@@ -169,8 +169,6 @@ class PASDataset(Dataset):
                                       special_tokens: List[str], coreference: bool):
         """Loads a data file into a list of `InputBatch`s."""
 
-        unique_id = 1000000000
-
         features = []
         num_case_w_coreference = num_case
         if coreference is True:
@@ -265,7 +263,6 @@ class PASDataset(Dataset):
 
             if example_index < 20:
                 logger.info("*** Example ***")
-                logger.info("unique_id: %s" % unique_id)
                 logger.info("example_index: %s" % example_index)
                 logger.info("tokens: %s" % " ".join(
                     [x for x in tokens]))
@@ -286,8 +283,6 @@ class PASDataset(Dataset):
 
             features.append(
                 InputFeatures(
-                    unique_id=unique_id,
-                    example_index=example_index,
                     tokens=tokens,
                     orig_to_tok_index=orig_to_tok_index,
                     tok_to_orig_index=tok_to_orig_index,
@@ -298,7 +293,6 @@ class PASDataset(Dataset):
                     ng_arg_ids_set=[[1 if x in ng_arg_ids else 0 for x in range(max_seq_length)] for ng_arg_ids in
                                     ng_arg_ids_set],
                     ))
-            unique_id += 1
 
         return features
 

@@ -5,8 +5,6 @@ class InputFeatures:
     """A single set of features of data."""
 
     def __init__(self,
-                 unique_id: int,
-                 example_index: int,
                  tokens: List[str],
                  orig_to_tok_index: List[int],  # use for output
                  tok_to_orig_index: List[int],  # use for output
@@ -16,8 +14,6 @@ class InputFeatures:
                  arguments_set: List[List[int]] = None,  # use for model
                  ng_arg_ids_set: List[List[int]] = None,  # use for model
                  ):
-        self.unique_id = unique_id
-        self.example_index = example_index
         self.tokens = tokens
         self.orig_to_tok_index = orig_to_tok_index
         self.tok_to_orig_index = tok_to_orig_index
