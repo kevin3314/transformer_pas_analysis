@@ -193,13 +193,19 @@ class PASDataset(Dataset):
                     arguments_set.append([-1] * num_case_w_coreference)
                 else:
                     arguments: List[int] = []
-                    for arg in example.arguments_set[tok_to_orig_index[i]]:
+                    for k, arg in enumerate(example.arguments_set[tok_to_orig_index[i]]):
                         if arg is None or "%C" in arg:
                             # none or overt
                             argument_index = -1
                         elif arg.isdigit():
-                            # normal
-                            argument_index = orig_to_tok_index[int(arg) - 1] + 1
+                            if coreference is False or (coreference is True and k != num_case_w_coreference - 1) and \
+                                   int(arg) in example.ng_arg_ids_set[tok_to_orig_index[i]]:
+                                # ng_arg_id (except for coreference resolution)
+                                logger.debug("ng_arg_id: {} {} {}".format(example.comment, token, arg))
+                                argument_index = -1
+                            else:
+                                # normal
+                                argument_index = orig_to_tok_index[int(arg) - 1] + 1
                         else:
                             # special token
                             argument_index = max_seq_length - num_expand_vocab + special_tokens.index(arg)
