@@ -39,42 +39,44 @@ class BertPASAnalysisModel(BaseModel):
             self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size)
             self.v_a = nn.Linear(bert_hidden_size, num_case, bias=False)
 
-    def forward(self, input_ids, token_type_ids, attention_mask, arguments_set=None, ng_arg_ids_set=None,
-                token_tags=None):
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                token_type_ids: torch.Tensor,  # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                arguments_set=None,
+                ng_arg_ids_set=None,           # (b, seq, seq)
+                ):
+        # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
 
         g_logits = torch.Tensor()
         if self.parsing_algorithm == "biaffine":
-            h_i = torch.relu(self.child_arc_linear(sequence_output))
-            h_j = torch.relu(self.head_arc_linear(sequence_output))
+            h_i = torch.relu(self.child_arc_linear(sequence_output))  # (b, seq, arc)
+            h_j = torch.relu(self.head_arc_linear(sequence_output))   # (b, seq, arc)
 
-            inter = torch.matmul(h_j, self.arc_W)
-            g_logits = torch.matmul(inter, h_i.transpose(1, 2))
+            inter = torch.matmul(h_j, self.arc_W)  # (b, seq, arc)
+            g_logits = torch.matmul(inter, h_i.transpose(1, 2))  # (b, seq, seq)
             bias = self.arc_b(h_j).squeeze(2).unsqueeze(1)  # (b, 1, seq)
             g_logits = g_logits + bias  # (b, seq, seq)
 
         elif self.parsing_algorithm == "zhang":
             h_i = self.W_a(sequence_output)  # (b, seq, hid)
             h_j = self.U_a(sequence_output)  # (b, seq, hid)
-            g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2)))  # (b, seq, seq)
+            g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2)))  # (b, seq, seq, case)
 
         # (b, seq, seq, case) -> (b, seq, case, seq)
         g_logits = g_logits.transpose(2, 3).contiguous()
 
-        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)
-        # (b, seq, 1, seq)
-        ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        ng_arg_ids_mask = ng_arg_ids_mask * -1024.0
-
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)  # (b, 1, 1, seq)
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -1024.0
-
         g_logits += extended_attention_mask
 
+        ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)  # (b, seq, 1, seq)
+        ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        ng_arg_ids_mask = ng_arg_ids_mask * -1024.0
         g_logits += ng_arg_ids_mask
 
-        ret_dict = {}
         # training
         if arguments_set is not None:
             sequence_length = input_ids.size(1)
@@ -85,9 +87,7 @@ class BertPASAnalysisModel(BaseModel):
         # testing
         else:
             _, arguments_set = torch.max(g_logits, dim=3)
-            ret_dict["arguments_set"] = arguments_set
-
-            return ret_dict
+            return arguments_set
 
     def expand_vocab(self, num_expand_vocab):
         """Add special tokens to vocab."""
