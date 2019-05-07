@@ -8,12 +8,12 @@ ipython = "*"
 ipdb = "*"
 
 [packages]
-torch = "==1.0.1.post2"
 numpy = "*"
 tqdm = "*"
 torchvision = "*"
 pytorch-pretrained-bert = "*"
 tensorboardx = "==1.2"
+torch = "*"
 
 [requires]
 python_version = "3.6"
