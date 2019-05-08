@@ -130,7 +130,7 @@ def main() -> None:
             "amsgrad": True,
         },
     }
-    loss = "nll_loss",
+    loss = "nll_loss"
     metrics = [
         "my_metric", "my_metric2",
     ]
