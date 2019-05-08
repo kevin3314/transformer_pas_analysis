@@ -117,7 +117,7 @@ def main(config, resume):
         ng_arg_ids_set = ng_arg_ids_set.to(device)  # (b, seq, seq)
 
         with torch.no_grad():
-            arguments_set = model(input_ids, input_mask, segment_ids, ng_arg_ids_set=ng_arg_ids_set)  # (b, seq, case)
+            arguments_set = model(input_ids, input_mask, segment_ids, ng_arg_ids_set)  # (b, seq, case)
 
         # for i, example_index in enumerate(example_indices):
         arguments_sets += arguments_set.detach().cpu().tolist()

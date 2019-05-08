@@ -1,6 +1,7 @@
 import numpy as np
+
 import torch
-from torchvision.utils import make_grid
+
 from base import BaseTrainer
 
 
@@ -52,7 +53,7 @@ class Trainer(BaseTrainer):
             ng_arg_ids_set = ng_arg_ids_set.to(self.device)  # (b, seq, seq)
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, segment_ids, arguments_set=arguments_set, ng_arg_ids_set=ng_arg_ids_set)
+            output = self.model(input_ids, input_mask, segment_ids, ng_arg_ids_set, arguments_set=arguments_set)
             # loss = self.loss(output, input_ids)
             loss = output
             loss.backward()
@@ -70,7 +71,6 @@ class Trainer(BaseTrainer):
                     self.data_loader.n_samples,
                     100.0 * batch_idx / len(self.data_loader),
                     loss.item()))
-                # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         log = {
             'loss': total_loss / len(self.data_loader),

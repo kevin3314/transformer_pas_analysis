@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+# import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from pytorch_pretrained_bert.modeling import BertModel
 
@@ -12,7 +12,6 @@ class BertPASAnalysisModel(BaseModel):
                  bert_model: BertModel,
                  parsing_algorithm: str,
                  num_case: int,
-                 num_topk_heads: int,
                  arc_representation_dim: int) -> None:
         super(BertPASAnalysisModel, self).__init__()
 
@@ -21,7 +20,6 @@ class BertPASAnalysisModel(BaseModel):
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.num_case = num_case
-        self.num_topk_heads = num_topk_heads
         self.parsing_algorithm = parsing_algorithm
 
         bert_hidden_size = self.bert.config.hidden_size
@@ -43,8 +41,8 @@ class BertPASAnalysisModel(BaseModel):
                 input_ids: torch.Tensor,       # (b, seq)
                 token_type_ids: torch.Tensor,  # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                arguments_set=None,
-                ng_arg_ids_set=None,           # (b, seq, seq)
+                ng_arg_ids_set: torch.Tensor,  # (b, seq, seq)
+                arguments_set=None,            # (b, seq, case)
                 ):
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
@@ -70,7 +68,7 @@ class BertPASAnalysisModel(BaseModel):
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)  # (b, 1, 1, seq)
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -1024.0
-        g_logits += extended_attention_mask
+        g_logits += extended_attention_mask  # (b, seq, case, seq)
 
         ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)  # (b, seq, 1, seq)
         ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
