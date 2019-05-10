@@ -38,7 +38,7 @@ def output_pas_analysis(items: List[str], cases: List[str], arguments_set, featu
                 else:
                     argument_string = feature.tok_to_orig_index[argument_string - 1] + 1
 
-            argument_strings.append(case + ":" + argument_string)
+            argument_strings.append(case + ":" + str(argument_string))
 
         items[5] = ",".join(argument_strings)
 
@@ -130,7 +130,8 @@ def main(config, resume):
         # for i, metric in enumerate(metric_fns):
         #     total_metrics[i] += metric(ret_dict) * batch_size
 
-    output_prediction_file = os.path.join(config.save_dir, 'predictions.txt')
+    # output_prediction_file = os.path.join(config.save_dir, 'predictions.txt')
+    output_prediction_file = 'predictions.conll'
     special_tokens = config['test_dataset']['args']['special_tokens']
     cases = config['test_dataset']['args']['cases']
     write_predictions(dataset.pas_examples, dataset.features, arguments_sets, output_prediction_file,

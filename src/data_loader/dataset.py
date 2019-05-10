@@ -198,7 +198,7 @@ class PASDataset(Dataset):
                             # none or overt
                             argument_index = -1
                         elif arg.isdigit():
-                            if coreference is False or (coreference is True and k != num_case_w_coreference - 1) and \
+                            if (coreference is False or (coreference is True and k != num_case_w_coreference - 1)) and \
                                    int(arg) in example.ng_arg_ids_set[tok_to_orig_index[i]]:
                                 # ng_arg_id (except for coreference resolution)
                                 logger.debug("ng_arg_id: {} {} {}".format(example.comment, token, arg))
