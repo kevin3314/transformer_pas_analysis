@@ -175,4 +175,4 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
 
-    main(config=ConfigParser(parser), resume=parser.parse_args().resume)
+    main(config=ConfigParser(parser, timestamp=False), resume=parser.parse_args().resume)
