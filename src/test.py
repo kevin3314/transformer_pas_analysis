@@ -16,9 +16,16 @@ from data_loader.dataset import PasExample
 from data_loader.input_features import InputFeatures
 
 
-def output_pas_analysis(items: List[str], cases: List[str], arguments_set, features: InputFeatures, line_num: int,
-                        max_seq_length: int, num_expand_vocab: int, special_tokens: List[str],
-                        coreference: bool, logger: Logger):
+def output_pas_analysis(items: List[str],
+                        cases: List[str],
+                        arguments_set: List[List[int]],
+                        features: InputFeatures,
+                        line_num: int,
+                        max_seq_length: int,
+                        num_expand_vocab: int,
+                        special_tokens: List[str],
+                        coreference: bool,
+                        logger: Logger):
     if items[5] != "_":
         # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
         orig_arguments = {arg_string.split(":", 1)[0]: arg_string.split(":", 1)[1]
@@ -59,9 +66,16 @@ def output_pas_analysis(items: List[str], cases: List[str], arguments_set, featu
     return items
 
 
-def write_predictions(all_examples: List[PasExample], all_features: List[InputFeatures], arguments_sets: List[List[int]],
-                      output_prediction_file: Optional[str], max_seq_length: int, cases: List[str],
-                      num_expand_vocab: int, special_tokens: List[str], coreference: bool, logger: Logger):
+def write_predictions(all_examples: List[PasExample],
+                      all_features: List[InputFeatures],
+                      arguments_sets: List[List[List[int]]],
+                      output_prediction_file: Optional[str],
+                      max_seq_length: int,
+                      cases: List[str],
+                      num_expand_vocab: int,
+                      special_tokens: List[str],
+                      coreference: bool,
+                      logger: Logger):
     """Write final predictions to the file."""
     if output_prediction_file is not None:
         logger.info(f"Writing predictions to: {output_prediction_file}")
