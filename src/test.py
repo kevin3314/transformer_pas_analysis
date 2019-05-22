@@ -150,7 +150,7 @@ def main(config, resume):
         #     total_metrics[i] += metric(ret_dict) * batch_size
 
     # output_prediction_file = os.path.join(config.save_dir, 'predictions.txt')
-    output_prediction_file = 'test_out.conll'
+    output_prediction_file = os.path.join(config.save_dir, 'test_out.conll')
     special_tokens = config['test_dataset']['args']['special_tokens']
     cases = config['test_dataset']['args']['cases']
     write_predictions(dataset.pas_examples, dataset.features, arguments_sets, output_prediction_file,
