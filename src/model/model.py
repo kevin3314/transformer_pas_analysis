@@ -33,9 +33,9 @@ class BertPASAnalysisModel(BaseModel):
 
         # head selection [Zhang+ 16]
         elif self.parsing_algorithm == "zhang":
-            self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size)
-            self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size)
-            self.v_a = nn.Linear(bert_hidden_size, num_case, bias=False)
+            self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
+            self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
+            self.v_a = nn.Linear(bert_hidden_size, 1, bias=False)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -44,6 +44,7 @@ class BertPASAnalysisModel(BaseModel):
                 ng_arg_ids_set: torch.Tensor,  # (b, seq, seq)
                 arguments_set=None,            # (b, seq, case)
                 ):
+        batch_size, sequence_length = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
 
@@ -58,9 +59,11 @@ class BertPASAnalysisModel(BaseModel):
             g_logits = g_logits + bias  # (b, seq, seq)
 
         elif self.parsing_algorithm == "zhang":
-            h_i = self.W_a(sequence_output)  # (b, seq, hid)
-            h_j = self.U_a(sequence_output)  # (b, seq, hid)
-            g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2)))  # (b, seq, seq, case)
+            h_i = self.W_a(sequence_output)  # (b, seq, hid*case)
+            h_j = self.U_a(sequence_output)  # (b, seq, hid*case)
+            h_i = h_i.view(batch_size, sequence_length, self.num_case, -1)  # (b, seq, case, hid)
+            h_j = h_j.view(batch_size, sequence_length, self.num_case, -1)  # (b, seq, case, hid)
+            g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)  # (b, seq, seq, case)
 
         # (b, seq, seq, case) -> (b, seq, case, seq)
         g_logits = g_logits.transpose(2, 3).contiguous()
