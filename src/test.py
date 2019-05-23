@@ -113,15 +113,16 @@ def main(config, resume):
     # loss_fn = getattr(module_loss, config['loss'])
     # metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     logger.info('Loading checkpoint: {} ...'.format(resume))
-    checkpoint = torch.load(resume)
+    checkpoint = torch.load(resume, map_location=device)
     state_dict = checkpoint['state_dict']
     if config['n_gpu'] > 1:
         model = torch.nn.DataParallel(model)
     model.load_state_dict(state_dict)
 
     # prepare model for testing
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
     model.eval()
 
@@ -129,14 +130,14 @@ def main(config, resume):
     # total_metrics = torch.zeros(len(metric_fns))
 
     arguments_sets: List[List[List[int]]] = []
-    for batch_idx, (input_ids, input_mask, segment_ids, example_indices, ng_arg_ids_set) in enumerate(data_loader):
+    for batch_idx, (input_ids, segment_ids, input_mask, example_indices, ng_arg_ids_set) in enumerate(data_loader):
         input_ids = input_ids.to(device)  # (b, seq)
-        input_mask = input_mask.to(device)  # (b, seq)
         segment_ids = segment_ids.to(device)  # (b, seq)
+        input_mask = input_mask.to(device)  # (b, seq)
         ng_arg_ids_set = ng_arg_ids_set.to(device)  # (b, seq, seq)
 
         with torch.no_grad():
-            arguments_set = model(input_ids, input_mask, segment_ids, ng_arg_ids_set)  # (b, seq, case)
+            arguments_set = model(input_ids, segment_ids, input_mask, ng_arg_ids_set)  # (b, seq, case)
 
         # for i, example_index in enumerate(example_indices):
         arguments_sets += arguments_set.detach().cpu().tolist()

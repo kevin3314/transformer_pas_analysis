@@ -46,7 +46,10 @@ class BertPASAnalysisModel(BaseModel):
                 ):
         batch_size, sequence_length = input_ids.size()
         # (b, seq, hid)
-        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        sequence_output, _ = self.bert(input_ids,
+                                       token_type_ids=token_type_ids,
+                                       attention_mask=attention_mask,
+                                       output_all_encoded_layers=False)
 
         g_logits = torch.Tensor()
         if self.parsing_algorithm == "biaffine":
