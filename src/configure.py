@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import argparse
 from typing import List
 
@@ -26,11 +27,11 @@ class Path:
         'server': '/mnt/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE'
     }
     train_file = {
-        'local': 'data/sample.train.conll',
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.train.conll',
         'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
     }
     test_file = {
-        'local': 'data/sample.test.conll',
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.test.conll',
         'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
     }
 
@@ -59,6 +60,11 @@ def main() -> None:
                         help='Case strings. Separate by ","')
     # parser.add_argument('--dropout', type=float, default=0.1, nargs='*',
     #                     help='dropout ratio')
+    parser.add_argument('--lr', type=float, default=5e-5,
+                        help='learning rate')
+    parser.add_argument("--warmup_proportion", default=0.1, type=float,
+                        help="Proportion of training to perform linear learning rate warmup for. "
+                             "E.g., 0.1 = 10% of training.")
     parser.add_argument('--env', choices=['local', 'server'], default='server',
                         help='development environment')
     parser.add_argument('--additional-name', type=str, default=None,
@@ -70,6 +76,8 @@ def main() -> None:
 
     name = 'PAS' + ('' if args.additional_name is None else args.additional_name)
     n_gpu = 1
+    with open(Path.train_file[args.env]) as f:
+        num_train_examples = f.readlines().count('\n') + 1
 
     arch = {
         "type": "BertPASAnalysisModel",
@@ -123,24 +131,25 @@ def main() -> None:
         },
     }
     optimizer = {
-        "type": "Adam",
+        "type": "BertAdam",
         "args": {
-            "lr": 0.001,
-            "weight_decay": 0,
-            "amsgrad": True,
+            "lr": args.lr,
+            "warmup": args.warmup_proportion,
+            "t_total": math.ceil(num_train_examples / args.batch_size) * args.epoch,
+            "weight_decay": 0.01,
         },
     }
     loss = "nll_loss"
     metrics = [
         "my_metric", "my_metric2",
     ]
-    lr_scheduler = {
-        "type": "StepLR",
-        "args": {
-            "step_size": 50,
-            "gamma": 0.1,
-        },
-    }
+    # lr_scheduler = {
+    #     "type": "StepLR",
+    #     "args": {
+    #         "step_size": 50,
+    #         "gamma": 0.1,
+    #     },
+    # }
     trainer = {
         "epochs": args.epoch,
         "save_dir": "result/",
@@ -166,7 +175,7 @@ def main() -> None:
         optimizer=optimizer,
         loss=loss,
         metrics=metrics,
-        lr_scheduler=lr_scheduler,
+        # lr_scheduler=lr_scheduler,
         trainer=trainer,
         visualization=visualization,
     )

@@ -2,6 +2,7 @@ import argparse
 import collections
 
 import torch
+import pytorch_pretrained_bert.optimization as module_optim
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -29,17 +30,22 @@ def main(config):
     loss = getattr(module_loss, config['loss'])
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
-    # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = config.initialize('optimizer', torch.optim, trainable_params)
+    # prepare optimizer
+    param_optimizer = filter(lambda np: np[1].requires_grad, model.named_parameters())
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    optimizer = config.initialize('optimizer', module_optim, optimizer_grouped_parameters)
 
-    lr_scheduler = config.initialize('lr_scheduler', torch.optim.lr_scheduler, optimizer)
+    # lr_scheduler = config.initialize('lr_scheduler', torch.optim.lr_scheduler, optimizer)
 
     trainer = Trainer(model, loss, metrics, optimizer,
                       config=config,
                       data_loader=data_loader,
                       valid_data_loader=valid_data_loader,
-                      lr_scheduler=lr_scheduler)
+                      lr_scheduler=None)
 
     trainer.train()
 
@@ -52,6 +58,8 @@ if __name__ == '__main__':
                         help='path to latest checkpoint (default: None)')
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
+    parser.add_argument('--seed', type=int, default=42,
+                        help='random seed for initialization')
 
     # custom cli options to modify configuration from default values given in json file.
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
