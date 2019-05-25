@@ -62,8 +62,8 @@ class BertPASAnalysisModel(BaseModel):
             g_logits = g_logits + bias  # (b, seq, seq)
 
         elif self.parsing_algorithm == "zhang":
-            h_i = self.W_a(sequence_output)  # (b, seq, hid*case)
-            h_j = self.U_a(sequence_output)  # (b, seq, hid*case)
+            h_i = self.W_a(sequence_output)  # (b, seq, case*hid)
+            h_j = self.U_a(sequence_output)  # (b, seq, case*hid)
             h_i = h_i.view(batch_size, sequence_length, self.num_case, -1)  # (b, seq, case, hid)
             h_j = h_j.view(batch_size, sequence_length, self.num_case, -1)  # (b, seq, case, hid)
             g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)  # (b, seq, seq, case)
@@ -79,7 +79,7 @@ class BertPASAnalysisModel(BaseModel):
         ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)  # (b, seq, 1, seq)
         ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         ng_arg_ids_mask = ng_arg_ids_mask * -1024.0
-        g_logits += ng_arg_ids_mask
+        g_logits += ng_arg_ids_mask  # (b, seq, case, seq)
 
         # training
         if arguments_set is not None:
@@ -90,7 +90,7 @@ class BertPASAnalysisModel(BaseModel):
             return loss
         # testing
         else:
-            _, arguments_set = torch.max(g_logits, dim=3)
+            arguments_set = torch.argmax(g_logits, dim=3)
             return arguments_set
 
     def expand_vocab(self, num_expand_vocab):
