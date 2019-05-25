@@ -30,6 +30,10 @@ class Path:
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.train.conll',
         'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
     }
+    valid_file = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.dev.conll',
+        'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/dev.conll'
+    }
     test_file = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.test.conll',
         'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
@@ -100,6 +104,18 @@ def main() -> None:
             "bert_model": Path.bert_model[args.env],
         },
     }
+    valid_dataset = {
+        "type": "PASDataset",
+        "args": {
+            "path": Path.valid_file[args.env],
+            "max_seq_length": args.max_seq_length,
+            "cases": cases,
+            "coreference": args.coreference,
+            "special_tokens": args.special_tokens.split(','),
+            "training": False,
+            "bert_model": Path.bert_model[args.env],
+        },
+    }
     test_dataset = {
         "type": "PASDataset",
         "args": {
@@ -117,6 +133,15 @@ def main() -> None:
         "args": {
             "batch_size": args.batch_size,
             "shuffle": True,
+            "validation_split": 0.0,
+            "num_workers": 2,
+        },
+    }
+    valid_data_loader = {
+        "type": "ConlluDataLoader",
+        "args": {
+            "batch_size": args.batch_size,
+            "shuffle": False,
             "validation_split": 0.0,
             "num_workers": 2,
         },
@@ -169,6 +194,8 @@ def main() -> None:
         arch=arch,
         train_dataset=train_dataset,
         train_data_loader=train_data_loader,
+        valid_dataset=valid_dataset,
+        valid_data_loader=valid_data_loader,
         test_dataset=test_dataset,
         test_data_loader=test_data_loader,
         # drawer=drawer,

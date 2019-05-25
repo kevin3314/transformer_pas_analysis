@@ -11,8 +11,8 @@ class Trainer(BaseTrainer):
     Note:
         Inherited from BaseTrainer.
     """
-    def __init__(self, model, loss, metrics, optimizer, config,
-                 data_loader, valid_data_loader=None, lr_scheduler=None):
+    def __init__(self, model, loss, metrics, optimizer, config, data_loader, valid_data_loader,
+                 lr_scheduler=None):
         super(Trainer, self).__init__(model, loss, metrics, optimizer, config)
         self.config = config
         self.data_loader = data_loader
@@ -96,13 +96,16 @@ class Trainer(BaseTrainer):
         # total_val_loss = 0
         total_val_metrics = np.zeros(len(self.metrics))
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, segment_ids, ng_arg_ids_set) in enumerate(
-                    self.valid_data_loader):
+            for batch_idx, (input_ids, segment_ids, input_mask, arguments_ids, ng_arg_mask)\
+                    in enumerate(self.valid_data_loader):
                 input_ids = input_ids.to(self.device)  # (b, seq)
-                input_mask = input_mask.to(self.device)  # (b, seq)
                 segment_ids = segment_ids.to(self.device)  # (b, seq)
-                ng_arg_ids_set = ng_arg_ids_set.to(self.device)  # (b, seq, seq)
-                #
+                input_mask = input_mask.to(self.device)        # (b, seq)
+                arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
+                ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+
+                output = self.model(input_ids, segment_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
+
                 # ret_dict = self.model(input_ids, input_mask, segment_ids, ng_arg_ids_set=ng_arg_ids_set)
                 # arguments_set = ret_dict["arguments_set"][i].detach().cpu().tolist()
 

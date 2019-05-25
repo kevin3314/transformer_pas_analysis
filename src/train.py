@@ -17,9 +17,10 @@ def main(config):
     logger = config.get_logger('train')
 
     # setup data_loader instances
-    dataset = config.initialize('train_dataset', module_dataset)
-    data_loader = config.initialize('train_data_loader', module_loader, dataset)
-    valid_data_loader = data_loader.split_validation()
+    train_dataset = config.initialize('train_dataset', module_dataset)
+    train_data_loader = config.initialize('train_data_loader', module_loader, train_dataset)
+    valid_dataset = config.initialize('valid_dataset', module_dataset)
+    valid_data_loader = config.initialize('valid_data_loader', module_loader, valid_dataset)
 
     # build model architecture, then print to console
     model = config.initialize('arch', module_arch)
@@ -43,7 +44,7 @@ def main(config):
 
     trainer = Trainer(model, loss, metrics, optimizer,
                       config=config,
-                      data_loader=data_loader,
+                      data_loader=train_data_loader,
                       valid_data_loader=valid_data_loader,
                       lr_scheduler=None)
 
