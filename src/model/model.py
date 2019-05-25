@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 # import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
 from pytorch_pretrained_bert.modeling import BertModel
 
 from base import BaseModel
@@ -41,9 +40,8 @@ class BertPASAnalysisModel(BaseModel):
                 input_ids: torch.Tensor,       # (b, seq)
                 token_type_ids: torch.Tensor,  # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_arg_ids_set: torch.Tensor,  # (b, seq, seq)
-                arguments_set=None,            # (b, seq, case)
-                ):
+                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
+                ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_length = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
@@ -68,30 +66,16 @@ class BertPASAnalysisModel(BaseModel):
             h_j = h_j.view(batch_size, sequence_length, self.num_case, -1)  # (b, seq, case, hid)
             g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)  # (b, seq, seq, case)
 
-        # (b, seq, seq, case) -> (b, seq, case, seq)
-        g_logits = g_logits.transpose(2, 3).contiguous()
+        g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
-        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)  # (b, 1, 1, seq)
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -1024.0
-        g_logits += extended_attention_mask  # (b, seq, case, seq)
+        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_length)  # (b, 1, 1, seq)
+        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
 
-        ng_arg_ids_mask = ng_arg_ids_set.unsqueeze(2)  # (b, seq, 1, seq)
-        ng_arg_ids_mask = ng_arg_ids_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        ng_arg_ids_mask = ng_arg_ids_mask * -1024.0
-        g_logits += ng_arg_ids_mask  # (b, seq, case, seq)
+        g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
 
-        # training
-        if arguments_set is not None:
-            sequence_length = input_ids.size(1)
-
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(g_logits.view((-1, sequence_length)), arguments_set.view(-1))
-            return loss
-        # testing
-        else:
-            arguments_set = torch.argmax(g_logits, dim=3)
-            return arguments_set
+        return g_logits  # (b, seq, case, seq)
 
     def expand_vocab(self, num_expand_vocab):
         """Add special tokens to vocab."""

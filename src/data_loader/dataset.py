@@ -51,7 +51,7 @@ class InputFeatures:
                  input_mask: List[int],  # use for model
                  segment_ids: List[int],  # use for model
                  arguments_set: List[List[int]] = None,  # use for model
-                 ng_arg_ids_set: List[List[int]] = None,  # use for model
+                 ng_arg_mask: List[List[int]] = None,  # use for model
                  ):
         self.tokens = tokens
         self.orig_to_tok_index = orig_to_tok_index
@@ -60,7 +60,7 @@ class InputFeatures:
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.arguments_set = arguments_set
-        self.ng_arg_ids_set = ng_arg_ids_set
+        self.ng_arg_mask = ng_arg_mask
 
 
 class PASDataset(Dataset):
@@ -90,16 +90,12 @@ class PASDataset(Dataset):
 
     def __getitem__(self, idx) -> tuple:
         feature = self.features[idx]
-        input_ids = np.array(feature.input_ids)            # (seq)
-        segment_ids = np.array(feature.segment_ids)        # (seq)
-        input_mask = np.array(feature.input_mask)          # (seq)
-        arguments_set = np.array(feature.arguments_set)    # (seq, case)
-        example_index = np.array(idx)                      # ()
-        ng_arg_ids_set = np.array(feature.ng_arg_ids_set)  # (seq, seq)
-        if self.training:
-            return input_ids, segment_ids, input_mask, arguments_set, ng_arg_ids_set
-        else:
-            return input_ids, segment_ids, input_mask, example_index, ng_arg_ids_set
+        input_ids = np.array(feature.input_ids)          # (seq)
+        segment_ids = np.array(feature.segment_ids)      # (seq)
+        input_mask = np.array(feature.input_mask)        # (seq)
+        arguments_ids = np.array(feature.arguments_set)  # (seq, case)
+        ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
+        return input_ids, segment_ids, input_mask, arguments_ids, ng_arg_mask
 
     @staticmethod
     def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool) -> List[PasExample]:
@@ -298,8 +294,8 @@ class PASDataset(Dataset):
                     input_mask=input_mask,
                     segment_ids=segment_ids,
                     arguments_set=arguments_set,
-                    ng_arg_ids_set=[[1 if x in ng_arg_ids else 0 for x in range(max_seq_length)] for ng_arg_ids in
-                                    ng_arg_ids_set],
+                    ng_arg_mask=[[0 if x in ng_arg_ids else 1 for x in range(max_seq_length)] for ng_arg_ids in
+                                 ng_arg_ids_set],
                     ))
 
         return features

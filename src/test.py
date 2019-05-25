@@ -109,7 +109,7 @@ def main(config, resume):
     logger.info(model)
 
     # get function handles of loss and metrics
-    # loss_fn = getattr(module_loss, config['loss'])
+    loss_fn = getattr(module_loss, config['loss'])
     # metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -125,31 +125,29 @@ def main(config, resume):
     model = model.to(device)
     model.eval()
 
-    # total_loss = 0.0
+    total_loss = 0.0
     # total_metrics = torch.zeros(len(metric_fns))
-
     arguments_sets: List[List[List[int]]] = []
-    for batch_idx, (input_ids, segment_ids, input_mask, example_indices, ng_arg_ids_set) in enumerate(data_loader):
-        input_ids = input_ids.to(device)  # (b, seq)
+    for batch_idx, (input_ids, segment_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(data_loader):
+        input_ids = input_ids.to(device)      # (b, seq)
         segment_ids = segment_ids.to(device)  # (b, seq)
-        input_mask = input_mask.to(device)  # (b, seq)
-        ng_arg_ids_set = ng_arg_ids_set.to(device)  # (b, seq, seq)
+        input_mask = input_mask.to(device)    # (b, seq)
+        arguments_ids = arguments_ids.to(device)  # (b, seq, case)
+        ng_arg_mask = ng_arg_mask.to(device)  # (b, seq, seq)
 
         with torch.no_grad():
-            arguments_set = model(input_ids, segment_ids, input_mask, ng_arg_ids_set)  # (b, seq, case)
+            output = model(input_ids, segment_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
 
-        # for i, example_index in enumerate(example_indices):
+        arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
         arguments_sets += arguments_set.detach().cpu().tolist()
-        # arguments_sets.append(arguments_set)
 
         # computing loss, metrics on test set
-        # loss = loss_fn(output, target)
-        # batch_size = input_ids.size(0)
-        # total_loss += loss.item() * batch_size
+        loss = loss_fn(output, arguments_ids)
+        batch_size = input_ids.size(0)
+        total_loss += loss.item() * batch_size
         # for i, metric in enumerate(metric_fns):
         #     total_metrics[i] += metric(ret_dict) * batch_size
 
-    # output_prediction_file = os.path.join(config.save_dir, 'predictions.txt')
     output_prediction_file = os.path.join(config.save_dir, 'test_out.conll')
     special_tokens = config['test_dataset']['args']['special_tokens']
     cases = config['test_dataset']['args']['cases']
@@ -158,9 +156,7 @@ def main(config, resume):
                       cases=cases, num_expand_vocab=len(special_tokens), special_tokens=special_tokens,
                       coreference=config['test_dataset']['args']['coreference'], logger=logger)
 
-    # n_samples = len(data_loader.sampler)
-    # log = {'loss': total_loss / n_samples}
-    log = {}
+    log = {'loss': total_loss / data_loader.n_samples}
     # log.update({
     #     met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
     # })

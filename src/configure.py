@@ -139,7 +139,7 @@ def main() -> None:
             "weight_decay": 0.01,
         },
     }
-    loss = "nll_loss"
+    loss = "cross_entropy_loss"
     metrics = [
         "my_metric", "my_metric2",
     ]
