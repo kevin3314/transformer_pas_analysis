@@ -12,7 +12,7 @@ class BertPASAnalysisModel(BaseModel):
                  parsing_algorithm: str,
                  num_case: int,
                  arc_representation_dim: int) -> None:
-        super(BertPASAnalysisModel, self).__init__()
+        super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version

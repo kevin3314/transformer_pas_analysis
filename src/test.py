@@ -97,7 +97,7 @@ def write_predictions(all_examples: List[PasExample],
             writer.write("\n")
 
 
-def main(config, resume):
+def main(config):
     logger = config.get_logger('test')
 
     # setup data_loader instances
@@ -115,8 +115,8 @@ def main(config, resume):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    logger.info('Loading checkpoint: {} ...'.format(resume))
-    checkpoint = torch.load(resume, map_location=device)
+    logger.info('Loading checkpoint: {} ...'.format(config.resume))
+    checkpoint = torch.load(config.resume, map_location=device)
     state_dict = checkpoint['state_dict']
     if config['n_gpu'] > 1:
         model = nn.DataParallel(model)
@@ -172,4 +172,4 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
 
-    main(config=ConfigParser(parser, timestamp=False), resume=parser.parse_args().resume)
+    main(ConfigParser(parser, timestamp=False))
