@@ -129,7 +129,7 @@ def main() -> None:
         },
     }
     train_data_loader = {
-        "type": "ConlluDataLoader",
+        "type": "ConllDataLoader",
         "args": {
             "batch_size": args.batch_size,
             "shuffle": True,
@@ -138,7 +138,7 @@ def main() -> None:
         },
     }
     valid_data_loader = {
-        "type": "ConlluDataLoader",
+        "type": "ConllDataLoader",
         "args": {
             "batch_size": args.batch_size,
             "shuffle": False,
@@ -147,7 +147,7 @@ def main() -> None:
         },
     }
     test_data_loader = {
-        "type": "ConlluDataLoader",
+        "type": "ConllDataLoader",
         "args": {
             "batch_size": args.batch_size,
             "shuffle": False,
