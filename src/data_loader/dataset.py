@@ -91,11 +91,10 @@ class PASDataset(Dataset):
     def __getitem__(self, idx) -> tuple:
         feature = self.features[idx]
         input_ids = np.array(feature.input_ids)          # (seq)
-        segment_ids = np.array(feature.segment_ids)      # (seq)
         input_mask = np.array(feature.input_mask)        # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case)
         ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
-        return input_ids, segment_ids, input_mask, arguments_ids, ng_arg_mask
+        return input_ids, input_mask, arguments_ids, ng_arg_mask
 
     @staticmethod
     def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool) -> List[PasExample]:

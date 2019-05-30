@@ -8,7 +8,7 @@ from base import BaseModel
 
 class BertPASAnalysisModel(BaseModel):
     def __init__(self,
-                 bert_model: BertModel,
+                 bert_model: str,
                  parsing_algorithm: str,
                  num_case: int,
                  arc_representation_dim: int) -> None:
@@ -38,14 +38,12 @@ class BertPASAnalysisModel(BaseModel):
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
-                token_type_ids: torch.Tensor,  # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
                 ng_arg_mask: torch.Tensor,     # (b, seq, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_length = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
-                                       token_type_ids=token_type_ids,
                                        attention_mask=attention_mask,
                                        output_all_encoded_layers=False)
 
