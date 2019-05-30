@@ -90,6 +90,7 @@ def write_predictions(all_examples: List[PasExample],
 
             for line_num, line in enumerate(example.lines):
                 items = line.split("\t")
+                assert int(items[0]) == line_num
                 items = output_pas_analysis(items, cases, arguments_set, feature, line_num,
                                             max_seq_length, num_expand_vocab, special_tokens, coreference, logger)
                 writer.write("\t".join(items) + "\n")
@@ -130,22 +131,20 @@ def main(config):
     # total_metrics = torch.zeros(len(metric_fns))
     arguments_sets: List[List[List[int]]] = []
     with torch.no_grad():
-        for batch_idx, (input_ids, segment_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(data_loader):
+        for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(data_loader):
             input_ids = input_ids.to(device)          # (b, seq)
-            segment_ids = segment_ids.to(device)      # (b, seq)
             input_mask = input_mask.to(device)        # (b, seq)
             arguments_ids = arguments_ids.to(device)  # (b, seq, case)
             ng_arg_mask = ng_arg_mask.to(device)      # (b, seq, seq)
 
-            output = model(input_ids, segment_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
+            output = model(input_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
 
             arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
-            arguments_sets += arguments_set.detach().cpu().tolist()
+            arguments_sets += arguments_set.tolist()
 
             # computing loss, metrics on test set
             loss = loss_fn(output, arguments_ids)
-            batch_size = input_ids.size(0)
-            total_loss += loss.item() * batch_size
+            total_loss += loss.item() * input_ids.size(0)
             # for i, metric in enumerate(metric_fns):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
