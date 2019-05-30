@@ -205,7 +205,12 @@ class PASDataset(Dataset):
                 tokens.append(token)
                 segment_ids.append(0)
 
-                if is_training is False or token.startswith("##"):
+                if token.startswith("##"):
+                    arguments_set.append([-1] * num_case_w_coreference)
+                    ng_arg_ids_set.append([])
+                    continue
+
+                if is_training is False:
                     arguments_set.append([-1] * num_case_w_coreference)
                 else:
                     arguments: List[int] = []
@@ -230,11 +235,8 @@ class PASDataset(Dataset):
                     arguments_set.append(arguments)
 
                 # ng_arg_ids
-                if token.startswith("##") is True:
-                    ng_arg_ids_set.append([])
-                else:
-                    ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] + 1 for ng_arg_id in
-                                           example.ng_arg_ids_set[tok_to_orig_index[i]]])
+                ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] + 1 for ng_arg_id in
+                                       example.ng_arg_ids_set[tok_to_orig_index[i]]])
 
             # [SEP]
             tokens.append("[SEP]")
@@ -269,7 +271,7 @@ class PASDataset(Dataset):
             assert len(arguments_set) == max_seq_length
             assert len(ng_arg_ids_set) == max_seq_length
 
-            if example_index < 20:
+            if example_index < 10:
                 logger.info('*** Example ***')
                 logger.info(f'example_index: {example_index}')
                 logger.info(f'tokens: {" ".join(tokens)}')
@@ -280,9 +282,6 @@ class PASDataset(Dataset):
                             f'{" ".join(",".join(str(arg) for arg in arguments) for arguments in arguments_set)}')
                 logger.info(f'ng_arg_ids_set: '
                             f'{" ".join(",".join(str(x) for x in ng_arg_ids) for ng_arg_ids in ng_arg_ids_set)}')
-                # for namespace in token_tag_indices:
-                #     logger.info(
-                #         "%s_tags: %s" % (namespace, " ".join([str(x) for x in token_tag_indices[namespace]])))
 
             features.append(
                 InputFeatures(
@@ -295,7 +294,8 @@ class PASDataset(Dataset):
                     arguments_set=arguments_set,
                     ng_arg_mask=[[0 if x in ng_arg_ids else 1 for x in range(max_seq_length)] for ng_arg_ids in
                                  ng_arg_ids_set],
-                    ))
+                )
+            )
 
         return features
 
