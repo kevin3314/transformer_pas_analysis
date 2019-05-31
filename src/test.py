@@ -20,19 +20,21 @@ def output_pas_analysis(items: List[str],
                         cases: List[str],
                         arguments_set: List[List[int]],
                         features: InputFeatures,
-                        line_num: int,
                         max_seq_length: int,
-                        num_expand_vocab: int,
                         special_tokens: List[str],
                         coreference: bool,
                         logger: Logger):
+    target_token_index = features.orig_to_tok_index[int(items[0]) - 1]
+    target_arguments = arguments_set[target_token_index + 1]
+    num_special_tokens = len(special_tokens)
+
     if items[5] != "_":
         # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
         orig_arguments = {arg_string.split(":", 1)[0]: arg_string.split(":", 1)[1]
                           for arg_string in items[5].split(",")}
-        argument_strings = []
 
-        for case, argument_string in zip(cases, arguments_set[features.orig_to_tok_index[line_num] + 1]):
+        argument_strings = []
+        for case, argument in zip(cases, target_arguments):
             if coreference is True and case == "=":
                 continue
 
@@ -40,27 +42,27 @@ def output_pas_analysis(items: List[str],
                 argument_string = orig_arguments[case]
             else:
                 # special
-                if argument_string >= max_seq_length - num_expand_vocab:
-                    argument_string = special_tokens[argument_string - max_seq_length + num_expand_vocab]
+                if argument >= max_seq_length - num_special_tokens:
+                    argument_string = special_tokens[argument - max_seq_length + num_special_tokens]
                 else:
                     # [SEP]
-                    if len(features.tok_to_orig_index) + 1 == argument_string:
+                    if len(features.tok_to_orig_index) + 1 == argument:
                         logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
                         argument_string = "NULL"
                     else:
-                        argument_string = features.tok_to_orig_index[argument_string - 1] + 1
+                        argument_string = features.tok_to_orig_index[argument - 1] + 1
 
             argument_strings.append(case + ":" + str(argument_string))
 
         items[5] = ",".join(argument_strings)
 
     if coreference is True and items[6] == "MASKED":
-        argument_string = arguments_set[features.orig_to_tok_index[line_num] + 1][-1]
+        argument = target_arguments[-1]
         # special
-        if argument_string >= max_seq_length - num_expand_vocab:
-            argument_string = special_tokens[argument_string - max_seq_length + num_expand_vocab]
+        if argument >= max_seq_length - num_special_tokens:
+            argument_string = special_tokens[argument - max_seq_length + num_special_tokens]
         else:
-            argument_string = features.tok_to_orig_index[argument_string - 1] + 1
+            argument_string = features.tok_to_orig_index[argument - 1] + 1
         items[6] = str(argument_string)
 
     return items
@@ -72,7 +74,6 @@ def write_predictions(all_examples: List[PasExample],
                       output_prediction_file: Optional[str],
                       max_seq_length: int,
                       cases: List[str],
-                      num_expand_vocab: int,
                       special_tokens: List[str],
                       coreference: bool,
                       logger: Logger):
@@ -88,11 +89,10 @@ def write_predictions(all_examples: List[PasExample],
             if example.comment is not None:
                 writer.write("{}\n".format(example.comment))
 
-            for line_num, line in enumerate(example.lines):
+            for line in example.lines:
                 items = line.split("\t")
-                assert int(items[0]) == line_num
-                items = output_pas_analysis(items, cases, arguments_set, feature, line_num,
-                                            max_seq_length, num_expand_vocab, special_tokens, coreference, logger)
+                items = output_pas_analysis(items, cases, arguments_set, feature,
+                                            max_seq_length, special_tokens, coreference, logger)
                 writer.write("\t".join(items) + "\n")
 
             writer.write("\n")
@@ -153,7 +153,7 @@ def main(config):
     cases = config['test_dataset']['args']['cases']
     write_predictions(dataset.pas_examples, dataset.features, arguments_sets, output_prediction_file,
                       config['test_dataset']['args']['max_seq_length'],
-                      cases=cases, num_expand_vocab=len(special_tokens), special_tokens=special_tokens,
+                      cases=cases, special_tokens=special_tokens,
                       coreference=config['test_dataset']['args']['coreference'], logger=logger)
 
     log = {'loss': total_loss / data_loader.n_samples}
