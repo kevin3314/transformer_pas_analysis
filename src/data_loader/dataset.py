@@ -224,8 +224,11 @@ class PASDataset(Dataset):
                     arguments_set.append(arguments)
 
                 # 0 origin
-                ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] for ng_arg_id in
-                                       example.ng_arg_ids_set[orig_index]])
+                ng_arg_ids_set.append(
+                    [0] +
+                    [orig_to_tok_index[ng_arg_id - 1] for ng_arg_id in example.ng_arg_ids_set[orig_index]] +
+                    [len(all_tokens) - 1]
+                )
 
             input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
