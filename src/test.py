@@ -25,7 +25,7 @@ def output_pas_analysis(items: List[str],
                         coreference: bool,
                         logger: Logger):
     target_token_index = features.orig_to_tok_index[int(items[0]) - 1]
-    target_arguments = arguments_set[target_token_index + 1]
+    target_arguments = arguments_set[target_token_index]
     num_special_tokens = len(special_tokens)
 
     if items[5] != "_":
@@ -34,7 +34,7 @@ def output_pas_analysis(items: List[str],
                           for arg_string in items[5].split(",")}
 
         argument_strings = []
-        for case, argument in zip(cases, target_arguments):
+        for case, argument_index in zip(cases, target_arguments):
             if coreference is True and case == "=":
                 continue
 
@@ -42,27 +42,27 @@ def output_pas_analysis(items: List[str],
                 argument_string = orig_arguments[case]
             else:
                 # special
-                if argument >= max_seq_length - num_special_tokens:
-                    argument_string = special_tokens[argument - max_seq_length + num_special_tokens]
+                if argument_index >= max_seq_length - num_special_tokens:
+                    argument_string = special_tokens[argument_index - max_seq_length + num_special_tokens]
                 else:
                     # [SEP]
-                    if len(features.tok_to_orig_index) + 1 == argument:
+                    if argument_index + 1 == len(features.tok_to_orig_index):
                         logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
                         argument_string = "NULL"
                     else:
-                        argument_string = features.tok_to_orig_index[argument - 1] + 1
+                        argument_string = features.tok_to_orig_index[argument_index] + 1
 
             argument_strings.append(case + ":" + str(argument_string))
 
         items[5] = ",".join(argument_strings)
 
     if coreference is True and items[6] == "MASKED":
-        argument = target_arguments[-1]
+        argument_index = target_arguments[-1]
         # special
-        if argument >= max_seq_length - num_special_tokens:
-            argument_string = special_tokens[argument - max_seq_length + num_special_tokens]
+        if argument_index >= max_seq_length - num_special_tokens:
+            argument_string = special_tokens[argument_index - max_seq_length + num_special_tokens]
         else:
-            argument_string = features.tok_to_orig_index[argument - 1] + 1
+            argument_string = features.tok_to_orig_index[argument_index] + 1
         items[6] = str(argument_string)
 
     return items

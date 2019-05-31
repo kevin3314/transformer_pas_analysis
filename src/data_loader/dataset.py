@@ -46,7 +46,7 @@ class InputFeatures:
     def __init__(self,
                  tokens: List[str],
                  orig_to_tok_index: List[int],  # use for output
-                 tok_to_orig_index: List[int],  # use for output
+                 tok_to_orig_index: List[Optional[int]],  # use for output
                  input_ids: List[int],  # use for model
                  input_mask: List[int],  # use for model
                  segment_ids: List[int],  # use for model
@@ -167,7 +167,7 @@ class PASDataset(Dataset):
 
                 words.append(word)
                 arguments_set.append(arguments)
-                ng_arg_ids_set.append(ng_arg_ids)
+                ng_arg_ids_set.append(ng_arg_ids)  # 1オリジン
                 lines.append(line)
 
         return examples
@@ -188,21 +188,21 @@ class PASDataset(Dataset):
             segment_ids: List[int] = []
             arguments_set: List[List[int]] = []
             ng_arg_ids_set: List[List[int]] = []
-            # token_tag_indices = defaultdict(list)
 
             all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
 
-            # [CLS]
-            tokens.append("[CLS]")
-            segment_ids.append(0)
-            arguments_set.append([-1] * num_case_w_coreference)
-            ng_arg_ids_set.append([])
+            # # [CLS]
+            # tokens.append("[CLS]")
+            # segment_ids.append(0)
+            # arguments_set.append([-1] * num_case_w_coreference)
+            # ng_arg_ids_set.append([])
 
-            for i, token in enumerate(all_tokens):
+            for token, orig_index in zip(all_tokens, tok_to_orig_index):
                 tokens.append(token)
                 segment_ids.append(0)
 
-                if token.startswith("##"):
+                # subsequent subword or [CLS] token or [SEP] token
+                if token.startswith("##") or orig_index is None:
                     arguments_set.append([-1] * num_case_w_coreference)
                     ng_arg_ids_set.append([])
                     continue
@@ -211,35 +211,35 @@ class PASDataset(Dataset):
                     arguments_set.append([-1] * num_case_w_coreference)
                 else:
                     arguments: List[int] = []
-                    for k, arg in enumerate(example.arguments_set[tok_to_orig_index[i]]):
-                        if arg is None or "%C" in arg:
+                    for k, argument in enumerate(example.arguments_set[orig_index]):
+                        if argument is None or "%C" in argument:
                             # none or overt
                             argument_index = -1
-                        elif arg.isdigit():
+                        elif argument.isdigit():
                             if (coreference is False or (coreference is True and k != num_case_w_coreference - 1)) and \
-                                   int(arg) in example.ng_arg_ids_set[tok_to_orig_index[i]]:
+                                   int(argument) in example.ng_arg_ids_set[orig_index]:
                                 # ng_arg_id (except for coreference resolution)
-                                logger.debug("ng_arg_id: {} {} {}".format(example.comment, token, arg))
+                                logger.debug("ng_arg_id: {} {} {}".format(example.comment, token, argument))
                                 argument_index = -1
                             else:
                                 # normal
-                                argument_index = orig_to_tok_index[int(arg) - 1] + 1
+                                argument_index = orig_to_tok_index[int(argument) - 1]
                         else:
                             # special token
-                            argument_index = max_seq_length - num_expand_vocab + special_tokens.index(arg)
+                            argument_index = max_seq_length - num_expand_vocab + special_tokens.index(argument)
                         arguments.append(argument_index)
 
                     arguments_set.append(arguments)
 
-                # ng_arg_ids
-                ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] + 1 for ng_arg_id in
-                                       example.ng_arg_ids_set[tok_to_orig_index[i]]])
+                # ng_arg_ids (0オリジン)
+                ng_arg_ids_set.append([orig_to_tok_index[ng_arg_id - 1] for ng_arg_id in
+                                       example.ng_arg_ids_set[orig_index]])
 
-            # [SEP]
-            tokens.append("[SEP]")
-            segment_ids.append(0)
-            arguments_set.append([-1] * num_case_w_coreference)
-            ng_arg_ids_set.append([])
+            # # [SEP]
+            # tokens.append("[SEP]")
+            # segment_ids.append(0)
+            # arguments_set.append([-1] * num_case_w_coreference)
+            # ng_arg_ids_set.append([])
 
             input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
@@ -296,16 +296,22 @@ class PASDataset(Dataset):
 
         return features
 
-    def _get_tokenized_tokens(self, words):
+    def _get_tokenized_tokens(self, words: List[str]):
         all_tokens = []
-        tok_to_orig_index = []
-        orig_to_tok_index = []
+        tok_to_orig_index: List[Optional[int]] = []
+        orig_to_tok_index: List[int] = []
 
-        for i, token in enumerate(words):
-            orig_to_tok_index.append(len(all_tokens))
-            sub_tokens = self.tokenizer.tokenize(token)
+        all_tokens.append('[CLS]')
+        tok_to_orig_index.append(None)  # There's no original token corresponding to [CLS] token
+
+        for i, word in enumerate(words):
+            orig_to_tok_index.append(len(all_tokens))  # assign head subword
+            sub_tokens = self.tokenizer.tokenize(word)
             for sub_token in sub_tokens:
                 all_tokens.append(sub_token)
                 tok_to_orig_index.append(i)
+
+        all_tokens.append('[SEP]')
+        tok_to_orig_index.append(None)  # There's no original token corresponding to [SEP] token
 
         return all_tokens, tok_to_orig_index, orig_to_tok_index
