@@ -1,4 +1,5 @@
 import numpy as np
+from typing import List
 
 import torch
 
@@ -59,7 +60,7 @@ class Trainer(BaseTrainer):
 
             self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
             self.writer.add_scalar('loss', loss.item())
-            total_loss += loss.item()
+            total_loss += loss.item() * input_ids.size(0)
             # total_metrics += self._eval_metrics(output, target)
 
             if batch_idx % self.log_step == 0:
@@ -71,7 +72,7 @@ class Trainer(BaseTrainer):
                     loss.item()))
 
         log = {
-            'loss': total_loss / len(self.data_loader),
+            'loss': total_loss / self.data_loader.n_samples,
             # 'metrics': (total_metrics / len(self.data_loader)).tolist()
         }
 
@@ -92,8 +93,9 @@ class Trainer(BaseTrainer):
             The validation metrics in log must have the key 'val_metrics'.
         """
         self.model.eval()
-        # total_val_loss = 0
+        total_val_loss = 0
         total_val_metrics = np.zeros(len(self.metrics))
+        arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
             for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(self.valid_data_loader):
                 input_ids = input_ids.to(self.device)  # (b, seq)
@@ -103,14 +105,15 @@ class Trainer(BaseTrainer):
 
                 output = self.model(input_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
 
-                # ret_dict = self.model(input_ids, input_mask, segment_ids, ng_arg_ids_set=ng_arg_ids_set)
-                # arguments_set = ret_dict["arguments_set"][i].detach().cpu().tolist()
+                arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
+                arguments_sets += arguments_set.tolist()
 
-                # loss = self.loss(output, input_ids)
+                # computing loss, metrics on test set
+                loss = self.loss(output, arguments_ids)
+                total_val_loss += loss.item() * input_ids.size(0)
 
-                # self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                # self.writer.add_scalar('loss', loss.item())
-                # total_val_loss += loss.item()
+                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                self.writer.add_scalar('loss', loss.item())
                 # total_val_metrics += self._eval_metrics(output, target)
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
@@ -119,6 +122,6 @@ class Trainer(BaseTrainer):
             self.writer.add_histogram(name, p, bins='auto')
 
         return {
-            # 'val_loss': total_val_loss / len(self.valid_data_loader),
+            'val_loss': total_val_loss / self.valid_data_loader.n_samples,
             'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist()
         }

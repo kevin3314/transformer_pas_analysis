@@ -106,10 +106,7 @@ class PASDataset(Dataset):
             example_id: int = 0
             words, arguments_set, ng_arg_ids_set, lines = [], [], [], []
             comment: Optional[str] = None
-            while True:
-                line = reader.readline()
-                if not line:
-                    break
+            for line in reader:
                 line = line.strip()
                 if line.startswith("#"):
                     comment = line
