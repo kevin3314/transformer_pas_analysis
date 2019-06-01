@@ -1,7 +1,7 @@
 import os
 import sys
 import argparse
-from typing import List, Optional
+from typing import List, Optional, Dict
 from logging import Logger
 
 import torch
@@ -20,13 +20,11 @@ def output_pas_analysis(items: List[str],
                         cases: List[str],
                         arguments_set: List[List[int]],
                         features: InputFeatures,
-                        max_seq_length: int,
-                        special_tokens: List[str],
+                        tok_to_special: Dict[int, str],
                         coreference: bool,
                         logger: Logger):
     target_token_index = features.orig_to_tok_index[int(items[0]) - 1]
     target_arguments = arguments_set[target_token_index]
-    num_special_tokens = len(special_tokens)
 
     if items[5] != "_":
         # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
@@ -42,15 +40,14 @@ def output_pas_analysis(items: List[str],
                 argument_string = orig_arguments[case]
             else:
                 # special
-                if argument_index >= max_seq_length - num_special_tokens:
-                    argument_string = special_tokens[argument_index - max_seq_length + num_special_tokens]
+                if argument_index in tok_to_special:
+                    argument_string = tok_to_special[argument_index]
+                elif features.tok_to_orig_index[argument_index] is None:
+                    # [SEP] or [CLS]
+                    logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
+                    argument_string = "NULL"
                 else:
-                    # [SEP]
-                    if argument_index + 1 == len(features.tok_to_orig_index):
-                        logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
-                        argument_string = "NULL"
-                    else:
-                        argument_string = features.tok_to_orig_index[argument_index] + 1
+                    argument_string = features.tok_to_orig_index[argument_index] + 1
 
             argument_strings.append(case + ":" + str(argument_string))
 
@@ -59,8 +56,8 @@ def output_pas_analysis(items: List[str],
     if coreference is True and items[6] == "MASKED":
         argument_index = target_arguments[-1]
         # special
-        if argument_index >= max_seq_length - num_special_tokens:
-            argument_string = special_tokens[argument_index - max_seq_length + num_special_tokens]
+        if argument_index in tok_to_special:
+            argument_string = tok_to_special[argument_index]
         else:
             argument_string = features.tok_to_orig_index[argument_index] + 1
         items[6] = str(argument_string)
@@ -72,9 +69,8 @@ def write_predictions(all_examples: List[PasExample],
                       all_features: List[InputFeatures],
                       arguments_sets: List[List[List[int]]],
                       output_prediction_file: Optional[str],
-                      max_seq_length: int,
+                      tok_to_special: Dict[int, str],
                       cases: List[str],
-                      special_tokens: List[str],
                       coreference: bool,
                       logger: Logger):
     """Write final predictions to the file."""
@@ -91,8 +87,7 @@ def write_predictions(all_examples: List[PasExample],
 
             for line in example.lines:
                 items = line.split("\t")
-                items = output_pas_analysis(items, cases, arguments_set, feature,
-                                            max_seq_length, special_tokens, coreference, logger)
+                items = output_pas_analysis(items, cases, arguments_set, feature, tok_to_special, coreference, logger)
                 writer.write("\t".join(items) + "\n")
 
             writer.write("\n")
@@ -148,12 +143,15 @@ def main(config):
             # for i, metric in enumerate(metric_fns):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
-    output_prediction_file = os.path.join(config.save_dir, 'test_out.conll')
-    special_tokens = config['test_dataset']['args']['special_tokens']
+    output_prediction_file: str = os.path.join(config.save_dir, 'test_out.conll')
+    special_tokens: List[str] = config['test_dataset']['args']['special_tokens']
+    num_special_tokens: int = len(special_tokens)
+    max_seq_length: int = config['test_dataset']['args']['max_seq_length']
+    tok_to_special: Dict[int, str] = {i + max_seq_length - num_special_tokens: token for i, token
+                                      in enumerate(special_tokens)}
     cases = config['test_dataset']['args']['cases']
     write_predictions(dataset.pas_examples, dataset.features, arguments_sets, output_prediction_file,
-                      config['test_dataset']['args']['max_seq_length'],
-                      cases=cases, special_tokens=special_tokens,
+                      tok_to_special=tok_to_special, cases=cases,
                       coreference=config['test_dataset']['args']['coreference'], logger=logger)
 
     log = {'loss': total_loss / data_loader.n_samples}
