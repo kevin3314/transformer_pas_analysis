@@ -1,6 +1,7 @@
 import os
 import argparse
 from typing import List
+import subprocess
 
 import torch
 import torch.nn as nn
@@ -71,6 +72,7 @@ def main(config):
                      output_prediction_file,
                      config['test_dataset']['args'],
                      logger)
+    subprocess.run(['./evaluate.sh', str(config.save_dir), 'test'], shell=True, check=True)
 
     log = {'loss': total_loss / data_loader.n_samples}
     # log.update({

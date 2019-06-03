@@ -1,9 +1,12 @@
 import numpy as np
 from typing import List
+import subprocess
 
 import torch
 
 from base import BaseTrainer
+from model.metric import write_prediction
+from utils.util import read_json
 
 
 class Trainer(BaseTrainer):
@@ -22,12 +25,12 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
 
-    def _eval_metrics(self, output, target):
-        acc_metrics = np.zeros(len(self.metrics))
+    def _eval_metrics(self, result: dict):
+        f1_metrics = np.zeros(len(self.metrics))
         for i, metric in enumerate(self.metrics):
-            acc_metrics[i] += metric(output, target)
-            self.writer.add_scalar('{}'.format(metric.__name__), acc_metrics[i])
-        return acc_metrics
+            f1_metrics[i] += metric(result)
+            self.writer.add_scalar('{}'.format(metric.__name__), f1_metrics[i])
+        return f1_metrics
 
     def _train_epoch(self, epoch):
         """
@@ -94,7 +97,7 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         total_val_loss = 0
-        total_val_metrics = np.zeros(len(self.metrics))
+        # total_val_metrics = np.zeros(len(self.metrics))
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
             for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(self.valid_data_loader):
@@ -117,11 +120,22 @@ class Trainer(BaseTrainer):
                 # total_val_metrics += self._eval_metrics(output, target)
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
+        output_prediction_file = self.config.save_dir / 'valid_out.conll'
+        write_prediction(self.valid_data_loader.dataset.pas_examples,
+                         self.valid_data_loader.dataset.features,
+                         arguments_sets,
+                         output_prediction_file,
+                         self.config['valid_dataset']['args'],
+                         self.logger)
+        subprocess.run(['./evaluate.sh', str(self.config.save_dir), 'valid'], shell=True, check=True)
+        result = read_json(self.config.save_dir / 'result.json')
+        val_metrics = self._eval_metrics(result)
+
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')
 
         return {
             'val_loss': total_val_loss / self.valid_data_loader.n_samples,
-            'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist()
+            'val_metrics': val_metrics
         }

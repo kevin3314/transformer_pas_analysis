@@ -60,15 +60,15 @@ def main() -> None:
                         help='Perform coreference resolution.')
     parser.add_argument('--special-tokens', type=str, default='著者,読者,不特定:人,NULL,NA',
                         help='Special tokens. Separate by ",".')
-    parser.add_argument('--case-string', type=str, default="ガ,ヲ,ニ,ガ２",
+    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='Case strings. Separate by ","')
     # parser.add_argument('--dropout', type=float, default=0.1, nargs='*',
     #                     help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
-    parser.add_argument("--warmup_proportion", default=0.1, type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. "
-                             "E.g., 0.1 = 10% of training.")
+    parser.add_argument('--warmup_proportion', default=0.1, type=float,
+                        help='Proportion of training to perform linear learning rate warmup for. '
+                             'E.g., 0.1 = 10% of training.')
     parser.add_argument('--env', choices=['local', 'server'], default='server',
                         help='development environment')
     parser.add_argument('--task-name', type=str, default='Base',
@@ -84,109 +84,121 @@ def main() -> None:
         num_train_examples = f.readlines().count('\n') + 1
 
     arch = {
-        "type": "BertPASAnalysisModel",
-        "args": {
-            "bert_model": Path.bert_model[args.env],
-            "parsing_algorithm": "zhang",
-            "num_case": len(cases) if not args.coreference else len(cases) + 1,
-            "arc_representation_dim": 400,
+        'type': 'BertPASAnalysisModel',
+        'args': {
+            'bert_model': Path.bert_model[args.env],
+            'parsing_algorithm': 'zhang',
+            'num_case': len(cases) if not args.coreference else len(cases) + 1,
+            'arc_representation_dim': 400,
         },
     }
     train_dataset = {
-        "type": "PASDataset",
-        "args": {
-            "path": Path.train_file[args.env],
-            "max_seq_length": args.max_seq_length,
-            "cases": cases,
-            "coreference": args.coreference,
-            "special_tokens": args.special_tokens.split(','),
-            "training": True,
-            "bert_model": Path.bert_model[args.env],
+        'type': 'PASDataset',
+        'args': {
+            'path': Path.train_file[args.env],
+            'max_seq_length': args.max_seq_length,
+            'cases': cases,
+            'coreference': args.coreference,
+            'special_tokens': args.special_tokens.split(','),
+            'training': True,
+            'bert_model': Path.bert_model[args.env],
         },
     }
     valid_dataset = {
-        "type": "PASDataset",
-        "args": {
-            "path": Path.valid_file[args.env],
-            "max_seq_length": args.max_seq_length,
-            "cases": cases,
-            "coreference": args.coreference,
-            "special_tokens": args.special_tokens.split(','),
-            "training": False,
-            "bert_model": Path.bert_model[args.env],
+        'type': 'PASDataset',
+        'args': {
+            'path': Path.valid_file[args.env],
+            'max_seq_length': args.max_seq_length,
+            'cases': cases,
+            'coreference': args.coreference,
+            'special_tokens': args.special_tokens.split(','),
+            'training': False,
+            'bert_model': Path.bert_model[args.env],
         },
     }
     test_dataset = {
-        "type": "PASDataset",
-        "args": {
-            "path": Path.test_file[args.env],
-            "max_seq_length": args.max_seq_length,
-            "cases": cases,
-            "coreference": args.coreference,
-            "special_tokens": args.special_tokens.split(','),
-            "training": False,
-            "bert_model": Path.bert_model[args.env],
+        'type': 'PASDataset',
+        'args': {
+            'path': Path.test_file[args.env],
+            'max_seq_length': args.max_seq_length,
+            'cases': cases,
+            'coreference': args.coreference,
+            'special_tokens': args.special_tokens.split(','),
+            'training': False,
+            'bert_model': Path.bert_model[args.env],
         },
     }
     train_data_loader = {
-        "type": "ConllDataLoader",
-        "args": {
-            "batch_size": args.batch_size,
-            "shuffle": True,
-            "validation_split": 0.0,
-            "num_workers": 2,
+        'type': 'ConllDataLoader',
+        'args': {
+            'batch_size': args.batch_size,
+            'shuffle': True,
+            'validation_split': 0.0,
+            'num_workers': 2,
         },
     }
     valid_data_loader = {
-        "type": "ConllDataLoader",
-        "args": {
-            "batch_size": args.batch_size,
-            "shuffle": False,
-            "validation_split": 0.0,
-            "num_workers": 2,
+        'type': 'ConllDataLoader',
+        'args': {
+            'batch_size': args.batch_size,
+            'shuffle': False,
+            'validation_split': 0.0,
+            'num_workers': 2,
         },
     }
     test_data_loader = {
-        "type": "ConllDataLoader",
-        "args": {
-            "batch_size": args.batch_size,
-            "shuffle": False,
-            "validation_split": 0.0,
-            "num_workers": 2,
+        'type': 'ConllDataLoader',
+        'args': {
+            'batch_size': args.batch_size,
+            'shuffle': False,
+            'validation_split': 0.0,
+            'num_workers': 2,
         },
     }
     optimizer = {
-        "type": "BertAdam",
-        "args": {
-            "lr": args.lr,
-            "warmup": args.warmup_proportion,
-            "t_total": math.ceil(num_train_examples / args.batch_size) * args.epoch,
-            "weight_decay": 0.01,
+        'type': 'BertAdam',
+        'args': {
+            'lr': args.lr,
+            'warmup': args.warmup_proportion,
+            't_total': math.ceil(num_train_examples / args.batch_size) * args.epoch,
+            'weight_decay': 0.01,
         },
     }
-    loss = "cross_entropy_loss"
+    loss = 'cross_entropy_loss'
     metrics = [
-        "my_metric", "my_metric2",
+        'case_analysis_f1_ga',
+        'case_analysis_f1_wo',
+        'case_analysis_f1_ni',
+        'case_analysis_f1_ga2',
+        'case_analysis_f1',
+        'zero_anaphora_f1_ga',
+        'zero_anaphora_f1_wo',
+        'zero_anaphora_f1_ni',
+        'zero_anaphora_f1_ga2',
+        'zero_anaphora_f1',
+        'zero_anaphora_f1_inter',
+        'zero_anaphora_f1_intra',
+        'zero_anaphora_f1_writer_reader',
     ]
     # lr_scheduler = {
-    #     "type": "StepLR",
-    #     "args": {
-    #         "step_size": 50,
-    #         "gamma": 0.1,
+    #     'type': 'StepLR',
+    #     'args': {
+    #         'step_size': 50,
+    #         'gamma': 0.1,
     #     },
     # }
     trainer = {
-        "epochs": args.epoch,
-        "save_dir": "result/",
-        "save_period": 3,
-        "verbosity": 2,
-        "monitor": "off",
-        "early_stop": 10,
-        "tensorboardX": True,
+        'epochs': args.epoch,
+        'save_dir': 'result/',
+        'save_period': 3,
+        'verbosity': 2,
+        'monitor': 'off',
+        'early_stop': 10,
+        'tensorboardX': True,
     }
     visualization = {
-        "tensorboardX": True,
-        "log_dir": "result/runs"
+        'tensorboardX': True,
+        'log_dir': 'result/runs'
     }
     config = Config(
         name=name,
