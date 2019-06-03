@@ -69,11 +69,16 @@ def write_predictions(all_examples: List[PasExample],
                       all_features: List[InputFeatures],
                       arguments_sets: List[List[List[int]]],
                       output_prediction_file: Optional[str],
-                      tok_to_special: Dict[int, str],
-                      cases: List[str],
-                      coreference: bool,
+                      dataset_config: dict,
                       logger: Logger):
     """Write final predictions to the file."""
+    special_tokens: List[str] = dataset_config['special_tokens']
+    max_seq_length: int = dataset_config['max_seq_length']
+    tok_to_special: Dict[int, str] = {i + max_seq_length - len(special_tokens): token for i, token
+                                      in enumerate(special_tokens)}
+    cases = dataset_config['cases']
+    coreference = dataset_config['coreference']
+
     if output_prediction_file is not None:
         logger.info(f"Writing predictions to: {output_prediction_file}")
 
@@ -144,15 +149,12 @@ def main(config):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
     output_prediction_file: str = os.path.join(config.save_dir, 'test_out.conll')
-    special_tokens: List[str] = config['test_dataset']['args']['special_tokens']
-    num_special_tokens: int = len(special_tokens)
-    max_seq_length: int = config['test_dataset']['args']['max_seq_length']
-    tok_to_special: Dict[int, str] = {i + max_seq_length - num_special_tokens: token for i, token
-                                      in enumerate(special_tokens)}
-    cases = config['test_dataset']['args']['cases']
-    write_predictions(dataset.pas_examples, dataset.features, arguments_sets, output_prediction_file,
-                      tok_to_special=tok_to_special, cases=cases,
-                      coreference=config['test_dataset']['args']['coreference'], logger=logger)
+    write_predictions(dataset.pas_examples,
+                      dataset.features,
+                      arguments_sets,
+                      output_prediction_file,
+                      config['test_dataset']['args'],
+                      logger)
 
     log = {'loss': total_loss / data_loader.n_samples}
     # log.update({
