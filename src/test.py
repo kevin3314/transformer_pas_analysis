@@ -1,8 +1,6 @@
 import os
-import sys
 import argparse
-from typing import List, Optional, Dict
-from logging import Logger
+from typing import List
 
 import torch
 import torch.nn as nn
@@ -13,89 +11,7 @@ import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
-from data_loader.dataset import PasExample, InputFeatures
-
-
-def output_pas_analysis(items: List[str],
-                        cases: List[str],
-                        arguments_set: List[List[int]],
-                        features: InputFeatures,
-                        tok_to_special: Dict[int, str],
-                        coreference: bool,
-                        logger: Logger):
-    target_token_index = features.orig_to_tok_index[int(items[0]) - 1]
-    target_arguments = arguments_set[target_token_index]
-
-    if items[5] != "_":
-        # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
-        orig_arguments = {arg_string.split(":", 1)[0]: arg_string.split(":", 1)[1]
-                          for arg_string in items[5].split(",")}
-
-        argument_strings = []
-        for case, argument_index in zip(cases, target_arguments):
-            if coreference is True and case == "=":
-                continue
-
-            if "%C" in orig_arguments[case]:
-                argument_string = orig_arguments[case]
-            else:
-                # special
-                if argument_index in tok_to_special:
-                    argument_string = tok_to_special[argument_index]
-                elif features.tok_to_orig_index[argument_index] is None:
-                    # [SEP] or [CLS]
-                    logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
-                    argument_string = "NULL"
-                else:
-                    argument_string = features.tok_to_orig_index[argument_index] + 1
-
-            argument_strings.append(case + ":" + str(argument_string))
-
-        items[5] = ",".join(argument_strings)
-
-    if coreference is True and items[6] == "MASKED":
-        argument_index = target_arguments[-1]
-        # special
-        if argument_index in tok_to_special:
-            argument_string = tok_to_special[argument_index]
-        else:
-            argument_string = features.tok_to_orig_index[argument_index] + 1
-        items[6] = str(argument_string)
-
-    return items
-
-
-def write_predictions(all_examples: List[PasExample],
-                      all_features: List[InputFeatures],
-                      arguments_sets: List[List[List[int]]],
-                      output_prediction_file: Optional[str],
-                      dataset_config: dict,
-                      logger: Logger):
-    """Write final predictions to the file."""
-    special_tokens: List[str] = dataset_config['special_tokens']
-    max_seq_length: int = dataset_config['max_seq_length']
-    tok_to_special: Dict[int, str] = {i + max_seq_length - len(special_tokens): token for i, token
-                                      in enumerate(special_tokens)}
-    cases = dataset_config['cases']
-    coreference = dataset_config['coreference']
-
-    if output_prediction_file is not None:
-        logger.info(f"Writing predictions to: {output_prediction_file}")
-
-    if coreference is True:
-        cases.append("=")
-
-    with open(output_prediction_file, "w") if output_prediction_file is not None else sys.stdout as writer:
-        for example, feature, arguments_set in zip(all_examples, all_features, arguments_sets):
-            if example.comment is not None:
-                writer.write("{}\n".format(example.comment))
-
-            for line in example.lines:
-                items = line.split("\t")
-                items = output_pas_analysis(items, cases, arguments_set, feature, tok_to_special, coreference, logger)
-                writer.write("\t".join(items) + "\n")
-
-            writer.write("\n")
+from model.metric import write_prediction
 
 
 def main(config):
@@ -149,12 +65,12 @@ def main(config):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
     output_prediction_file: str = os.path.join(config.save_dir, 'test_out.conll')
-    write_predictions(dataset.pas_examples,
-                      dataset.features,
-                      arguments_sets,
-                      output_prediction_file,
-                      config['test_dataset']['args'],
-                      logger)
+    write_prediction(dataset.pas_examples,
+                     dataset.features,
+                     arguments_sets,
+                     output_prediction_file,
+                     config['test_dataset']['args'],
+                     logger)
 
     log = {'loss': total_loss / data_loader.n_samples}
     # log.update({
