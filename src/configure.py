@@ -71,14 +71,14 @@ def main() -> None:
                              "E.g., 0.1 = 10% of training.")
     parser.add_argument('--env', choices=['local', 'server'], default='server',
                         help='development environment')
-    parser.add_argument('--additional-name', type=str, default=None,
-                        help='additional config file name')
+    parser.add_argument('--task-name', type=str, default='Base',
+                        help='task name to identify different experiment settings')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
 
-    name = 'PAS' + ('' if args.additional_name is None else args.additional_name)
+    name = args.task_name
     n_gpu = 1
     with open(Path.train_file[args.env]) as f:
         num_train_examples = f.readlines().count('\n') + 1
