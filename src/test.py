@@ -1,10 +1,11 @@
 import os
 import argparse
-from typing import List
+from typing import List, Callable
 import subprocess
 
 import torch
 import torch.nn as nn
+import numpy as np
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -13,6 +14,14 @@ import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
 from model.metric import write_prediction
+from utils.util import read_json
+
+
+def eval_metrics(metrics: List[Callable], result: dict):
+    f1_metrics = np.zeros(len(metrics))
+    for i, metric in enumerate(metrics):
+        f1_metrics[i] += metric(result)
+    return f1_metrics
 
 
 def main(config):
@@ -29,7 +38,7 @@ def main(config):
 
     # get function handles of loss and metrics
     loss_fn = getattr(module_loss, config['loss'])
-    # metric_fns = [getattr(module_metric, met) for met in config['metrics']]
+    metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -73,11 +82,12 @@ def main(config):
                      config['test_dataset']['args'],
                      logger)
     subprocess.run([f'./evaluate.sh {config.save_dir} test'], shell=True, check=True)
-
+    result = read_json(config.save_dir / 'result.json')
+    metrics = eval_metrics(metric_fns, result)
     log = {'loss': total_loss / data_loader.n_samples}
-    # log.update({
-    #     met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
-    # })
+    log.update({
+        met.__name__: metrics[i] for i, met in enumerate(metric_fns)
+    })
     logger.info(log)
 
 
