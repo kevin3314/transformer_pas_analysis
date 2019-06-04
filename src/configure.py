@@ -175,10 +175,10 @@ def main() -> None:
         'zero_anaphora_f1_wo',
         'zero_anaphora_f1_ni',
         'zero_anaphora_f1_ga2',
-        'zero_anaphora_f1',
         'zero_anaphora_f1_inter',
         'zero_anaphora_f1_intra',
         'zero_anaphora_f1_writer_reader',
+        'zero_anaphora_f1',
     ]
     # lr_scheduler = {
     #     'type': 'StepLR',
@@ -192,7 +192,7 @@ def main() -> None:
         'save_dir': 'result/',
         'save_period': 3,
         'verbosity': 2,
-        'monitor': 'off',
+        'monitor': 'max val_zero_anaphora_f1',
         'early_stop': 10,
         'tensorboardX': True,
     }
