@@ -26,9 +26,9 @@ PYTHONPATH=${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts python ${NN_BASED_ANAPHOR
 
 # evaluate knp file
 if [[ ${TARGET} = "test" ]]; then
-    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR}/knp_add_feature --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > ${RESULT_FILE} 2> ${RESULT_LOG_FILE}
+    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR}/knp_add_feature --dev_id_file ${EVAL_CORPUS_BASEDIR}/dev.files --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > ${RESULT_FILE} 2> ${RESULT_LOG_FILE}
 else
-    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR}/knp_add_feature --dev_id_file ${EVAL_CORPUS_BASEDIR}/dev.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > /dev/null 2> ${RESULT_LOG_FILE}
+    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR}/knp_add_feature --dev_id_file ${EVAL_CORPUS_BASEDIR}/dev.files --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > /dev/null 2> ${RESULT_LOG_FILE}
 fi
 
 # convert result file to html format
