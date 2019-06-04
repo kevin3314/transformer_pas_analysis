@@ -24,7 +24,7 @@ def main(config):
 
     # build model architecture
     model = config.initialize('arch', module_arch)
-    model.expand_vocab(num_expand_vocab=5)  # same as that in dataset.py. TODO: consider resume case
+    model.expand_vocab(len(config['test_dataset']['args']['special_tokens']))  # same as that in dataset.py.
     logger.info(model)
 
     # get function handles of loss and metrics
