@@ -127,7 +127,7 @@ class Trainer(BaseTrainer):
                          output_prediction_file,
                          self.config['valid_dataset']['args'],
                          self.logger)
-        subprocess.run(['./evaluate.sh', str(self.config.save_dir), 'valid'], shell=True, check=True)
+        subprocess.run([f'./evaluate.sh {self.config.save_dir} valid'], shell=True, check=True)
         result = read_json(self.config.save_dir / 'result.json')
         val_metrics = self._eval_metrics(result)
 
