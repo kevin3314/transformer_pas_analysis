@@ -72,7 +72,7 @@ def main(config):
                      output_prediction_file,
                      config['test_dataset']['args'],
                      logger)
-    subprocess.run(['./evaluate.sh', str(config.save_dir), 'test'], shell=True, check=True)
+    subprocess.run([f'./evaluate.sh {config.save_dir} test'], shell=True, check=True)
 
     log = {'loss': total_loss / data_loader.n_samples}
     # log.update({
