@@ -44,11 +44,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
-    # parser.add_argument('--model',
-    #                     choices=['BaselineModel', 'EntityBufferModel'],
-    #                     default='EntityBufferModel',
-    #                     nargs='*',
-    #                     help='model name')
+    parser.add_argument('--model',
+                        choices=['BaselineModel', 'BaseAsymModel'],
+                        default='BaseModel',
+                        # nargs='*',
+                        help='model name')
     parser.add_argument('--epoch', '-e', type=int, default=3,
                         help='number of training epochs')
     parser.add_argument('--batch-size', type=int, default=32,
@@ -71,20 +71,20 @@ def main() -> None:
                              'E.g., 0.1 = 10% of training.')
     parser.add_argument('--env', choices=['local', 'server'], default='server',
                         help='development environment')
-    parser.add_argument('--task-name', type=str, default='Base',
-                        help='task name to identify different experiment settings')
+    parser.add_argument('--additional-name', type=str, default=None,
+                        help='additional config file name')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
 
-    name = args.task_name
+    name = args.model + ('' if args.additional_name is None else args.additional_name)
     n_gpu = 1
     with open(Path.train_file[args.env]) as f:
         num_train_examples = f.readlines().count('\n') + 1
 
     arch = {
-        'type': 'BertPASAnalysisModel',
+        'type': args.model,
         'args': {
             'bert_model': Path.bert_model[args.env],
             'parsing_algorithm': 'zhang',
