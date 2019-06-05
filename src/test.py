@@ -57,13 +57,14 @@ def main(config):
     # total_metrics = torch.zeros(len(metric_fns))
     arguments_sets: List[List[List[int]]] = []
     with torch.no_grad():
-        for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(data_loader):
+        for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(data_loader):
             input_ids = input_ids.to(device)          # (b, seq)
             input_mask = input_mask.to(device)        # (b, seq)
             arguments_ids = arguments_ids.to(device)  # (b, seq, case)
             ng_arg_mask = ng_arg_mask.to(device)      # (b, seq, seq)
+            deps = deps.to(device)                    # (b, seq, seq)
 
-            output = model(input_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
+            output = model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case, seq)
 
             arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
             arguments_sets += arguments_set.tolist()

@@ -49,14 +49,15 @@ class Trainer(BaseTrainer):
 
         total_loss = 0
         # total_metrics = np.zeros(len(self.metrics))
-        for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(self.data_loader):
+        for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(self.data_loader):
             input_ids = input_ids.to(self.device)          # (b, seq)
             input_mask = input_mask.to(self.device)        # (b, seq)
             arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
             ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+            deps = deps.to(self.device)                    # (b ,seq, seq)
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
+            output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case, seq)
             loss = self.loss(output, arguments_ids)
             loss.backward()
             self.optimizer.step()
@@ -100,13 +101,15 @@ class Trainer(BaseTrainer):
         # total_val_metrics = np.zeros(len(self.metrics))
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask) in enumerate(self.valid_data_loader):
-                input_ids = input_ids.to(self.device)  # (b, seq)
+            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps)\
+                    in enumerate(self.valid_data_loader):
+                input_ids = input_ids.to(self.device)          # (b, seq)
                 input_mask = input_mask.to(self.device)        # (b, seq)
                 arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
                 ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+                deps = deps.to(self.device)                    # (b, seq, seq)
 
-                output = self.model(input_ids, input_mask, ng_arg_mask)  # (b, seq, case, seq)
+                output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case, seq)
 
                 arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()

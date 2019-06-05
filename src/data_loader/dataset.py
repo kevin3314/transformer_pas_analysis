@@ -23,6 +23,8 @@ class PasExample:
                  lines: List[str],
                  arguments_set: List[List[Optional[str]]],
                  ng_arg_ids_set: List[List[int]],
+                 dtids: List[int],
+                 ddeps: List[int],
                  comment: Optional[str]
                  ) -> None:
         self.example_id = example_id
@@ -30,6 +32,8 @@ class PasExample:
         self.lines = lines
         self.arguments_set = arguments_set
         self.ng_arg_ids_set = ng_arg_ids_set
+        self.dtids = dtids
+        self.ddeps = ddeps
         self.comment = comment
 
     def __str__(self):
@@ -50,8 +54,9 @@ class InputFeatures:
                  input_ids: List[int],  # use for model
                  input_mask: List[int],  # use for model
                  segment_ids: List[int],  # use for model
-                 arguments_set: List[List[int]] = None,  # use for model
-                 ng_arg_mask: List[List[int]] = None,  # use for model
+                 arguments_set: List[List[int]],  # use for model
+                 ng_arg_mask: List[List[int]],  # use for model
+                 deps: List[List[int]],
                  ):
         self.tokens = tokens
         self.orig_to_tok_index = orig_to_tok_index
@@ -61,6 +66,7 @@ class InputFeatures:
         self.segment_ids = segment_ids
         self.arguments_set = arguments_set
         self.ng_arg_mask = ng_arg_mask
+        self.deps = deps
 
 
 class PASDataset(Dataset):
@@ -94,7 +100,8 @@ class PASDataset(Dataset):
         input_mask = np.array(feature.input_mask)        # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case)
         ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
-        return input_ids, input_mask, arguments_ids, ng_arg_mask
+        deps = np.array(feature.deps)                    # (seq, seq)
+        return input_ids, input_mask, arguments_ids, ng_arg_mask, deps
 
     @staticmethod
     def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool) -> List[PasExample]:
@@ -104,7 +111,8 @@ class PASDataset(Dataset):
         with open(input_file, "r") as reader:
             # 9       関わる  ガ:10,ヲ:NULL,ニ:7%C,ガ２:NULL _ _ _
             example_id: int = 0
-            words, arguments_set, ng_arg_ids_set, lines = [], [], [], []
+            words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
+            dtid, dep, dtid_offset = -1, -1, 0
             comment: Optional[str] = None
             for line in reader:
                 line = line.strip()
@@ -112,19 +120,31 @@ class PASDataset(Dataset):
                     comment = line
                     continue
                 if not line:
-                    example = PasExample(example_id, words, lines, arguments_set, ng_arg_ids_set, comment)
+                    example = PasExample(example_id, words, lines, arguments_set, ng_arg_ids_set, dtids, ddeps, comment)
                     examples.append(example)
 
                     example_id += 1
-                    words, arguments_set, ng_arg_ids_set, lines = [], [], [], []
+                    words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
+                    dtid, dep, dtid_offset = -1, -1, 0
                     comment = None
                     continue
 
                 items = line.split("\t")
                 word = items[1]
+                dep_string = items[2]
                 argument_string = items[5]
                 coreference_string = items[6] if coreference else None
                 ng_arg_string = items[8]
+
+                if dep_string != "_":
+                    assert dep_string[-1] in ['D', 'P', 'I']
+                    dtid += 1
+                    dep = int(dep_string[:-1])
+                dtids.append(dtid)
+                ddeps.append(dep + dtid_offset if dep != -1 else -1)
+                if word == '。':
+                    dtid_offset = dtid + 1
+
                 if argument_string == "_":
                     arguments = [None] * len(cases)
                     ng_arg_ids = []
@@ -188,6 +208,7 @@ class PASDataset(Dataset):
             segment_ids: List[int] = []
             arguments_set: List[List[int]] = []
             ng_arg_ids_set: List[List[int]] = []
+            deps: List[List[int]] = []
 
             for token, orig_index in zip(all_tokens, tok_to_orig_index):
                 tokens.append(token)
@@ -197,6 +218,7 @@ class PASDataset(Dataset):
                 if token.startswith("##") or orig_index is None:
                     arguments_set.append([-1] * num_case_w_coreference)
                     ng_arg_ids_set.append([])
+                    deps.append([0] * max_seq_length)
                     continue
 
                 if is_training is False:
@@ -223,6 +245,10 @@ class PASDataset(Dataset):
 
                     arguments_set.append(arguments)
 
+                ddep = example.ddeps[orig_index]
+                deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
+                deps[-1] += [0] * (max_seq_length - len(tok_to_orig_index))
+
                 # 0 origin
                 ng_arg_ids_set.append(
                     [0] +
@@ -242,6 +268,7 @@ class PASDataset(Dataset):
                 segment_ids.append(0)
                 arguments_set.append([-1] * num_case_w_coreference)
                 ng_arg_ids_set.append([])
+                deps.append([0] * max_seq_length)
 
             # add special tokens
             for i in range(num_expand_vocab):
@@ -250,12 +277,14 @@ class PASDataset(Dataset):
                 segment_ids.append(0)
                 arguments_set.append([-1] * num_case_w_coreference)
                 ng_arg_ids_set.append([])
+                deps.append([0] * max_seq_length)
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
             assert len(arguments_set) == max_seq_length
             assert len(ng_arg_ids_set) == max_seq_length
+            assert len(deps) == max_seq_length
 
             if example_index < 10:
                 logger.info('*** Example ***')
@@ -268,6 +297,8 @@ class PASDataset(Dataset):
                             f'{" ".join(",".join(str(arg) for arg in arguments) for arguments in arguments_set)}')
                 logger.info(f'ng_arg_ids_set: '
                             f'{" ".join(",".join(str(x) for x in ng_arg_ids) for ng_arg_ids in ng_arg_ids_set)}')
+                logger.info(f'deps: '
+                            f'{" ".join("".join(str(x) for x in dep) for dep in deps)}')
 
             features.append(
                 InputFeatures(
@@ -280,6 +311,7 @@ class PASDataset(Dataset):
                     arguments_set=arguments_set,
                     ng_arg_mask=[[0 if x in ng_arg_ids else 1 for x in range(max_seq_length)] for ng_arg_ids in
                                  ng_arg_ids_set],
+                    deps=deps,
                 )
             )
 
