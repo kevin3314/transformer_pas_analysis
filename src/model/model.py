@@ -107,7 +107,7 @@ class BaseAsymModel(BaseModel):
         self.l_pred = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_cases = nn.Linear(bert_hidden_size, num_case * bert_hidden_size)
         self.l_mid = nn.Linear(2 * bert_hidden_size, bert_hidden_size)
-        self.l_out = nn.Linear(bert_hidden_size, 1)
+        self.l_out = nn.Linear(bert_hidden_size, 1, bias=False)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
