@@ -137,7 +137,7 @@ class PASDataset(Dataset):
                 ng_arg_string = items[8]
 
                 if dep_string != "_":
-                    assert dep_string[-1] in ['D', 'P', 'I']
+                    assert dep_string[-1] in ['D', 'P', 'I', 'A']
                     dtid += 1
                     dep = int(dep_string[:-1])
                 dtids.append(dtid)
