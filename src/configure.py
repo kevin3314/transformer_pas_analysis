@@ -46,7 +46,7 @@ def main() -> None:
                         help='path to output directory')
     parser.add_argument('--model',
                         choices=['BaselineModel', 'BaseAsymModel', 'DependencyModel'],
-                        default='BaseModel',
+                        default='BaselineModel',
                         # nargs='*',
                         help='model name')
     parser.add_argument('--epoch', '-e', type=int, default=3,
@@ -192,7 +192,7 @@ def main() -> None:
     trainer = {
         'epochs': args.epoch,
         'save_dir': 'result/',
-        'save_period': 3,
+        'save_period': 1,
         'verbosity': 2,
         'monitor': 'max val_zero_anaphora_f1',
         'early_stop': 10,
