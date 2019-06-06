@@ -73,15 +73,17 @@ def main() -> None:
                         help='development environment')
     parser.add_argument('--additional-name', type=str, default=None,
                         help='additional config file name')
+    parser.add_argument('--gpus', type=int, default=2,
+                        help='number of gpus to use')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
-
-    name = args.model + ('' if args.additional_name is None else args.additional_name)
-    n_gpu = 1
     with open(Path.train_file[args.env]) as f:
         num_train_examples = f.readlines().count('\n') + 1
+
+    name = args.model + ('' if args.additional_name is None else args.additional_name)
+    n_gpu = args.gpus
 
     arch = {
         'type': args.model,
