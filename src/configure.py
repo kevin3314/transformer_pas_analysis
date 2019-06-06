@@ -198,10 +198,6 @@ def main() -> None:
         'early_stop': 10,
         'tensorboardX': True,
     }
-    visualization = {
-        'tensorboardX': True,
-        'log_dir': 'result/runs'
-    }
     config = Config(
         name=name,
         n_gpu=n_gpu,
@@ -218,7 +214,6 @@ def main() -> None:
         metrics=metrics,
         # lr_scheduler=lr_scheduler,
         trainer=trainer,
-        visualization=visualization,
     )
     config.dump(args.config)
 
