@@ -51,7 +51,7 @@ def main() -> None:
                         help='model name')
     parser.add_argument('--epoch', '-e', type=int, default=3,
                         help='number of training epochs')
-    parser.add_argument('--batch-size', type=int, default=32,
+    parser.add_argument('--batch-size', '-b', type=int, default=32,
                         help='number of batch size')
     parser.add_argument('--max-seq-length', type=int, default=512,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
@@ -163,6 +163,7 @@ def main() -> None:
             'lr': args.lr,
             'warmup': args.warmup_proportion,
             't_total': math.ceil(num_train_examples / args.batch_size) * args.epoch,
+            'schedule': 'warmup_linear',
             'weight_decay': 0.01,
         },
     }

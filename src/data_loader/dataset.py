@@ -286,7 +286,7 @@ class PASDataset(Dataset):
             assert len(ng_arg_ids_set) == max_seq_length
             assert len(deps) == max_seq_length
 
-            if example_index < 10:
+            if example_index == 0:
                 logger.info('*** Example ***')
                 logger.info(f'example_index: {example_index}')
                 logger.info(f'tokens: {" ".join(tokens)}')
