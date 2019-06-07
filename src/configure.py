@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
     parser.add_argument('--model',
-                        choices=['BaselineModel', 'BaseAsymModel', 'DependencyModel'],
+                        choices=['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel'],
                         default='BaselineModel',
                         # nargs='*',
                         help='model name')
