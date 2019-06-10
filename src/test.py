@@ -62,9 +62,8 @@ def main(config):
 
     # prepare model for testing
     logger.info('Loading checkpoint: {} ...'.format(config.resume))
-    checkpoint = torch.load(config.resume, map_location=device)
-    state_dict = checkpoint['state_dict']
-    model.load_state_dict(state_dict)
+    state_dict = torch.load(config.resume, map_location=device)['state_dict']
+    model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
     model = model.to(device)
     if len(device_ids) > 1:
         model = nn.DataParallel(model, device_ids=device_ids)
