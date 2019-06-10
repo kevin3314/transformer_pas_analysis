@@ -47,7 +47,7 @@ def main() -> None:
     parser.add_argument('--model',
                         choices=['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel'],
                         default='BaselineModel',
-                        # nargs='*',
+                        nargs='*',
                         help='model name')
     parser.add_argument('--epoch', '-e', type=int, default=3,
                         help='number of training epochs')
@@ -82,141 +82,144 @@ def main() -> None:
     with open(Path.train_file[args.env]) as f:
         num_train_examples = f.readlines().count('\n') + 1
 
-    name = args.model + ('' if args.additional_name is None else args.additional_name)
+    models = args.model if type(args.model) == list else [args.model]
     n_gpu = args.gpus
 
-    arch = {
-        'type': args.model,
-        'args': {
-            'bert_model': Path.bert_model[args.env],
-            'parsing_algorithm': 'zhang',
-            'num_case': len(cases) if not args.coreference else len(cases) + 1,
-            'arc_representation_dim': 400,
-        },
-    }
-    train_dataset = {
-        'type': 'PASDataset',
-        'args': {
-            'path': Path.train_file[args.env],
-            'max_seq_length': args.max_seq_length,
-            'cases': cases,
-            'coreference': args.coreference,
-            'special_tokens': args.special_tokens.split(','),
-            'training': True,
-            'bert_model': Path.bert_model[args.env],
-        },
-    }
-    valid_dataset = {
-        'type': 'PASDataset',
-        'args': {
-            'path': Path.valid_file[args.env],
-            'max_seq_length': args.max_seq_length,
-            'cases': cases,
-            'coreference': args.coreference,
-            'special_tokens': args.special_tokens.split(','),
-            'training': False,
-            'bert_model': Path.bert_model[args.env],
-        },
-    }
-    test_dataset = {
-        'type': 'PASDataset',
-        'args': {
-            'path': Path.test_file[args.env],
-            'max_seq_length': args.max_seq_length,
-            'cases': cases,
-            'coreference': args.coreference,
-            'special_tokens': args.special_tokens.split(','),
-            'training': False,
-            'bert_model': Path.bert_model[args.env],
-        },
-    }
-    train_data_loader = {
-        'type': 'ConllDataLoader',
-        'args': {
-            'batch_size': args.batch_size,
-            'shuffle': True,
-            'validation_split': 0.0,
-            'num_workers': 2,
-        },
-    }
-    valid_data_loader = {
-        'type': 'ConllDataLoader',
-        'args': {
-            'batch_size': args.batch_size,
-            'shuffle': False,
-            'validation_split': 0.0,
-            'num_workers': 2,
-        },
-    }
-    test_data_loader = {
-        'type': 'ConllDataLoader',
-        'args': {
-            'batch_size': args.batch_size,
-            'shuffle': False,
-            'validation_split': 0.0,
-            'num_workers': 2,
-        },
-    }
-    optimizer = {
-        'type': 'BertAdam',
-        'args': {
-            'lr': args.lr,
-            'warmup': args.warmup_proportion,
-            't_total': math.ceil(num_train_examples / args.batch_size) * args.epoch,
-            'schedule': 'warmup_linear',
-            'weight_decay': 0.01,
-        },
-    }
-    loss = 'cross_entropy_loss'
-    metrics = [
-        'case_analysis_f1_ga',
-        'case_analysis_f1_wo',
-        'case_analysis_f1_ni',
-        'case_analysis_f1_ga2',
-        'case_analysis_f1',
-        'zero_anaphora_f1_ga',
-        'zero_anaphora_f1_wo',
-        'zero_anaphora_f1_ni',
-        'zero_anaphora_f1_ga2',
-        'zero_anaphora_f1_inter',
-        'zero_anaphora_f1_intra',
-        'zero_anaphora_f1_writer_reader',
-        'zero_anaphora_f1',
-    ]
-    # lr_scheduler = {
-    #     'type': 'StepLR',
-    #     'args': {
-    #         'step_size': 50,
-    #         'gamma': 0.1,
-    #     },
-    # }
-    trainer = {
-        'epochs': args.epoch,
-        'save_dir': 'result/',
-        'save_period': 1,
-        'verbosity': 2,
-        'monitor': 'max val_zero_anaphora_f1',
-        'early_stop': 10,
-        'tensorboardX': True,
-    }
-    config = Config(
-        name=name,
-        n_gpu=n_gpu,
-        arch=arch,
-        train_dataset=train_dataset,
-        train_data_loader=train_data_loader,
-        valid_dataset=valid_dataset,
-        valid_data_loader=valid_data_loader,
-        test_dataset=test_dataset,
-        test_data_loader=test_data_loader,
-        # drawer=drawer,
-        optimizer=optimizer,
-        loss=loss,
-        metrics=metrics,
-        # lr_scheduler=lr_scheduler,
-        trainer=trainer,
-    )
-    config.dump(args.config)
+    for model in models:
+        name = model + ('' if args.additional_name is None else args.additional_name)
+
+        arch = {
+            'type': args.model,
+            'args': {
+                'bert_model': Path.bert_model[args.env],
+                'parsing_algorithm': 'zhang',
+                'num_case': len(cases) if not args.coreference else len(cases) + 1,
+                'arc_representation_dim': 400,
+            },
+        }
+        train_dataset = {
+            'type': 'PASDataset',
+            'args': {
+                'path': Path.train_file[args.env],
+                'max_seq_length': args.max_seq_length,
+                'cases': cases,
+                'coreference': args.coreference,
+                'special_tokens': args.special_tokens.split(','),
+                'training': True,
+                'bert_model': Path.bert_model[args.env],
+            },
+        }
+        valid_dataset = {
+            'type': 'PASDataset',
+            'args': {
+                'path': Path.valid_file[args.env],
+                'max_seq_length': args.max_seq_length,
+                'cases': cases,
+                'coreference': args.coreference,
+                'special_tokens': args.special_tokens.split(','),
+                'training': False,
+                'bert_model': Path.bert_model[args.env],
+            },
+        }
+        test_dataset = {
+            'type': 'PASDataset',
+            'args': {
+                'path': Path.test_file[args.env],
+                'max_seq_length': args.max_seq_length,
+                'cases': cases,
+                'coreference': args.coreference,
+                'special_tokens': args.special_tokens.split(','),
+                'training': False,
+                'bert_model': Path.bert_model[args.env],
+            },
+        }
+        train_data_loader = {
+            'type': 'ConllDataLoader',
+            'args': {
+                'batch_size': args.batch_size,
+                'shuffle': True,
+                'validation_split': 0.0,
+                'num_workers': 2,
+            },
+        }
+        valid_data_loader = {
+            'type': 'ConllDataLoader',
+            'args': {
+                'batch_size': args.batch_size,
+                'shuffle': False,
+                'validation_split': 0.0,
+                'num_workers': 2,
+            },
+        }
+        test_data_loader = {
+            'type': 'ConllDataLoader',
+            'args': {
+                'batch_size': args.batch_size,
+                'shuffle': False,
+                'validation_split': 0.0,
+                'num_workers': 2,
+            },
+        }
+        optimizer = {
+            'type': 'BertAdam',
+            'args': {
+                'lr': args.lr,
+                'warmup': args.warmup_proportion,
+                't_total': math.ceil(num_train_examples / args.batch_size) * args.epoch,
+                'schedule': 'warmup_linear',
+                'weight_decay': 0.01,
+            },
+        }
+        loss = 'cross_entropy_loss'
+        metrics = [
+            'case_analysis_f1_ga',
+            'case_analysis_f1_wo',
+            'case_analysis_f1_ni',
+            'case_analysis_f1_ga2',
+            'case_analysis_f1',
+            'zero_anaphora_f1_ga',
+            'zero_anaphora_f1_wo',
+            'zero_anaphora_f1_ni',
+            'zero_anaphora_f1_ga2',
+            'zero_anaphora_f1_inter',
+            'zero_anaphora_f1_intra',
+            'zero_anaphora_f1_writer_reader',
+            'zero_anaphora_f1',
+        ]
+        # lr_scheduler = {
+        #     'type': 'StepLR',
+        #     'args': {
+        #         'step_size': 50,
+        #         'gamma': 0.1,
+        #     },
+        # }
+        trainer = {
+            'epochs': args.epoch,
+            'save_dir': 'result/',
+            'save_period': 1,
+            'verbosity': 2,
+            'monitor': 'max val_zero_anaphora_f1',
+            'early_stop': 10,
+            'tensorboardX': True,
+        }
+        config = Config(
+            name=name,
+            n_gpu=n_gpu,
+            arch=arch,
+            train_dataset=train_dataset,
+            train_data_loader=train_data_loader,
+            valid_dataset=valid_dataset,
+            valid_data_loader=valid_data_loader,
+            test_dataset=test_dataset,
+            test_data_loader=test_data_loader,
+            # drawer=drawer,
+            optimizer=optimizer,
+            loss=loss,
+            metrics=metrics,
+            # lr_scheduler=lr_scheduler,
+            trainer=trainer,
+        )
+        config.dump(args.config)
 
 
 if __name__ == '__main__':
