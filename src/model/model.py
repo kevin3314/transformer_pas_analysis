@@ -129,7 +129,7 @@ class BaseAsymModel(BaseModel):
         # -> (b, 1, seq, case, hid) -> (b, seq, seq, case, hid)
         h_j = h_j.view(batch_size, 1, sequence_len, self.num_case, hidden_dim).expand(-1, sequence_len, -1, -1, -1)
         g_logits = self.l_mid(torch.tanh(torch.cat([h_i, h_j], dim=4)))  # (b, seq, seq, case, hid)
-        g_logits = self.l_out(g_logits).squeeze(4)  # -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
+        g_logits = self.l_out(torch.tanh(g_logits)).squeeze(4)  # -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
 
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
