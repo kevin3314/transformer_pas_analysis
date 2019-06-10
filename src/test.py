@@ -24,6 +24,24 @@ def eval_metrics(metrics: List[Callable], result: dict):
     return f1_metrics
 
 
+def prepare_device(n_gpu_use, logger):
+    """
+    setup GPU device if available, move model into configured device
+    """
+    n_gpu = torch.cuda.device_count()
+    if n_gpu_use > 0 and n_gpu == 0:
+        logger.warning("Warning: There\'s no GPU available on this machine,"
+                       "training will be performed on CPU.")
+        n_gpu_use = 0
+    if n_gpu_use > n_gpu:
+        logger.warning("Warning: The number of GPU\'s configured to use is {}, but only {} are available "
+                       "on this machine.".format(n_gpu_use, n_gpu))
+        n_gpu_use = n_gpu
+    device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
+    list_ids = list(range(n_gpu_use))
+    return device, list_ids
+
+
 def main(config):
     logger = config.get_logger('test')
 
@@ -40,17 +58,16 @@ def main(config):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device, device_ids = prepare_device(config['n_gpu'], logger)
 
+    # prepare model for testing
     logger.info('Loading checkpoint: {} ...'.format(config.resume))
     checkpoint = torch.load(config.resume, map_location=device)
     state_dict = checkpoint['state_dict']
-    if config['n_gpu'] > 1:
-        model = nn.DataParallel(model)
     model.load_state_dict(state_dict)
-
-    # prepare model for testing
     model = model.to(device)
+    if len(device_ids) > 1:
+        model = nn.DataParallel(model, device_ids=device_ids)
     model.eval()
 
     total_loss = 0.0
