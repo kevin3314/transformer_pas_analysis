@@ -89,7 +89,7 @@ def main() -> None:
         name = model + ('' if args.additional_name is None else args.additional_name)
 
         arch = {
-            'type': args.model,
+            'type': model,
             'args': {
                 'bert_model': Path.bert_model[args.env],
                 'parsing_algorithm': 'zhang',
