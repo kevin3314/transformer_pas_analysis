@@ -26,6 +26,10 @@ class Path:
         'local': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
         'server': '/mnt/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE'
     }
+    bert_large_model = {
+        'local': None,
+        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-9_BPE'
+    }
     train_file = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.train.conll',
         'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
@@ -66,7 +70,7 @@ def main() -> None:
     #                     help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
-    parser.add_argument('--warmup_proportion', default=0.1, type=float,
+    parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
                              'E.g., 0.1 = 10% of training.')
     parser.add_argument('--env', choices=['local', 'server'], default='server',
@@ -75,6 +79,8 @@ def main() -> None:
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
+    parser.add_argument('--use-bert-large', action='store_true', default=False,
+                        help='whether to use BERT_LARGE model')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
@@ -82,8 +88,9 @@ def main() -> None:
     with open(Path.train_file[args.env]) as f:
         num_train_examples = f.readlines().count('\n') + 1
 
-    models = args.model if type(args.model) == list else [args.model]
-    n_gpu = args.gpus
+    models: List[str] = args.model if type(args.model) == list else [args.model]
+    n_gpu: int = args.gpus
+    bert_model: dict = Path.bert_large_model if args.use_bert_large else Path.bert_model
 
     for model in models:
         name = model + ('' if args.additional_name is None else args.additional_name)
@@ -91,7 +98,7 @@ def main() -> None:
         arch = {
             'type': model,
             'args': {
-                'bert_model': Path.bert_model[args.env],
+                'bert_model': bert_model[args.env],
                 'parsing_algorithm': 'zhang',
                 'num_case': len(cases) if not args.coreference else len(cases) + 1,
                 'arc_representation_dim': 400,
@@ -106,7 +113,7 @@ def main() -> None:
                 'coreference': args.coreference,
                 'special_tokens': args.special_tokens.split(','),
                 'training': True,
-                'bert_model': Path.bert_model[args.env],
+                'bert_model': bert_model[args.env],
             },
         }
         valid_dataset = {
@@ -118,7 +125,7 @@ def main() -> None:
                 'coreference': args.coreference,
                 'special_tokens': args.special_tokens.split(','),
                 'training': False,
-                'bert_model': Path.bert_model[args.env],
+                'bert_model': bert_model[args.env],
             },
         }
         test_dataset = {
@@ -130,7 +137,7 @@ def main() -> None:
                 'coreference': args.coreference,
                 'special_tokens': args.special_tokens.split(','),
                 'training': False,
-                'bert_model': Path.bert_model[args.env],
+                'bert_model': bert_model[args.env],
             },
         }
         train_data_loader = {
