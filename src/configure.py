@@ -207,7 +207,7 @@ def main() -> None:
             'verbosity': 2,
             'monitor': 'max val_zero_anaphora_f1',
             'early_stop': 10,
-            'tensorboardX': True,
+            'tensorboard': True,
         }
         config = Config(
             name=name,
