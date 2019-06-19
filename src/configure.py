@@ -28,7 +28,7 @@ class Path:
     }
     bert_large_model = {
         'local': None,
-        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-9_BPE'
+        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-10_BPE'
     }
     train_file = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.train.conll',
