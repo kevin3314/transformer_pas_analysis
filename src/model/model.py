@@ -192,6 +192,9 @@ class DependencyModel(BaseModel):
         h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h = torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))  # (b, seq, seq, case, hid)
+
+        # make deps symmetric matrix
+        deps = deps | deps.transpose(1, 2).contiguous()  # (b, seq, seq)
         # (b, seq, seq, case, 1)
         deps = deps.view(batch_size, sequence_len, sequence_len, 1, 1).expand(-1, -1, -1, self.num_case, 1).float()
         g_logits = self.v_a(torch.cat([h, deps], dim=4)).squeeze(-1)  # (b, seq, seq, case)
