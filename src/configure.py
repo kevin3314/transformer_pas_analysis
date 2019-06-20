@@ -45,13 +45,11 @@ class Path:
 
 
 def main() -> None:
+    all_models = ['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
-    parser.add_argument('--model',
-                        choices=['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel'],
-                        default='BaselineModel',
-                        nargs='*',
+    parser.add_argument('--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
     parser.add_argument('--epoch', '-e', type=int, default=3,
                         help='number of training epochs')
@@ -177,7 +175,10 @@ def main() -> None:
                 'weight_decay': 0.01,
             },
         }
-        loss = 'cross_entropy_loss'
+        if model == 'MultitaskDepModel':
+            loss = 'cross_entropy_pas_dep_loss'
+        else:
+            loss = 'cross_entropy_pas_loss'
         metrics = [
             'case_analysis_f1_ga',
             'case_analysis_f1_wo',
@@ -193,13 +194,6 @@ def main() -> None:
             'zero_anaphora_f1_writer_reader',
             'zero_anaphora_f1',
         ]
-        # lr_scheduler = {
-        #     'type': 'StepLR',
-        #     'args': {
-        #         'step_size': 50,
-        #         'gamma': 0.1,
-        #     },
-        # }
         trainer = {
             'epochs': args.epoch,
             'save_dir': 'result/',
@@ -223,7 +217,6 @@ def main() -> None:
             optimizer=optimizer,
             loss=loss,
             metrics=metrics,
-            # lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
         config.dump(args.config)

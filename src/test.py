@@ -82,11 +82,11 @@ def main(config):
 
             output = model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case, seq)
 
-            arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
+            arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
             arguments_sets += arguments_set.tolist()
 
             # computing loss, metrics on test set
-            loss = loss_fn(output, arguments_ids)
+            loss = loss_fn(output, arguments_ids, deps)
             total_loss += loss.item() * input_ids.size(0)
             # for i, metric in enumerate(metric_fns):
             #     total_metrics[i] += metric(ret_dict) * batch_size

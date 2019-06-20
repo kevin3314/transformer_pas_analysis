@@ -296,3 +296,77 @@ class LayerAttentionModel(BaseModel):
         new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
         new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
         self.bert.embeddings.word_embeddings = new_word_embeddings
+
+
+class MultitaskDepModel(BaseModel):
+    def __init__(self,
+                 bert_model: str,
+                 parsing_algorithm: str,
+                 num_case: int,
+                 arc_representation_dim: int) -> None:
+        super().__init__()
+
+        self.bert = BertModel.from_pretrained(bert_model)
+        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
+        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        self.num_case = num_case
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
+        self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
+        self.v_a = nn.Linear(bert_hidden_size + 1, 1, bias=False)
+
+        self.W_dep = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.U_dep = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.v_dep = nn.Linear(bert_hidden_size, 1, bias=True)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
+                _: torch.Tensor,            # (b, seq, seq)
+                ) -> torch.Tensor:             # (b, seq, case, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,
+                                       attention_mask=attention_mask,
+                                       output_all_encoded_layers=False)
+        batch_size, sequence_len, hidden_dim = sequence_output.size()
+
+        # dependency parsing
+        dep_i = self.W_dep(sequence_output)  # (b, seq, hid)
+        dep_j = self.U_dep(sequence_output)  # (b, seq, hid)
+        dep = self.v_dep(torch.tanh(dep_i.unsqueeze(1) + dep_j.unsqueeze(2)))  # (b, seq, seq, hid) -> (b, seq, seq, 1)
+
+        # PAS analysis
+        h_i = self.W_a(sequence_output)  # (b, seq, case*hid)
+        h_j = self.U_a(sequence_output)  # (b, seq, case*hid)
+        h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h = torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))  # (b, seq, seq, case, hid)
+        extended_dep = torch.tanh(dep).unsqueeze(3).expand(-1, -1, -1, self.num_case, 1)  # (b, seq, seq, case, 1)
+        g_logits = self.v_a(torch.cat([h, extended_dep], dim=4)).squeeze(-1)  # (b, seq, seq, case)
+
+        g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+
+        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
+        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+
+        g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
+
+        return torch.cat([g_logits, dep.transpose(2, 3).contiguous()], dim=2)  # (b, seq, case+1, seq)
+
+    def expand_vocab(self, num_expand_vocab):
+        """Add special tokens to vocab."""
+
+        bert_word_embeddings = self.bert.embeddings.word_embeddings
+
+        old_word_embeddings_numpy = bert_word_embeddings.weight.detach().numpy()
+        vocab_size = bert_word_embeddings.weight.shape[0]
+        new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
+        new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
+        new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
+        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        self.bert.embeddings.word_embeddings = new_word_embeddings
