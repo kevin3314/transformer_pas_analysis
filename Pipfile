@@ -16,6 +16,7 @@ tensorboardx = "==1.2"
 torch = "*"
 tensorboard = "==1.12.0"
 tensorflow = "==1.12.0"
+pyknp = "*"
 
 [requires]
 python_version = "3.6"
