@@ -45,4 +45,14 @@ ALL_EXOPHORS = [
     "不特定:人",
     "不特定:物",
     "不特定:状況",
+    "前文",
+    "後文",
+]
+
+DEP_TYPES = [
+    "overt",
+    "dep",
+    "intra",
+    "inter",
+    "exo",
 ]

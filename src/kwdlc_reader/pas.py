@@ -1,7 +1,8 @@
 import logging
+from typing import List, Dict, Optional
 from collections import defaultdict
 
-from pyknp import Rel
+from pyknp import Tag, Rel
 
 
 logger = logging.getLogger(__name__)
@@ -11,24 +12,25 @@ logger.setLevel(logging.DEBUG)
 class Argument:
     """ 項に関する情報を保持するオブジェクト
 
-    詳しくは下記ページの「格要素側」の記述方法を参照
-    http://nlp.ist.i.kyoto-u.ac.jp/index.php?KNP%2F%E6%A0%BC%E8%A7%A3%E6%9E%90%E7%B5%90%E6%9E%9C%E6%9B%B8%E5%BC%8F
-
     Attributes:
         sid (str): 文ID
         tid (int): 基本句ID
         midasi (str): 表記
-        flag (str): フラグ (C, N, O, D, E, U)
+        dtid (int): 文書レベル基本句ID
+        dep_type (str): 係り受けタイプ ("overt", "dep", "intra", "inter", "exo")
+        mode (str): モード
     """
 
-    def __init__(self, target: str, dtid: int, tid: int, mode: str):
-        self.target = target
+    def __init__(self, rel: Rel, dtid: int, dep_type: str):
+        self.sid = rel.sid
+        self.tid = rel.tid
+        self.midasi = rel.target
         self.dtid = dtid
-        self.tid = tid
-        self.mode = mode
+        self.dep_type = dep_type
+        self.mode = rel.mode
 
-    def __str__(self):
-        return f'target: {self.target}, dtid: {self.dtid}, tid: {self.tid}'
+    # def __str__(self):
+    #     return f'target: {self.target}, dtid: {self.dtid}, tid: {self.tid}'
 
 
 class Pas:
@@ -36,13 +38,32 @@ class Pas:
 
     """
 
-    def __init__(self, dtid: int, tid: int):
+    def __init__(self, tag: Tag, dtid: int, sid: str):
         # self.cfid = None  # always None (for compatibility)
-        self.arguments = defaultdict(list)
+        self.predicate = tag
+        self.arguments: Dict[str, List[Argument]] = defaultdict(list)
         self.dtid = dtid
-        self.tid = tid
+        self.sid = sid
 
-    def add_argument(self, atype: str, target: str, dtid: int, tid: int, mode: str):
-        self.arguments[atype].append(Argument(target, dtid, tid, mode))
-        # print(atype, end='')
-        # print(Argument(target, dtid, tid))
+    def add_argument(self, rel: Rel, tag: Optional[Tag], dtid: Optional[int]):
+        assert tag.tag_id == rel.tid
+        assert tag is not None or dtid is None
+        dep_type = self._get_dep_type(self.predicate, tag, self.sid, rel.sid, rel.atype)
+        self.arguments[rel.atype].append(Argument(rel, dtid, dep_type))
+
+    @staticmethod
+    def _get_dep_type(pred: Tag, arg: Tag, sid_pred: str, sid_arg: str, atype: str) -> str:
+        if arg is not None:
+            if arg in pred.children:
+                if atype in arg.features:
+                    return "overt"
+                else:
+                    return "dep"
+            elif arg is pred.parent:
+                return "dep"
+            elif sid_arg == sid_pred:
+                return "intra"
+            else:
+                return "inter"
+        else:
+            return "exo"

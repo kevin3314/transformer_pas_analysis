@@ -6,13 +6,29 @@ from collections import OrderedDict
 
 # from kwdlc_reader.blist import BList
 # from kwdlc_reader.tag import Tag
-from pyknp import BList, Tag, Rel
+from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
 from kwdlc_reader.pas import Pas, Argument
-from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_COREFS, CORE_COREFS
+from kwdlc_reader.entity import Entity
+from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_COREFS, CORE_COREFS, DEP_TYPES
 
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+"""
+# TODO
+- modeの扱い(ANDの他には?)
+- dep_type
+- named entity
+- テストコード
+
+# MEMO
+- アノテーション基準には著者読者とのcorefは=:著者と書いてあるが、<rel>タグの中身はatype='=≒', target='著者'となっている
+- corefタグは用言に対しても振られる
+- Entityクラスに用言か体言かをもたせる？
+- 前文/後文への照応もある(<rel type="=" target="後文"/>)
+- 述語から項への係り受けもdep?
+"""
 
 
 class KyotoCorpus:
@@ -28,61 +44,6 @@ class KyotoCorpus:
     @staticmethod
     def get_file_paths(dirname: str, glob_pat: str):
         return sorted(glob.glob(os.path.join(dirname, glob_pat)))
-
-
-class Document:
-
-    def __init__(self, sentences: List[BList], doc_id: str):
-        self.sentences = sentences
-        self.doc_id = doc_id
-        self.sid2sent = {sentence.sid: sentence for sentence in sentences}
-
-        self.entities = {}  # eid -> list of mention keys
-        self.mentions = {}  # mention key -> {is_special, key, dmid_range}
-
-    def bnst_list(self):
-        return [bnst for sentence in self.sentences for bnst in sentence.bnst_list()]
-
-    def tag_list(self):
-        return [tag for sentence in self.sentences for tag in sentence.tag_list()]
-
-    def mrph_list(self):
-        return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
-
-    def add_corefs(self, tobj1: dict, tobj2: dict):
-        eid1 = self.add_mention(tobj1)
-        eid2 = self.add_mention(tobj2)
-        if eid1 is None:
-            if eid2 is None:
-                eid = len(self.entities)
-                self.entities[eid] = [tobj1["key"], tobj2["key"]]
-                tobj1["eid"] = tobj2["eid"] = eid
-            else:
-                self.entities[eid2].append(tobj1["key"])
-                tobj1["eid"] = eid2
-        else:
-            if eid2 is None:
-                self.entities[eid1].append(tobj2["key"])
-                tobj2["eid"] = eid1
-            else:
-                if not eid1 == eid2:
-                    sys.stderr.write(f"different clusters: {tobj1['key']}\t{tobj2['key']}\n")
-
-    def add_mention(self, tobj: dict):
-        if tobj["key"] in self.mentions:
-            return self.mentions[tobj["key"]]["eid"]
-        else:
-            self.mentions[tobj["key"]] = tobj
-            return None
-
-    def __len__(self):
-        return len(self.sentences)
-
-    def __getitem__(self, sid: str):
-        return self.sid2sent[sid]
-
-    def __iter__(self):
-        return iter(self.sentences)
 
 
 class KWDLCReader:
@@ -110,10 +71,11 @@ class KWDLCReader:
         self.tag2dtid = {}
         self.mrph2dmid = {}
         self._assign_document_wide_id()
+        self.dtid2tag = {dtid: tag for tag, dtid in self.tag2dtid.items()}
 
-        self._pas: Dict[Tag, Pas] = self._extract_pas()
-
-        self.mention2entity = {}
+        self._pas: Dict[Tag, Pas] = OrderedDict()
+        self._mention2entity: Dict[Tag, Entity] = {}
+        self._extract_relations()
 
     @staticmethod
     def _get_target(input_: Optional[list], all_: list, default: list, type_: str) -> list:
@@ -151,20 +113,21 @@ class KWDLCReader:
 
         self.entities = []
 
-    def _extract_pas(self) -> Dict[Tag, Pas]:
-        tag2pas = OrderedDict()
+    def _extract_relations(self):
+        tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
             if tag.features.rels is None:
                 logger.debug(f'Tag: "{tag.midasi}" has no relation tags.')
                 continue
-            pas = Pas(self.tag2dtid[tag], tag.tag_id)
-            print(tag.midasi)
+            pas = Pas(tag, self.tag2dtid[tag], tag2sid[tag])
             for rel in tag.features.rels:
                 assert rel.ignore is False
+                # extract PAS
                 if rel.atype in self.target_cases:
                     if rel.sid is not None:
-                        tag_list = self.sid2sentence[rel.sid].tag_list()
-                        dtid = self.tag2dtid[tag_list[rel.tid]]
+                        assert rel.tid is not None
+                        arg_tag = self.sid2sentence[rel.sid].tag_list()[rel.tid]
+                        pas.add_argument(rel, arg_tag, self.tag2dtid[arg_tag])
                     # exophora
                     else:
                         if rel.target not in ALL_EXOPHORS:
@@ -173,42 +136,61 @@ class KWDLCReader:
                         elif rel.target not in self.target_exophors:
                             logger.info(f'Argument: {rel.target} ({rel.atype}) of {tag.midasi} is ignored.')
                             continue
-                        dtid = None
-                    pas.add_argument(rel.atype, rel.target, dtid, rel.tid, rel.mode)
+                        pas.add_argument(rel, None, None)
+
+                # extract coreference
+                elif rel.atype in self.target_corefs:
+                    self._add_corefs(tag, rel)
 
             if pas.arguments:
-                tag2pas[tag] = pas
-        return tag2pas
+                self._pas[tag] = pas
 
-    def _extract_coreference(self):
-        pass
+    def _add_corefs(self, source_mention: Tag, rel):
+        if rel.sid is not None:
+            tag_list = self.sid2sentence[rel.sid].tag_list()
+            target_dtid = self.tag2dtid[tag_list[rel.tid]]
+            if target_dtid >= self.tag2dtid[source_mention]:
+                logger.warning('Coreference with self or latter entity was found.')
+                return
+            target_mention = self.dtid2tag[target_dtid]
+            if target_mention in self._mention2entity:
+                entity = self._mention2entity[target_mention]
+            else:
+                entity = Entity.create()
+                self._add_mention(target_mention, entity)
+        # exophora
+        else:
+            if rel.target not in ALL_EXOPHORS:
+                logger.warning(f'Unknown exophor: {rel.target}')
+                return
+            elif rel.target not in self.target_exophors:
+                logger.info(f'Coreference with {rel.target} ({rel.atype}) of {source_mention.midasi} is ignored.')
+                return
+            entity = Entity.create(exophor=rel.target)
+        self._add_mention(source_mention, entity)
+
+    def _add_mention(self, mention, entity):
+        entity.add_mention(mention)
+        self._mention2entity[mention] = entity
 
     @property
-    def sentences(self):
+    def sentences(self) -> List[BList]:
         return list(self.sid2sentence.values())
 
-    def bnst_list(self):
+    def bnst_list(self) -> List[Bunsetsu]:
         return [bnst for sentence in self.sentences for bnst in sentence.bnst_list()]
 
-    def tag_list(self):
+    def tag_list(self) -> List[Tag]:
         return [tag for sentence in self.sentences for tag in sentence.tag_list()]
 
-    def mrph_list(self):
+    def mrph_list(self) -> List[Morpheme]:
         return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
     def get_all_entities(self) -> List[Entity]:
-        return list(self.mention2entity.values())
+        return list(self._mention2entity.values())
 
     def get_entity(self, mention: Tag) -> Optional[Entity]:
-        return self.mention2entity.get(mention, None)
-
-    # def pas_list(self) -> List[Pas]:
-    #     pas_list = []
-    #     for sentence in self.sentences:
-    #         for tag in sentence.tag_list():
-    #             if tag.pas is not None:
-    #                 pas_list.append(tag.pas)
-    #     return pas_list
+        return self._mention2entity.get(mention, None)
 
 
     # NEに関して
@@ -233,12 +215,13 @@ class KWDLCReader:
 
 
 if __name__ == '__main__':
-    # path = 'data/train/w201106-0000060050.knp'
-    path = 'data/train/w201106-0000074273.knp'
+    path = 'data/train/w201106-0000060050.knp'
+    # path = 'data/train/w201106-0000074273.knp'
     kwdlc = KWDLCReader(path,
                         target_cases=['ガ', 'ヲ', 'ニ', 'ノ'],
+                        target_corefs=["=", "=構", "=≒"],
                         target_exophors=['読者', '著者', '不特定:人'])
-    kwdlc.get_entities()  # -> List[Entity]
+    kwdlc.get_all_entities()  # -> List[Entity]
     predicates: List[Tag] = kwdlc.get_predicates()
 
     # tags = kwdlc.tag_list()  # -> List[Tag]
