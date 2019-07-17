@@ -34,12 +34,13 @@ logging.basicConfig(level=logging.INFO)
 class KyotoCorpus:
     """https://bitbucket.org/ku_nlp/seqzero/src/master/seqzero/corpus_reader.py"""
 
-    def __init__(self, dirname: str, glob_pat: str = "*.knp"):
+    def __init__(self, dirname: str, glob_pat: str = "*.knp", **kwargs):
         self.file_paths = self.get_file_paths(dirname, glob_pat)
+        self.kwargs = kwargs
 
     def load_files(self):
         for file_path in self.file_paths:
-            yield KWDLCReader(file_path)
+            yield KWDLCReader(file_path, **self.kwargs)
 
     @staticmethod
     def get_file_paths(dirname: str, glob_pat: str):
