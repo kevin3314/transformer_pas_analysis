@@ -18,9 +18,9 @@ logging.basicConfig(level=logging.INFO)
 """
 # TODO
 - modeの扱い(ANDの他には?)
-- dep_type
 - named entity
 - テストコード
+- relax match
 
 # MEMO
 - アノテーション基準には著者読者とのcorefは=:著者と書いてあるが、<rel>タグの中身はatype='=≒', target='著者'となっている
@@ -192,7 +192,6 @@ class KWDLCReader:
     def get_entity(self, mention: Tag) -> Optional[Entity]:
         return self._mention2entity.get(mention, None)
 
-
     # NEに関して
     # tag.features = {'NE': 'LOCATION:ダーマ神殿'}
     # などとなっている
@@ -208,9 +207,9 @@ class KWDLCReader:
     def get_arguments(self,
                       tag: Tag,
                       relax: bool = False,
-                      ) -> List[Argument]:
+                      ) -> Dict[str, List[Argument]]:
         if tag not in self._pas:
-            return []
+            return {}
         return self._pas[tag].arguments
 
 
