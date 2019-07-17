@@ -17,9 +17,7 @@ logging.basicConfig(level=logging.INFO)
 
 """
 # TODO
-- modeの扱い(ANDの他には?)
 - named entity
-- テストコード
 - relax match
 
 # MEMO
@@ -188,7 +186,7 @@ class KWDLCReader:
         return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
     def get_all_entities(self) -> List[Entity]:
-        return list(self._mention2entity.values())
+        return list(set(self._mention2entity.values()))
 
     def get_entity(self, mention: Tag) -> Optional[Entity]:
         return self._mention2entity.get(mention, None)
@@ -206,12 +204,12 @@ class KWDLCReader:
         return list(self._pas.keys())
 
     def get_arguments(self,
-                      tag: Tag,
+                      predicate: Tag,
                       relax: bool = False,
                       ) -> Dict[str, List[Argument]]:
-        if tag not in self._pas:
+        if predicate not in self._pas:
             return {}
-        return self._pas[tag].arguments
+        return self._pas[predicate].arguments
 
 
 if __name__ == '__main__':

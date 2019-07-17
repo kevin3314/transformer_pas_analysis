@@ -48,7 +48,6 @@ class Pas:
     """
 
     def __init__(self, tag: Tag, dtid: int, sid: str):
-        # self.cfid = None  # always None (for compatibility)
         self.predicate = tag
         self.arguments: Dict[str, List[Argument]] = defaultdict(list)
         self.dtid = dtid
