@@ -2,7 +2,7 @@ from typing import List
 
 from pyknp import Tag
 
-from kwdlc_reader import KWDLCReader, Entity
+from kwdlc_reader import KWDLCReader, Mention, Entity
 
 
 def test_pas(fixture_kwdlc_readers: List[KWDLCReader]):
@@ -97,14 +97,13 @@ def test_pas(fixture_kwdlc_readers: List[KWDLCReader]):
 
 def test_coref(fixture_kwdlc_readers: List[KWDLCReader]):
     kwdlc_reader = fixture_kwdlc_readers[1]
-    tag2dtid = kwdlc_reader.tag2dtid
     entities: List[Entity] = kwdlc_reader.get_all_entities()
     assert len(entities) == 1
 
     entity: Entity = entities[0]
-    mentions: List[Tag] = entity.mentions
+    mentions: List[Mention] = entity.mentions
     assert len(mentions) == 4
-    assert (mentions[0].midasi, tag2dtid[mentions[0]]) == ('ドクターを', 7)
-    assert (mentions[1].midasi, tag2dtid[mentions[1]]) == ('ドクターを', 11)
-    assert (mentions[2].midasi, tag2dtid[mentions[2]]) == ('ドクターの', 16)
-    assert (mentions[3].midasi, tag2dtid[mentions[3]]) == ('皆様', 17)
+    assert (mentions[0].midasi, mentions[0].dtid) == ('ドクターを', 7)
+    assert (mentions[1].midasi, mentions[1].dtid) == ('ドクターを', 11)
+    assert (mentions[2].midasi, mentions[2].dtid) == ('ドクターの', 16)
+    assert (mentions[3].midasi, mentions[3].dtid) == ('皆様', 17)

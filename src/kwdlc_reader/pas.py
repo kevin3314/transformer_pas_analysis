@@ -21,13 +21,28 @@ class Argument:
         mode (str): モード
     """
 
-    def __init__(self, rel: Rel, dtid: Optional[int], dep_type: str):
-        self.sid: str = rel.sid
-        self.tid: Optional[int] = rel.tid
-        self.midasi: str = rel.target
-        self.dtid: Optional[int] = dtid
-        self.dep_type: str = dep_type
-        self.mode: str = rel.mode
+    # def __init__(self, rel: Rel, dtid: Optional[int], dep_type: str):
+    #     self.sid: str = rel.sid
+    #     self.tid: Optional[int] = rel.tid
+    #     self.midasi: str = rel.target
+    #     self.dtid: Optional[int] = dtid
+    #     self.dep_type: str = dep_type
+    #     self.mode: str = rel.mode
+
+    def __init__(self,
+                 sid: str,
+                 tid: int,
+                 midasi: str,
+                 dtid: Optional[int],
+                 dep_type: str,
+                 mode: str
+                 ) -> None:
+        self.sid = sid
+        self.tid = tid
+        self.midasi = midasi
+        self.dtid = dtid
+        self.dep_type = dep_type
+        self.mode = mode
 
     # for test
     def __iter__(self):
@@ -38,8 +53,8 @@ class Argument:
         yield self.dep_type
         yield self.mode
 
-    # def __str__(self):
-    #     return f'target: {self.target}, dtid: {self.dtid}, tid: {self.tid}'
+    def __str__(self):
+        return f'{self.midasi} (sid: {self.sid}, tid: {self.tid}, dtid: {self.dtid})'
 
 
 class Pas:
@@ -53,16 +68,25 @@ class Pas:
         self.dtid = dtid
         self.sid = sid
 
-    def add_argument(self, rel: Rel, tag: Optional[Tag], dtid: Optional[int]):
+    def add_argument(self,
+                     case: str,
+                     tag: Optional[Tag],
+                     sid: Optional[str],
+                     dtid: Optional[int],
+                     midasi: str,
+                     mode: str,
+                     ) -> None:
+    # def add_argument(self, rel: Rel, tag: Optional[Tag], dtid: Optional[int]):
         if tag is None:
-            assert rel.tid is None and dtid is None
+            assert sid is None and dtid is None
+            tid = None
         else:
-            assert tag.tag_id == rel.tid
-        assert tag is not None or dtid is None
-        if rel.atype in self.arguments:
-            assert rel.mode != ''
-        dep_type = self._get_dep_type(self.predicate, tag, self.sid, rel.sid, rel.atype)
-        self.arguments[rel.atype].append(Argument(rel, dtid, dep_type))
+            tid = tag.tag_id
+        if case in self.arguments:
+            assert mode != ''
+        dep_type = self._get_dep_type(self.predicate, tag, self.sid, sid, case)
+        argument = Argument(sid, tid, midasi, dtid, dep_type, mode)
+        self.arguments[case].append(argument)
 
     @staticmethod
     def _get_dep_type(pred: Tag, arg: Tag, sid_pred: str, sid_arg: str, atype: str) -> str:

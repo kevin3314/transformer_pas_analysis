@@ -3,20 +3,29 @@ from typing import List
 from pyknp import Tag
 
 
+class Mention:
+    def __init__(self, sid: str, tag: Tag, dtid: int, midasi: str):
+        self.tag = tag
+        self.sid = sid
+        self.tid = tag.tag_id
+        self.dtid = dtid
+        self.midasi = midasi
+
+
 class Entity:
-    eid = 0
+    eid = -1
 
     def __init__(self, eid: int, exophor):
         self.eid: int = eid
         self.exophor = exophor
-        self.mentions: List[Tag] = []
+        self.mentions: List[Mention] = []
 
-    def add_mention(self, mention: Tag):
+    def add_mention(self, mention: Mention):
         self.mentions.append(mention)
 
     @classmethod
     def initialize(cls):
-        cls.eid = 0
+        cls.eid = -1
 
     @classmethod
     def create(cls, exophor=None):

@@ -1,4 +1,4 @@
 from .reader import *
 from .pas import *
-from .entity import *
+from .coreference import *
 from .constants import *
