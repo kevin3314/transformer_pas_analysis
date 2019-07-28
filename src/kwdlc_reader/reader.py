@@ -2,7 +2,7 @@ import os
 import glob
 import logging
 from typing import List, Dict, Optional
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
 from kwdlc_reader.pas import Pas, Argument
@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 # TODO
 - named entity
 - relax match
-- 2つのcorefクラスタが実は同じクラスタだった場合の処理
 
 # MEMO
 - アノテーション基準には著者読者とのcorefは=:著者と書いてあるが、<rel>タグの中身はatype='=≒', target='著者'となっている
@@ -73,9 +72,9 @@ class KWDLCReader:
         self.dtid2tag = {dtid: tag for tag, dtid in self.tag2dtid.items()}
 
         self._pas: Dict[Tag, Pas] = OrderedDict()
-        # self.mentions: Dict[int, Mention] = {}
-        # self.entities: List[Entity] = []
-        self._mention2entity: Dict[Mention, Entity] = {}
+        self.mentions: Dict[int, Mention] = OrderedDict()
+        self.entities: List[Entity] = []
+        # self._mention2entity: Dict[Mention, Entity] = {}
         self._extract_relations()
 
     @staticmethod
@@ -113,7 +112,6 @@ class KWDLCReader:
                 dbid += 1
 
     def _extract_relations(self):
-        Entity.initialize()
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
             dtid = self.tag2dtid[tag]
@@ -141,42 +139,73 @@ class KWDLCReader:
 
                 # extract coreference
                 elif rel.atype in self.target_corefs:
-                    self._add_corefs(Mention(tag2sid[tag], tag, dtid, tag.midasi), rel)
+                    self._add_corefs(tag2sid[tag], tag, rel)
+
+                else:
+                    logger.info(f'Relation type: {rel.atype} is ignored.')
 
             if pas.arguments:
                 self._pas[tag] = pas
 
-    def _add_corefs(self, source_mention: Mention, rel: Rel):
-        dtid2entity = {m.dtid: e for m, e in self._mention2entity.items()}
+    def _add_corefs(self, source_sid: str, source_tag: Tag, rel: Rel):
+        source_dtid = self.tag2dtid[source_tag]
         if rel.sid is not None:
             target_tag = self.sid2sentence[rel.sid].tag_list()[rel.tid]
             target_dtid = self.tag2dtid[target_tag]
-            if target_dtid >= source_mention.dtid:
-                logger.warning('Coreference with self or latter entity was found.')
+            if target_dtid >= source_dtid:
+                logger.warning('Coreference with self or latter entity is found.')
                 return
-            target_mention = Mention(rel.sid, target_tag, target_dtid, rel.target)
-            if target_dtid in dtid2entity:
-                entity = dtid2entity[target_dtid]
-            else:
-                entity = Entity.create()
-                self._add_mention(target_mention, entity)
-        # exophora
         else:
+            target_tag = target_dtid = None
             if rel.target not in ALL_EXOPHORS:
                 logger.warning(f'Unknown exophor: {rel.target}')
                 return
             elif rel.target not in self.target_exophors:
-                logger.info(f'Coreference with {rel.target} ({rel.atype}) of {source_mention.midasi} is ignored.')
+                logger.info(f'Coreference with {rel.target} ({rel.atype}) of {source_tag.midasi} is ignored.')
                 return
-            if source_mention.dtid in dtid2entity:
-                entity = dtid2entity[source_mention.dtid]
-            else:
-                entity = Entity.create(exophor=rel.target)
-        self._add_mention(source_mention, entity)
 
-    def _add_mention(self, mention: Mention, entity: Entity):
-        entity.add_mention(mention)
-        self._mention2entity[mention] = entity
+        if source_dtid in self.mentions:
+            entity = self.entities[self.mentions[source_dtid].eid]
+            if rel.sid is not None:
+                if target_dtid in self.mentions:
+                    target_entity = self.entities[self.mentions[target_dtid].eid]
+                    logger.info(f'Merge entity {entity.eid} and {target_entity.eid}.')
+                    entity.merge(target_entity)
+                else:
+                    target_mention = Mention(rel.sid, target_tag, target_dtid)
+                    self.mentions[target_dtid] = target_mention
+                    entity.add_mention(target_mention)
+            # exophor
+            else:
+                if entity.exophor is None:
+                    logger.info(f'Mark entity {entity.eid} as {rel.target}.')
+                    entity.exophor = rel.target
+                elif entity.exophor != rel.target:
+                    if rel.mode != '':
+                        entity.additional_exophor[rel.mode].append(rel.target)
+                    else:
+                        logger.warning(f'Overwrite entity {entity.eid} {entity.exophor} to {rel.target}.')
+                        entity.exophor = rel.target
+        else:
+            source_mention = Mention(source_sid, source_tag, source_dtid)
+            self.mentions[source_dtid] = source_mention
+            if rel.sid is not None:
+                if target_dtid in self.mentions:
+                    entity = self.entities[self.mentions[target_dtid].eid]
+                else:
+                    target_mention = Mention(rel.sid, target_tag, target_dtid)
+                    self.mentions[target_dtid] = target_mention
+                    entity = self._create_entity()
+                    entity.add_mention(target_mention)
+            # exophor
+            else:
+                entity = self._create_entity(exophor=rel.target)
+            entity.add_mention(source_mention)
+
+    def _create_entity(self, exophor: Optional[str] = None) -> Entity:
+        entity = Entity(len(self.entities), exophor=exophor)
+        self.entities.append(entity)
+        return entity
 
     @property
     def sentences(self) -> List[BList]:
@@ -192,10 +221,10 @@ class KWDLCReader:
         return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
     def get_all_entities(self) -> List[Entity]:
-        return list(set(self._mention2entity.values()))
+        return [entity for entity in self.entities if entity.mentions]
 
     def get_entity(self, tag: Tag) -> Optional[Entity]:
-        entities = [e for m, e in self._mention2entity.items() if m.dtid == self.tag2dtid[tag]]
+        entities = [e for e in self.entities for m in e.mentions if m.dtid == self.tag2dtid[tag]]
         if entities:
             assert len(entities) == 1
             return entities[0]

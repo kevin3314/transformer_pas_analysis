@@ -96,12 +96,23 @@ def test_pas(fixture_kwdlc_readers: List[KWDLCReader]):
 
 
 def test_coref(fixture_kwdlc_readers: List[KWDLCReader]):
+    kwdlc_reader = fixture_kwdlc_readers[0]
+    entities: List[Entity] = kwdlc_reader.get_all_entities()
+    assert len(entities) == 1
+
+    entity: Entity = entities[0]
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+    assert entity.exophor == '不特定:人'
+    assert entity.additional_exophor == {'AND': ['著者', '読者']}
+
     kwdlc_reader = fixture_kwdlc_readers[1]
     entities: List[Entity] = kwdlc_reader.get_all_entities()
     assert len(entities) == 1
 
     entity: Entity = entities[0]
-    mentions: List[Mention] = entity.mentions
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 4
     assert (mentions[0].midasi, mentions[0].dtid) == ('ドクターを', 7)
     assert (mentions[1].midasi, mentions[1].dtid) == ('ドクターを', 11)
