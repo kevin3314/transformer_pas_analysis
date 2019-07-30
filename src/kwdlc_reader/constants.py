@@ -57,3 +57,14 @@ DEP_TYPES = [
     "inter",
     "exo",
 ]
+
+NE_CATEGORIES = [
+    "ORGANIZATION",
+    "PERSON",
+    "LOCATION",
+    "ARTIFACT",
+    "DATE",
+    "TIME",
+    "MONEY",
+    "PERCENT",
+]

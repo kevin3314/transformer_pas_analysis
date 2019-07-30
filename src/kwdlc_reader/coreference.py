@@ -20,17 +20,22 @@ class Mention:
 
 
 class Entity:
-    eid = -1
-
     def __init__(self, eid: int, exophor: Optional[str]):
         self.eid: int = eid
         self.exophor = exophor
         self.mentions: List[Mention] = []
         self.additional_exophor: Dict[str, List[str]] = defaultdict(list)
+        self.taigen: bool = True
+        self.yougen: bool = True
 
     def add_mention(self, mention: Mention):
         mention.eid = self.eid
         self.mentions.append(mention)
+        # 全てのmentionの品詞が一致した場合のみentityに品詞を設定
+        if '<用言:' not in mention.tag.fstring:
+            self.yougen = False
+        if '<体言>' not in mention.tag.fstring:
+            self.taigen = False
 
     def merge(self, entity):
         for mention in entity.mentions:

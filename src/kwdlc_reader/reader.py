@@ -7,7 +7,8 @@ from collections import OrderedDict
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
 from kwdlc_reader.pas import Pas, Argument
 from kwdlc_reader.coreference import Mention, Entity
-from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_COREFS, CORE_COREFS, DEP_TYPES
+from kwdlc_reader.ne import NamedEntity
+from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_COREFS, CORE_COREFS, NE_CATEGORIES
 
 
 logger = logging.getLogger(__name__)
@@ -15,13 +16,13 @@ logging.basicConfig(level=logging.INFO)
 
 """
 # TODO
-- named entity
 - relax match
 
 # MEMO
 - アノテーション基準には著者読者とのcorefは=:著者と書いてあるが、<rel>タグの中身はatype='=≒', target='著者'となっている
 - corefタグは用言に対しても振られる
 - Entityクラスに用言か体言かをもたせる？
+- 用言かつ体言の基本句もある
 - 前文/後文への照応もある(<rel type="=" target="後文"/>)
 - 述語から項への係り受けもdep?
 - BasePhraseクラス作っちゃう？
@@ -50,10 +51,12 @@ class KWDLCReader:
                  target_cases: Optional[List[str]] = None,
                  target_corefs: Optional[List[str]] = None,
                  target_exophors: Optional[List[str]] = None,
+                 extract_nes: bool = True,
                  ) -> None:
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
         self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
+        self.extract_nes: bool = extract_nes
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
         with open(file_path) as f:
@@ -72,10 +75,13 @@ class KWDLCReader:
         self.dtid2tag = {dtid: tag for tag, dtid in self.tag2dtid.items()}
 
         self._pas: Dict[Tag, Pas] = OrderedDict()
-        self.mentions: Dict[int, Mention] = OrderedDict()
-        self.entities: List[Entity] = []
-        # self._mention2entity: Dict[Mention, Entity] = {}
+        self._mentions: Dict[int, Mention] = OrderedDict()
+        self._entities: List[Entity] = []
         self._extract_relations()
+
+        if extract_nes:
+            self.named_entities: List[NamedEntity] = []
+            self._extract_nes()
 
     @staticmethod
     def _get_target(input_: Optional[list], all_: list, default: list, type_: str) -> list:
@@ -89,16 +95,7 @@ class KWDLCReader:
                 logger.warning(f'Unknown {type_}: {item}')
         return target
 
-    # @staticmethod
-    # def _read_knp_stream(f):
-    #     buff = ""
-    #     for line in f:
-    #         buff += line
-    #         if line == "EOS\n":
-    #             yield BList(buff)
-    #             buff = ""
-
-    def _assign_document_wide_id(self):
+    def _assign_document_wide_id(self) -> None:
         dbid, dtid, dmid = 0, 0, 0
         for sentence in self.sentences:
             for bnst in sentence.bnst_list():
@@ -111,7 +108,7 @@ class KWDLCReader:
                 self.bnst2dbid[bnst] = dbid
                 dbid += 1
 
-    def _extract_relations(self):
+    def _extract_relations(self) -> None:
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
             dtid = self.tag2dtid[tag]
@@ -147,7 +144,11 @@ class KWDLCReader:
             if pas.arguments:
                 self._pas[tag] = pas
 
-    def _add_corefs(self, source_sid: str, source_tag: Tag, rel: Rel):
+    def _add_corefs(self,
+                    source_sid: str,
+                    source_tag: Tag,
+                    rel: Rel
+                    ) -> None:
         source_dtid = self.tag2dtid[source_tag]
         if rel.sid is not None:
             target_tag = self.sid2sentence[rel.sid].tag_list()[rel.tid]
@@ -164,16 +165,16 @@ class KWDLCReader:
                 logger.info(f'Coreference with {rel.target} ({rel.atype}) of {source_tag.midasi} is ignored.')
                 return
 
-        if source_dtid in self.mentions:
-            entity = self.entities[self.mentions[source_dtid].eid]
+        if source_dtid in self._mentions:
+            entity = self._entities[self._mentions[source_dtid].eid]
             if rel.sid is not None:
-                if target_dtid in self.mentions:
-                    target_entity = self.entities[self.mentions[target_dtid].eid]
+                if target_dtid in self._mentions:
+                    target_entity = self._entities[self._mentions[target_dtid].eid]
                     logger.info(f'Merge entity {entity.eid} and {target_entity.eid}.')
                     entity.merge(target_entity)
                 else:
                     target_mention = Mention(rel.sid, target_tag, target_dtid)
-                    self.mentions[target_dtid] = target_mention
+                    self._mentions[target_dtid] = target_mention
                     entity.add_mention(target_mention)
             # exophor
             else:
@@ -188,13 +189,13 @@ class KWDLCReader:
                         entity.exophor = rel.target
         else:
             source_mention = Mention(source_sid, source_tag, source_dtid)
-            self.mentions[source_dtid] = source_mention
+            self._mentions[source_dtid] = source_mention
             if rel.sid is not None:
-                if target_dtid in self.mentions:
-                    entity = self.entities[self.mentions[target_dtid].eid]
+                if target_dtid in self._mentions:
+                    entity = self._entities[self._mentions[target_dtid].eid]
                 else:
                     target_mention = Mention(rel.sid, target_tag, target_dtid)
-                    self.mentions[target_dtid] = target_mention
+                    self._mentions[target_dtid] = target_mention
                     entity = self._create_entity()
                     entity.add_mention(target_mention)
             # exophor
@@ -203,9 +204,42 @@ class KWDLCReader:
             entity.add_mention(source_mention)
 
     def _create_entity(self, exophor: Optional[str] = None) -> Entity:
-        entity = Entity(len(self.entities), exophor=exophor)
-        self.entities.append(entity)
+        entity = Entity(len(self._entities), exophor=exophor)
+        self._entities.append(entity)
         return entity
+
+    def _extract_nes(self) -> None:
+        for sentence in self.sentences:
+            tag_list = sentence.tag_list()
+            # tag.features = {'NE': 'LOCATION:ダーマ神殿'}
+            for tag in tag_list:
+                if 'NE' not in tag.features:
+                    continue
+                category, midasi = tag.features['NE'].split(':', maxsplit=1)
+                if category not in NE_CATEGORIES:
+                    logger.warning(f'unknown NE category: {category}')
+                    continue
+                mrph_list = [m for t in tag_list[:tag.tag_id + 1] for m in t.mrph_list()]
+                mrph_span = self._find_mrph_span(midasi, mrph_list, tag)
+                if mrph_span is None:
+                    logger.warning(f'mrph span of "{midasi}" was not found in {sentence.sid}')
+                    continue
+                ne = NamedEntity(category, midasi, sentence, mrph_span, self.mrph2dmid)
+                self.named_entities.append(ne)
+
+    @staticmethod
+    def _find_mrph_span(midasi: str,
+                        mrph_list: List[Morpheme],
+                        tag: Tag
+                        ) -> Optional[range]:
+        for i in range(len(tag.mrph_list())):
+            end_mid = len(mrph_list) - i
+            mrph_span = ''
+            for mrph in reversed(mrph_list[:end_mid]):
+                mrph_span = mrph.midasi + mrph_span
+                if mrph_span == midasi:
+                    return range(mrph.mrph_id, end_mid)
+        return None
 
     @property
     def sentences(self) -> List[BList]:
@@ -220,11 +254,14 @@ class KWDLCReader:
     def mrph_list(self) -> List[Morpheme]:
         return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
+    def get_all_mentions(self) -> List[Mention]:
+        return list(self._mentions.values())
+
     def get_all_entities(self) -> List[Entity]:
-        return [entity for entity in self.entities if entity.mentions]
+        return [entity for entity in self._entities if entity.mentions]
 
     def get_entity(self, tag: Tag) -> Optional[Entity]:
-        entities = [e for e in self.entities for m in e.mentions if m.dtid == self.tag2dtid[tag]]
+        entities = [e for e in self._entities for m in e.mentions if m.dtid == self.tag2dtid[tag]]
         if entities:
             assert len(entities) == 1
             return entities[0]
