@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Optional
 from collections import defaultdict
 
-from pyknp import Tag, Rel
+from pyknp import Tag
 
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,6 @@ class Pas:
                      midasi: str,
                      mode: str,
                      ) -> None:
-    # def add_argument(self, rel: Rel, tag: Optional[Tag], dtid: Optional[int]):
         if tag is None:
             assert sid is None and dtid is None
             tid = None

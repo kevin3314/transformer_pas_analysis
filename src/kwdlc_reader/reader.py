@@ -268,12 +268,6 @@ class KWDLCReader:
         else:
             return None
 
-    # NEに関して
-    # tag.features = {'NE': 'LOCATION:ダーマ神殿'}
-    # などとなっている
-    # なお、NEは対象NEの最後の基本句に付与されており、形態素単位
-    # dmid_range を持っておく必要あり
-
     def pas_list(self) -> List[Pas]:
         return list(self._pas.values())
 

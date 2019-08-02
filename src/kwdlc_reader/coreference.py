@@ -37,7 +37,7 @@ class Entity:
         if '<体言>' not in mention.tag.fstring:
             self.taigen = False
 
-    def merge(self, entity):
+    def merge(self, entity: 'Entity'):
         for mention in entity.mentions:
             mention.eid = self.eid
         self.mentions += entity.mentions
