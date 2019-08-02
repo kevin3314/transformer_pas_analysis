@@ -1,7 +1,6 @@
-import os
-import glob
 import logging
-from typing import List, Dict, Optional
+from pathlib import Path
+from typing import List, Dict, Optional, Iterator
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
@@ -29,25 +28,10 @@ logging.basicConfig(level=logging.INFO)
 """
 
 
-class KyotoCorpus:
-    """https://bitbucket.org/ku_nlp/seqzero/src/master/seqzero/corpus_reader.py"""
-
-    def __init__(self, dirname: str, glob_pat: str = "*.knp", **kwargs):
-        self.file_paths = self.get_file_paths(dirname, glob_pat)
-        self.kwargs = kwargs
-
-    def load_files(self):
-        for file_path in self.file_paths:
-            yield KWDLCReader(file_path, **self.kwargs)
-
-    @staticmethod
-    def get_file_paths(dirname: str, glob_pat: str):
-        return sorted(glob.glob(os.path.join(dirname, glob_pat)))
-
-
 class KWDLCReader:
     def __init__(self,
-                 file_path: str,
+                 corpus_dir: Path,
+                 glob_pat: str = '*.knp',
                  target_cases: Optional[List[str]] = None,
                  target_corefs: Optional[List[str]] = None,
                  target_exophors: Optional[List[str]] = None,
@@ -58,8 +42,56 @@ class KWDLCReader:
         self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
         self.extract_nes: bool = extract_nes
 
+        self.file_paths: List[Path] = list(corpus_dir.glob(glob_pat))
+        self.did2path: Dict[str, Path] = {path.stem: path for path in self.file_paths}
+
+    @staticmethod
+    def _get_target(input_: Optional[list], all_: list, default: list, type_: str) -> list:
+        if input_ is None:
+            return default
+        target = []
+        for item in input_:
+            if item in all_:
+                target.append(item)
+            else:
+                logger.warning(f'Unknown {type_}: {item}')
+        return target
+
+    def get_doc_ids(self) -> List[str]:
+        return list(self.did2path.keys())
+
+    def process_document(self, doc_id: str) -> Optional['Document']:
+        if doc_id not in self.did2path:
+            logger.error(f'Unknown document id: {doc_id}')
+            return None
+        path = self.did2path[doc_id]
+        return Document(path, self.target_cases, self.target_corefs, self.target_exophors, self.extract_nes)
+
+    def process_documents(self, doc_ids: List[str]) -> Iterator[Optional['Document']]:
+        for doc_id in doc_ids:
+            yield self.process_document(doc_id)
+
+    def process_all_documents(self) -> Iterator[Optional['Document']]:
+        for path in self.file_paths:
+            yield Document(path, self.target_cases, self.target_corefs, self.target_exophors, self.extract_nes)
+
+
+class Document:
+    def __init__(self,
+                 file_path: Path,
+                 target_cases: List[str],
+                 target_corefs: List[str],
+                 target_exophors: List[str],
+                 extract_nes: bool,
+                 ) -> None:
+        self.doc_id = file_path.stem
+        self.target_cases: List[str] = target_cases
+        self.target_corefs: List[str] = target_corefs
+        self.target_exophors: List[str] = target_exophors
+        self.extract_nes: bool = extract_nes
+
         self.sid2sentence: Dict[str, BList] = OrderedDict()
-        with open(file_path) as f:
+        with file_path.open() as f:
             buff = ""
             for line in f:
                 buff += line
@@ -82,18 +114,6 @@ class KWDLCReader:
         if extract_nes:
             self.named_entities: List[NamedEntity] = []
             self._extract_nes()
-
-    @staticmethod
-    def _get_target(input_: Optional[list], all_: list, default: list, type_: str) -> list:
-        if input_ is None:
-            return default
-        target = []
-        for item in input_:
-            if item in all_:
-                target.append(item)
-            else:
-                logger.warning(f'Unknown {type_}: {item}')
-        return target
 
     def _assign_document_wide_id(self) -> None:
         dbid, dtid, dmid = 0, 0, 0
@@ -294,18 +314,3 @@ class KWDLCReader:
                         pas.add_argument(case, mention.tag, mention.sid, mention.dtid, mention.midasi, '')
 
         return pas.arguments
-
-
-if __name__ == '__main__':
-    path = 'data/train/w201106-0000060050.knp'
-    # path = 'data/train/w201106-0000074273.knp'
-    kwdlc = KWDLCReader(path,
-                        target_cases=['ガ', 'ヲ', 'ニ', 'ノ'],
-                        target_corefs=["=", "=構", "=≒"],
-                        target_exophors=['読者', '著者', '不特定:人'])
-    kwdlc.get_all_entities()  # -> List[Entity]
-    predicates: List[Tag] = kwdlc.get_predicates()
-
-    # tags = kwdlc.tag_list()  # -> List[Tag]
-    # predicates = list(filter(lambda x: x.pas is not None, tags))
-    kwdlc.get_arguments(predicates[0], relax=True)  # -> List[Argument]

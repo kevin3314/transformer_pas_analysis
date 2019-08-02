@@ -24,7 +24,7 @@ class Entity:
         self.eid: int = eid
         self.exophor = exophor
         self.mentions: List[Mention] = []
-        self.additional_exophor: Dict[str, List[str]] = defaultdict(list)
+        self.additional_exophor: Dict[str, List[str]] = defaultdict(list)  # TODO: revise name
         self.taigen: bool = True
         self.yougen: bool = True
 
