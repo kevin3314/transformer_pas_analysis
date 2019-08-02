@@ -314,3 +314,12 @@ class Document:
                         pas.add_argument(case, mention.tag, mention.sid, mention.dtid, mention.midasi, '')
 
         return pas.arguments
+
+    def __len__(self):
+        return len(self.sid2sentence)
+
+    def __getitem__(self, sid: str):
+        return self.sid2sentence[sid]
+
+    def __iter__(self):
+        return iter(self.sid2sentence.values())
