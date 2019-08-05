@@ -29,6 +29,24 @@ logging.basicConfig(level=logging.INFO)
 
 
 class KWDLCReader:
+    """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
+
+    Args:
+        corpus_dir (Path): コーパスの存在するディレクトリ
+        glob_pat (str): コーパスとして扱うファイルのパターン
+        target_cases (list): 抽出の対象とする格
+        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        target_exophors (list): 抽出の対象とする外界照応詞
+        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+
+    Attributes:
+        target_cases (list): 抽出の対象とする格
+        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        target_exophors (list): 抽出の対象とする外界照応詞
+        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+        file_paths (list): コーパスのファイルリスト
+        did2path (dict): 文書IDとその文書のファイルを紐付ける辞書
+    """
     def __init__(self,
                  corpus_dir: Path,
                  glob_pat: str = '*.knp',
@@ -77,6 +95,28 @@ class KWDLCReader:
 
 
 class Document:
+    """ KWDLC(または Kyoto Corpus)の1文書を扱うクラス
+
+        Args:
+            file_path (str): 文書ファイルのパス
+            target_cases (list): 抽出の対象とする格
+            target_corefs (list): 抽出の対象とする共参照関係(=など)
+            target_exophors (list): 抽出の対象とする外界照応詞
+            extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+
+        Attributes:
+            doc_id (str): 文書ID(ファイル名から拡張子を除いたもの)
+            target_cases (list): 抽出の対象とする格
+            target_corefs (list): 抽出の対象とする共参照関係(=など)
+            target_exophors (list): 抽出の対象とする外界照応詞
+            extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+            sid2sentence (dict): 文IDと文を紐付ける辞書
+            bnst2dbid (dict): 文節IDと文書レベルの文節IDを紐付ける辞書
+            tag2dtid (dict): 基本句IDと文書レベルの基本句IDを紐付ける辞書
+            mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
+            dtid2tag (dict): 文書レベルの基本句IDと基本句を紐付ける辞書
+            named_entities (list): 抽出した固有表現
+        """
     def __init__(self,
                  file_path: Path,
                  target_cases: List[str],
@@ -92,13 +132,13 @@ class Document:
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
         with file_path.open() as f:
-            buff = ""
+            buff = ''
             for line in f:
                 buff += line
-                if line == "EOS\n":
+                if line == 'EOS\n':
                     sentence = BList(buff)
                     self.sid2sentence[sentence.sid] = sentence
-                    buff = ""
+                    buff = ''
 
         self.bnst2dbid = {}
         self.tag2dtid = {}

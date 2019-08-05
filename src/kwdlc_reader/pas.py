@@ -75,10 +75,10 @@ class Pas:
 
     def _get_content_word(self, tag: Tag):
         for mrph in tag.mrph_list():
-            if "<内容語>" in mrph.fstring:
+            if '<内容語>' in mrph.fstring:
                 return mrph
         else:
-            logger.error(f"cannot find content word:\n{tag.spec()}\t({self.sid})\n")
+            logger.error(f'cannot find content word:\n{tag.spec()}\t({self.sid})\n')
             return tag.mrph_list()[0]
 
     def add_argument(self,
@@ -105,14 +105,14 @@ class Pas:
         if arg is not None:
             if arg in pred.children:
                 if arg.features.get('係', None) == atype.rstrip('？') + '格':
-                    return "overt"
+                    return 'overt'
                 else:
-                    return "dep"
+                    return 'dep'
             elif arg is pred.parent:
-                return "dep"
+                return 'dep'
             elif sid_arg == sid_pred:
-                return "intra"
+                return 'intra'
             else:
-                return "inter"
+                return 'inter'
         else:
-            return "exo"
+            return 'exo'
