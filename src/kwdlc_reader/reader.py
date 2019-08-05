@@ -135,7 +135,7 @@ class Document:
             if tag.features.rels is None:
                 logger.debug(f'Tag: "{tag.midasi}" has no relation tags.')
                 continue
-            pas = Pas(tag, dtid, tag2sid[tag])
+            pas = Pas(tag, dtid, tag2sid[tag], self.mrph2dmid)
             for rel in tag.features.rels:
                 assert rel.ignore is False
                 # extract PAS

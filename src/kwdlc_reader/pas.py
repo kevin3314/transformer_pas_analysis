@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Optional
 from collections import defaultdict
 
-from pyknp import Tag
+from pyknp import Tag, Morpheme
 
 
 logger = logging.getLogger(__name__)
@@ -20,14 +20,6 @@ class Argument:
         dep_type (str): 係り受けタイプ ("overt", "dep", "intra", "inter", "exo")
         mode (str): モード
     """
-
-    # def __init__(self, rel: Rel, dtid: Optional[int], dep_type: str):
-    #     self.sid: str = rel.sid
-    #     self.tid: Optional[int] = rel.tid
-    #     self.midasi: str = rel.target
-    #     self.dtid: Optional[int] = dtid
-    #     self.dep_type: str = dep_type
-    #     self.mode: str = rel.mode
 
     def __init__(self,
                  sid: str,
@@ -58,15 +50,36 @@ class Argument:
 
 
 class Pas:
-    """ 述語項構造を扱うクラス
+    """ 述語項構造を保持するオブジェクト
 
+    Args:
+        tag (Tag): 述語の基本句
+        dtid (int): 述語の文書レベル基本句ID
+        sid (str): 述語の文ID
+        mrph2dmid (dict): 形態素とその文書レベルIDを紐付ける辞書
+
+    Attributes:
+        predicate (Tag): 述語
+        arguments (dict): 格と項
+        dtid (int): 文書レベル基本句ID
+        sid (str): 文ID
+        dmid (int): 述語の中の内容語形態素の文書レベル形態素ID
     """
 
-    def __init__(self, tag: Tag, dtid: int, sid: str):
+    def __init__(self, tag: Tag, dtid: int, sid: str, mrph2dmid: Dict[Morpheme, int]):
         self.predicate = tag
         self.arguments: Dict[str, List[Argument]] = defaultdict(list)
         self.dtid = dtid
         self.sid = sid
+        self.dmid = mrph2dmid[self._get_content_word(tag)]
+
+    def _get_content_word(self, tag: Tag):
+        for mrph in tag.mrph_list():
+            if "<内容語>" in mrph.fstring:
+                return mrph
+        else:
+            logger.error(f"cannot find content word:\n{tag.spec()}\t({self.sid})\n")
+            return tag.mrph_list()[0]
 
     def add_argument(self,
                      case: str,
