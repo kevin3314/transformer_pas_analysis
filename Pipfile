@@ -18,6 +18,7 @@ tensorboard = "==1.12.0"
 tensorflow = "==1.12.0"
 pyknp = "*"
 torch = "==1.1.0"
+mojimoji = "*"
 
 [requires]
 python_version = "3.6"
