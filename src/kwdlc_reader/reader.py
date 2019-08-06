@@ -146,7 +146,7 @@ class Document:
         self._assign_document_wide_id()
         self.dtid2tag = {dtid: tag for tag, dtid in self.tag2dtid.items()}
 
-        self._pas: Dict[Tag, Pas] = OrderedDict()
+        self._pas: Dict[int, Pas] = OrderedDict()
         self._mentions: Dict[int, Mention] = OrderedDict()
         self._entities: List[Entity] = []
         self._extract_relations()
@@ -202,7 +202,7 @@ class Document:
                     logger.info(f'Relation type: {rel.atype} is ignored.')
 
             if pas.arguments:
-                self._pas[tag] = pas
+                self._pas[dtid] = pas
 
     def _add_corefs(self,
                     source_sid: str,
@@ -332,19 +332,23 @@ class Document:
         return list(self._pas.values())
 
     def get_predicates(self) -> List[Tag]:
-        return list(self._pas.keys())
+        return [pas.predicate for pas in self._pas.values()]
 
     def get_arguments(self,
                       predicate: Tag,
                       relax: bool = False,
                       ) -> Dict[str, List[Argument]]:
-        if predicate not in self._pas:
+        predicate_dtid = self.tag2dtid[predicate]
+        if predicate_dtid not in self._pas:
             return {}
-        pas = self._pas[predicate]
+        pas = self._pas[predicate_dtid].copy()
 
         if relax is True:
-            for case, args in self._pas[predicate].arguments.items():
+            for case, args in self._pas[predicate_dtid].arguments.items():
                 for arg in args:
+                    # exophor
+                    if arg.dtid is None:
+                        continue
                     entity = self.get_entity(self.dtid2tag[arg.dtid])
                     if entity is None:
                         continue
@@ -359,7 +363,11 @@ class Document:
         return len(self.sid2sentence)
 
     def __getitem__(self, sid: str):
-        return self.sid2sentence[sid]
+        if sid in self.sid2sentence:
+            return self.sid2sentence[sid]
+        else:
+            logger.error(f'sentence: {sid} is not in this document')
+            return None
 
     def __iter__(self):
         return iter(self.sid2sentence.values())

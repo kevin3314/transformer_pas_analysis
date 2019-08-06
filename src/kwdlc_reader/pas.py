@@ -1,4 +1,5 @@
 import logging
+import copy
 from typing import List, Dict, Optional
 from collections import defaultdict
 
@@ -17,6 +18,7 @@ class Argument:
         tid (int): 基本句ID
         midasi (str): 表記
         dtid (int): 文書レベル基本句ID
+        dmid (int): 文書レベルの形態素ID
         dep_type (str): 係り受けタイプ ("overt", "dep", "intra", "inter", "exo")
         mode (str): モード
     """
@@ -26,6 +28,7 @@ class Argument:
                  tid: int,
                  midasi: str,
                  dtid: Optional[int],
+                 dmid: Optional[int],
                  dep_type: str,
                  mode: str
                  ) -> None:
@@ -33,6 +36,7 @@ class Argument:
         self.tid = tid
         self.midasi = midasi
         self.dtid = dtid
+        self.dmid = dmid
         self.dep_type = dep_type
         self.mode = mode
 
@@ -42,11 +46,18 @@ class Argument:
         yield self.tid
         yield self.midasi
         yield self.dtid
+        # yield self.dmid
         yield self.dep_type
         yield self.mode
 
     def __str__(self):
         return f'{self.midasi} (sid: {self.sid}, tid: {self.tid}, dtid: {self.dtid})'
+
+    def __eq__(self, other: 'Argument'):
+        if self.dtid is None and other.dtid is None:
+            return self.midasi == other.midasi
+        else:
+            return self.dtid == other.dtid
 
 
 class Pas:
@@ -71,15 +82,16 @@ class Pas:
         self.arguments: Dict[str, List[Argument]] = defaultdict(list)
         self.dtid = dtid
         self.sid = sid
-        self.dmid = mrph2dmid[self._get_content_word(tag)]
+        self.mrph2dmid = mrph2dmid
+        self.dmid = self._get_content_word(tag)
 
-    def _get_content_word(self, tag: Tag):
+    def _get_content_word(self, tag: Tag) -> int:
         for mrph in tag.mrph_list():
             if '<内容語>' in mrph.fstring:
-                return mrph
+                return self.mrph2dmid[mrph]
         else:
-            logger.error(f'cannot find content word:\n{tag.spec()}\t({self.sid})\n')
-            return tag.mrph_list()[0]
+            logger.warning(f'cannot find content word:\n{tag.spec()}\n')
+            return self.mrph2dmid[tag.mrph_list()[0]]
 
     def add_argument(self,
                      case: str,
@@ -92,12 +104,12 @@ class Pas:
         if tag is None:
             assert sid is None and dtid is None
             tid = None
+            dmid = None
         else:
             tid = tag.tag_id
-        if case in self.arguments:
-            assert mode != ''
+            dmid = self._get_content_word(tag)
         dep_type = self._get_dep_type(self.predicate, tag, self.sid, sid, case)
-        argument = Argument(sid, tid, midasi, dtid, dep_type, mode)
+        argument = Argument(sid, tid, midasi, dtid, dmid, dep_type, mode)
         self.arguments[case].append(argument)
 
     @staticmethod
@@ -116,3 +128,9 @@ class Pas:
                 return 'inter'
         else:
             return 'exo'
+
+    def copy(self) -> 'Pas':
+        # only for arguments, perform deepcopy
+        new_obj = copy.copy(self)
+        new_obj.arguments = copy.deepcopy(self.arguments)
+        return new_obj
