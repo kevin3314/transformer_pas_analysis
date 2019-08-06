@@ -4,6 +4,8 @@ from typing import List, Dict, Optional, Iterator
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
+import mojimoji
+
 from kwdlc_reader.pas import Pas, Argument
 from kwdlc_reader.coreference import Mention, Entity
 from kwdlc_reader.ne import NamedEntity
@@ -11,11 +13,10 @@ from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_CORE
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 """
 # TODO
-- relax match
 
 # MEMO
 - アノテーション基準には著者読者とのcorefは=:著者と書いてあるが、<rel>タグの中身はatype='=≒', target='著者'となっている
@@ -25,6 +26,8 @@ logging.basicConfig(level=logging.INFO)
 - 前文/後文への照応もある(<rel type="=" target="後文"/>)
 - 述語から項への係り受けもdep?
 - BasePhraseクラス作っちゃう？
+- 不特定:１などは他の不特定:１と同一の対象
+- 不特定:1などの"1"で全角と半角の表記ゆれ
 """
 
 
@@ -72,7 +75,7 @@ class KWDLCReader:
             if item in all_:
                 target.append(item)
             else:
-                logger.warning(f'Unknown {type_}: {item}')
+                logger.warning(f'Unknown target {type_}: {item}')
         return target
 
     def get_doc_ids(self) -> List[str]:
@@ -178,16 +181,22 @@ class Document:
             pas = Pas(tag, dtid, tag2sid[tag], self.mrph2dmid)
             for rel in tag.features.rels:
                 assert rel.ignore is False
+                if rel.sid is not None and rel.sid not in self.sid2sentence:
+                    logger.warning(f'sentence: {rel.sid} not found in {self.doc_id}')
+                    continue
+                rel.target = mojimoji.han_to_zen(rel.target, ascii=False)  # 不特定:人1 -> 不特定:人１
                 # extract PAS
                 if rel.atype in self.target_cases:
                     if rel.sid is not None:
                         assert rel.tid is not None
-                        arg_tag = self.sid2sentence[rel.sid].tag_list()[rel.tid]
+                        arg_tag = self._get_tag(rel.sid, rel.tid)
+                        if arg_tag is None:
+                            return
                         pas.add_argument(rel.atype, arg_tag, rel.sid, self.tag2dtid[arg_tag], rel.target, rel.mode)
                     # exophora
                     else:
                         if rel.target not in ALL_EXOPHORS:
-                            logger.warning(f'Unknown exophor: {rel.target}')
+                            logger.warning(f'Unknown exophor: {rel.target}\t{pas.sid}')
                             continue
                         elif rel.target not in self.target_exophors:
                             logger.info(f'Argument: {rel.target} ({rel.atype}) of {tag.midasi} is ignored.')
@@ -211,15 +220,17 @@ class Document:
                     ) -> None:
         source_dtid = self.tag2dtid[source_tag]
         if rel.sid is not None:
-            target_tag = self.sid2sentence[rel.sid].tag_list()[rel.tid]
+            target_tag = self._get_tag(rel.sid, rel.tid)
+            if target_tag is None:
+                return
             target_dtid = self.tag2dtid[target_tag]
             if target_dtid >= source_dtid:
-                logger.warning('Coreference with self or latter entity is found.')
+                logger.warning(f'Coreference with self or latter entity is found in {source_sid}.')
                 return
         else:
             target_tag = target_dtid = None
             if rel.target not in ALL_EXOPHORS:
-                logger.warning(f'Unknown exophor: {rel.target}')
+                logger.warning(f'Unknown exophor: {rel.target}\t{source_sid}')
                 return
             elif rel.target not in self.target_exophors:
                 logger.info(f'Coreference with {rel.target} ({rel.atype}) of {source_tag.midasi} is ignored.')
@@ -267,6 +278,13 @@ class Document:
         entity = Entity(len(self._entities), exophor=exophor)
         self._entities.append(entity)
         return entity
+
+    def _get_tag(self, sid: str, tid: int) -> Optional[Tag]:
+        tag_list = self.sid2sentence[sid].tag_list()
+        if not (0 <= tid < len(tag_list)):
+            logger.warning(f'tag out of range\t{tid}\t({sid})')
+            return None
+        return tag_list[tid]
 
     def _extract_nes(self) -> None:
         for sentence in self.sentences:

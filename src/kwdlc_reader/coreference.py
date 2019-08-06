@@ -6,7 +6,7 @@ from pyknp import Tag
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 
 class Mention:
@@ -58,19 +58,19 @@ class Entity:
         if '<体言>' not in mention.tag.fstring:
             self.taigen = False
 
-    def merge(self, entity: 'Entity'):
-        for mention in entity.mentions:
+    def merge(self, other: 'Entity'):
+        for mention in other.mentions:
             mention.eid = self.eid
-        self.mentions += entity.mentions
-        entity.mentions = []
-        if entity.exophor is not None:
-            if self.exophor is not None:
-                logger.warning(f'Overwrite entity {self.eid} {self.exophor} to {entity.exophor}.')
-                self.exophor = entity.exophor
+        self.mentions += other.mentions
+        other.mentions = []
+        if other.exophor is not None:
+            if self.exophor is not None and self.exophor != other.exophor:
+                logger.warning(f'Overwrite entity {self.eid} {self.exophor} to {other.exophor}.')
+                self.exophor = other.exophor
             else:
-                logger.info(f'Mark entity {self.eid} as {entity.exophor}.')
-                self.exophor = entity.exophor
+                logger.info(f'Mark entity {self.eid} as {other.exophor}.')
+                self.exophor = other.exophor
         else:
             if self.exophor is not None:
-                logger.info(f'Mark entity {entity.eid} as {self.exophor}.')
-                entity.exophor = self.exophor
+                logger.info(f'Mark entity {other.eid} as {self.exophor}.')
+                other.exophor = self.exophor

@@ -7,7 +7,7 @@ from pyknp import Tag, Morpheme
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 
 class Argument:
@@ -90,7 +90,7 @@ class Pas:
             if '<内容語>' in mrph.fstring:
                 return self.mrph2dmid[mrph]
         else:
-            logger.warning(f'cannot find content word:\n{tag.spec()}\n')
+            logger.warning(f'cannot find content word:\n{tag.spec()}')
             return self.mrph2dmid[tag.mrph_list()[0]]
 
     def add_argument(self,
