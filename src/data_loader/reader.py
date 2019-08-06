@@ -8,13 +8,13 @@ import sys
 
 from pyknp import BList, Morpheme
 from pyknp import Tag
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Optional
 
 
 class KyotoCorpus(object):
     """https://bitbucket.org/ku_nlp/seqzero/src/master/seqzero/corpus_reader.py"""
 
-    def __init__(self, dirname: str, glob_pat: str="*.knp"):
+    def __init__(self, dirname: str, glob_pat: str = "*.knp"):
         self.file_paths = self.get_file_paths(dirname, glob_pat)
 
     def load_files(self):
@@ -50,6 +50,15 @@ class Document(object):
 
         self.entities = {}  # eid -> list of mention keys
         self.mentions = {}  # mention key -> {is_special, key, dmid_range}
+
+    def bnst_list(self):
+        return [bnst for sentence in self.sentences for bnst in sentence.bnst_list()]
+
+    def tag_list(self):
+        return [tag for sentence in self.sentences for tag in sentence.tag_list()]
+
+    def mrph_list(self):
+        return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
     def add_corefs(self, tobj1: dict, tobj2: dict):
         eid1 = self.add_mention(tobj1)
@@ -87,43 +96,41 @@ class Document(object):
         return iter(self.sentences)
 
 
-class KyotoPASGoldExtractor(object):
+class KyotoPASGoldExtractor:
     """https://bitbucket.org/ku_nlp/seqzero/src/master/seqzero/pas.py"""
 
     rel_pat = re.compile(
         r"<rel type=\"(?P<type>[^\s]+?)\"(?: mode=\"(?P<mode>[^>]+?)\")? "
         r"target=\"(?P<target>[^\s]+?)\"(?: sid=\"(?P<sid>[^\"]+?)\" id=\"(?P<tid>\d*?)\")?/>")
 
-    def extract_from_doc(self, document: Document):
-        pas_list = []
-        for sentence in document:
-            pas_list += self.extract_from_sent(sentence, document)
-        return pas_list
+    def __init__(self, document: Document):
+        self.document = document
+        # self._assign_dtid()
+        self._assign_dmid()
+        self._check_corefs()
 
-    def extract_from_sent(self, sentence: BList, document: Document):
-        pas_list = []
-        for tag in sentence.tag_list():
-            obj = self._extract_from_tag(tag, sentence, document)
-            if obj:
-                pas_list.append(obj)
-        return pas_list
+    # @staticmethod
+    # def _assign_dtid():
+    #     """Assign document-wide tag index starting from the beginning of the document."""
+    #     idx = 0
+    #     for sentence in document:
+    #         # sentence.dtid_assigned = True
+    #         for tag in sentence.tag_list():
+    #             tag.dtid = idx
+    #             idx += 1
 
-    def preprocess_document(self, document: Document):
-        self._assign_dmid(document)
-        self._check_corefs(document)
-
-    def _assign_dmid(self, document: Document):
+    def _assign_dmid(self):
         """Assign document-wide mrph index starting from the beginning of the document."""
         idx = 0
-        for sentence in document:
+        for sentence in self.document:
             sentence.dmid_assigned = True
             for mrph in sentence.mrph_list():
                 mrph.dmid = idx
                 idx += 1
-            idx += 1  # count <EOS>
+            # idx += 1  # count <EOS>
 
-    def _check_corefs(self, document: Document):
-        for sentence in document:
+    def _check_corefs(self):
+        for sentence in self.document:
             sentence.coref_checked = True
             for tag in sentence.tag_list():
                 match_list = self.rel_pat.findall(tag.fstring)
@@ -143,7 +150,7 @@ class KyotoPASGoldExtractor(object):
                         if anaphor not in KyotoPASSpec.special_anaphors:
                             sys.stderr.write(f"unknown special anaphor\t{anaphor}\t({sentence.sid})\n")
                             continue
-                        document.add_corefs(
+                        self.document.add_corefs(
                             {
                                 "is_special": False,
                                 "key": f"{sentence.sid}:{tag.tag_id}",
@@ -165,16 +172,16 @@ class KyotoPASGoldExtractor(object):
                                 sys.stderr.write(f"reference to self\t{tid}\t{sentence.sid}\n")
                                 continue
                         else:
-                            if sid not in document.sid2sent:
+                            if sid not in self.document.sid2sent:
                                 sys.stderr.write(f"unknown sid\t{sid}\t({sentence.sid})\n")
                                 continue
-                            sent2 = document.sid2sent[sid]
+                            sent2 = self.document.sid2sent[sid]
                             if not (0 <= tid < len(sent2.tag_list())):
                                 sys.stderr.write(f"tag out of range\t{tid}\t({sent2.sid} <- {sentence.sid})\n")
                                 continue
                             tag2 = sent2.tag_list()[tid]
                         dmid_range2 = [tag2.mrph_list()[0].dmid, tag2.mrph_list()[-1].dmid]
-                        document.add_corefs(
+                        self.document.add_corefs(
                             {
                                 "is_special": False,
                                 "key": f"{sentence.sid}:{tag.tag_id}",
@@ -186,7 +193,21 @@ class KyotoPASGoldExtractor(object):
                                 "dmid_range": dmid_range2
                             })
 
-    def _extract_from_tag(self, tag: Tag, sentence: BList, document: Document):
+    def extract_from_doc(self):
+        pas_list: List[KyotoPAS] = []
+        for sentence in self.document:
+            pas_list += self.extract_from_sent(sentence)
+        return pas_list
+
+    def extract_from_sent(self, sentence: BList):
+        pas_list: List[KyotoPAS] = []
+        for tag in sentence.tag_list():
+            obj = self._extract_from_tag(tag, sentence)
+            if obj:
+                pas_list.append(obj)
+        return pas_list
+
+    def _extract_from_tag(self, tag: Tag, sentence: BList):
         """Check if this is a predicate to be analyzed."""
         match_list = self.rel_pat.findall(tag.fstring)
         if len(match_list) <= 0:
@@ -196,20 +217,10 @@ class KyotoPASGoldExtractor(object):
         target_cases = KyotoPASSpec.target_cases_pred if "<用言:" in tag.fstring else KyotoPASSpec.target_cases_noun
 
         # set of tags that have dependency relations
-        dep_ids = self._mark_deps(tag)
+        dep_ids: Dict[int, str] = self._mark_deps(tag)
 
-        # find dmid for the base phrase
-        dmid = None
-        for mrph in tag.mrph_list():
-            if "<内容語>" in mrph.fstring:
-                dmid = mrph.dmid
-                break
-        if dmid is None:
-            sys.stderr.write(f"cannot find content word:\n{tag.spec()}\t({sentence.sid})\n")
-            dmid = tag.mrph_list()[0].dmid
-
-        pas = KyotoPAS(sentence, tag.tag_id, dmid)
-        marked_tags = {}
+        pas = KyotoPAS(sentence, tag)
+        marked_tags = []
         for match in match_list:
             _type, mode, anaphor, sid, tid = match
 
@@ -221,10 +232,10 @@ class KyotoPASGoldExtractor(object):
                 continue
             if mode == "？":
                 continue
-            if sid == "":
-                assert (tid == -1)
+            if sid == "":  # 外界照応
+                assert tid == -1
                 # 不特定:人１; TODO: fix full-/half-width inconsistency
-                anaphor = re.sub("[0-9０-９]+$", "", anaphor)
+                anaphor = re.sub("[0-9０-９]+$", "", anaphor)  # 不特定:人１ -> 不特定:人
                 if anaphor == "なし":
                     continue
                 else:
@@ -232,26 +243,26 @@ class KyotoPASGoldExtractor(object):
                         sys.stderr.write(f"unknown special anaphor\t{anaphor}\t({sentence.sid})\n")
                         continue
                 anaphor = "<" + anaphor + ">"
-            elif sid == sentence.sid:
+            elif sid == sentence.sid:  # 文内照応
                 if not (0 <= tid < len(sentence.tag_list())):
                     sys.stderr.write(f"tag out of range\t{tid}\t({sentence.sid})\n")
                     continue
                 if tid in dep_ids:
                     dep_type = dep_ids[tid]
-                    marked_tags[tid] = True
+                    marked_tags.append(tid)
                 _tag = sentence.tag_list()[tid]
-                dmid = self._get_dmid(_tag, anaphor)
+                dmid = self._get_dmid(_tag, sentence)
                 dmid_range = [_tag.mrph_list()[0].dmid, _tag.mrph_list()[-1].dmid]
-            else:
-                if sid not in document.sid2sent:
+            else:  # 文間照応
+                if sid not in self.document.sid2sent:
                     sys.stderr.write(f"unknown sid\t{sid}\t({sentence.sid})\n")
                     continue
-                sentence2 = document.sid2sent[sid]
+                sentence2 = self.document.sid2sent[sid]
                 if not (0 <= tid < len(sentence2.tag_list())):
                     sys.stderr.write("tag out of range\t{}\t({} <- {})\n".format(tid, sentence2.sid, sentence.sid))
                     continue
                 _tag = sentence2.tag_list()[tid]
-                dmid = self._get_dmid(_tag, anaphor)
+                dmid = self._get_dmid(_tag, sentence2)
                 dmid_range = [_tag.mrph_list()[0].dmid, _tag.mrph_list()[-1].dmid]
             pas.add(_type, mode, anaphor, sid, tid, dmid, dmid_range, dep_type)
         if pas.rel_count <= 0:
@@ -271,82 +282,22 @@ class KyotoPASGoldExtractor(object):
                 pas.add("無", "", anaphor, sentence.sid, ctag.tag_id, dmid, dmid_range, "dep")
         return pas
 
-    def extract_dependency_type_from_sent(self, sentence: BList) -> Dict[Tuple, Tuple[str, str]]:
-        sid = sentence.sid
-        dtype_dict = {}
-        for tag in sentence.tag_list():
-            deps = self._mark_deps(tag, needs_case=True)
-            for ttid, (case, dtype) in deps.items():
-                dtype_dict[(sid, tag.tag_id, sid, ttid)] = (case, dtype)
-        return dtype_dict
+    @staticmethod
+    def _mark_deps(tag: Tag) -> Dict[int, str]:
 
-
-    def extract_dependency_path_from_sent(self, sentence: BList) -> Dict[Tuple, List[str]]:
-        path_dict = {}
-        for tag in sentence.tag_list():
-            obj = self._extract_dependency_path_from_tag(tag, sentence.sid, tag.tag_id)
-            if obj:
-                path_dict.update(obj)
-        return path_dict
-
-    def _extract_dependency_path_from_tag(self,
-                                          tag: Tag,
-                                          pred_sid: str,
-                                          pred_tid: int,
-                                          known_paths: Optional[Dict[Tuple, List[str]]] = None
-                                          ) -> Dict[Tuple, List[str]]:
-        if known_paths is None:
-            known_paths = {}  # type: Dict[Tuple, List[str]]
-
-        paths = {}  # type: Dict[Tuple, List[str]]
-        ptag = tag.parent
-        if ptag is not None:
-            if (pred_sid, pred_tid, pred_sid, ptag.tag_id) not in known_paths:
-                if (pred_sid, pred_tid, pred_sid, tag.tag_id) in known_paths:
-                    paths[(pred_sid, pred_tid, pred_sid, ptag.tag_id)] = \
-                        [m.midasi for m in ptag.mrph_list()] \
-                        + ['CHILD'] \
-                        + known_paths[(pred_sid, pred_tid, pred_sid, tag.tag_id)]
-                else:
-                    paths[(pred_sid, pred_tid, pred_sid, ptag.tag_id)] = \
-                        [m.midasi for m in ptag.mrph_list()] \
-                        + ['CHILD'] \
-                        + [m.midasi for m in tag.mrph_list()]
-                known_paths.update(paths)
-                paths.update(self._extract_dependency_path_from_tag(ptag, pred_sid, pred_tid, known_paths))
-
-        for ctag in tag.children:
-            if (pred_sid, pred_tid, pred_sid, ctag.tag_id) not in known_paths:
-                if (pred_sid, pred_tid, pred_sid, tag.tag_id) in known_paths:
-                    paths[(pred_sid, pred_tid, pred_sid, ctag.tag_id)] = \
-                        [m.midasi for m in ctag.mrph_list()] \
-                        + ['PARENT'] \
-                        + known_paths[(pred_sid, pred_tid, pred_sid, tag.tag_id)]
-                else:
-                    paths[(pred_sid, pred_tid, pred_sid, ctag.tag_id)] = \
-                        [m.midasi for m in ctag.mrph_list()] \
-                        + ['PARENT'] \
-                        + [m.midasi for m in tag.mrph_list()]
-                known_paths.update(paths)
-                paths.update(self._extract_dependency_path_from_tag(ctag, pred_sid, pred_tid, known_paths))
-        return paths
-
-    def _mark_deps(self, tag: Tag, needs_case: bool = False) -> Dict[int, Union[str, Tuple[str, str]]]:
-
-        def check_overtness(tag: Tag):
-            case = [case for case in KyotoPASSpec.target_cases.keys() if case in tag.features]
-            if len(case) > 0:
-                return (case[0], 'overt') if needs_case else 'overt'
-            else:
-                return ('', 'dep') if needs_case else 'dep'
+        def check_overtness(tag_: Tag):
+            for case in KyotoPASSpec.target_cases:
+                if case in tag_.features:
+                    return 'overt'
+            return 'dep'
 
         dep_ids = {}
         if tag.parent is not None:
-            dep_ids[tag.parent.tag_id] = ('', 'dep') if needs_case else 'dep'
+            dep_ids[tag.parent.tag_id] = 'dep'
             # coordination: 受診 し たい 病院 や 診療 所
             for ctag in tag.parent.children:
-                if ctag.dpndtype in ("P", "I"):
-                    dep_ids[ctag.tag_id] = ('', 'dep') if needs_case else 'dep'
+                if ctag.dpndtype in {"P", "I"}:
+                    dep_ids[ctag.tag_id] = 'dep'
         # assumption: no 複合辞 (e.g. ～について)
         for ctag in tag.children:
             dep_ids[ctag.tag_id] = check_overtness(ctag)
@@ -357,23 +308,17 @@ class KyotoPASGoldExtractor(object):
                     dep_ids[cctag.tag_id] = check_overtness(cctag)
         return dep_ids
 
-    def _get_dmid(self, tag: Tag, anaphor: str):
-        # find the last morpheme
-        # tricky case: 昨日 の ように -> 昨日のよう
-        for mrph in reversed(tag.mrph_list()):
-            start = 0
-            while True:
-                sidx = anaphor.find(mrph.midasi[0], start)
-                if sidx < 0:
-                    break
-                start = sidx + 1
-                if sidx >= 0 and anaphor[sidx:sidx + len(mrph.midasi)] == mrph.midasi:
-                    return mrph.dmid
-        sys.stderr.write(f"no such anaphor found; {anaphor} in {tag.get_surface()}\n")
+    @staticmethod
+    def _get_dmid(tag: Tag, sentence: BList):
+        # find content word mrph
+        for mrph in tag.mrph_list():
+            if "<内容語>" in mrph.fstring:
+                return mrph.dmid
+        sys.stderr.write(f"cannot find content word:\n{tag.spec()}\t({sentence.sid})\n")
         return tag.mrph_list()[0].dmid
 
 
-class KyotoPAS(object):
+class KyotoPAS:
     """https://bitbucket.org/ku_nlp/seqzero/src/master/seqzero/pas.py"""
 
     # tag types
@@ -384,10 +329,19 @@ class KyotoPAS(object):
     T_ARG_HEAD_PART = 4  # skip succeeding function words
     T_ARG_DEP = 5  # dependent of an argument
 
-    def __init__(self, sentence: BList, tid: int, dmid: int):
+    def __init__(self, sentence: BList, tag: Tag):
         self.sentence = sentence
-        self.tid = tid
-        self.dmid = dmid
+        self.tid = tag.tag_id
+
+        # find dmid for the base phrase
+        self.dmid = None
+        for mrph in tag.mrph_list():
+            if "<内容語>" in mrph.fstring:
+                self.dmid = mrph.dmid
+                break
+        if self.dmid is None:
+            sys.stderr.write(f"cannot find content word:\n{tag.spec()}\t({sentence.sid})\n")
+            self.dmid = tag.mrph_list()[0].dmid
 
         self.rel_count = 0
         self.type_dic = collections.defaultdict(list)
