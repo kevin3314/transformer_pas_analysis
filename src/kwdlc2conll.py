@@ -36,26 +36,27 @@ def convert(kwdlc_dir: Path, output_dir: Path):
                     for mrph in tag.mrph_list():
                         items[0] = str(dmid + 1)
                         items[1] = mrph.midasi
-                        if ('<用言:' in tag.fstring) and ('<省略解析なし>' not in tag.fstring):
-                            if '<内容語>' in mrph.fstring:
-                                arguments: List[str] = []
-                                cases = reader.target_cases
-                                if dmid in dmid2pred:
-                                    case2args = document.get_arguments(dmid2pred[dmid], relax=True)
-                                    for case in cases:
-                                        if case not in case2args:
-                                            arguments.append('NULL')
-                                            continue
-                                        arg = case2args[case][0]  # use first argument now
-                                        if arg.dep_type == 'exo':
-                                            arguments.append(arg.midasi)
-                                        elif arg.dep_type == 'overt':
-                                            arguments.append(f'{arg.dmid + 1}%C')
-                                        else:
-                                            arguments.append(str(arg.dmid + 1))
-                                else:
-                                    arguments = ['NULL'] * len(cases)
-                                items[5] = ','.join(f'{case}:{arg}' for case, arg in zip(cases, arguments))
+                        if '<用言:' in tag.fstring \
+                                and '<省略解析なし>' not in tag.fstring \
+                                and '<内容語>' in mrph.fstring:
+                            arguments: List[str] = []
+                            cases = reader.target_cases
+                            if dmid in dmid2pred:
+                                case2args = document.get_arguments(dmid2pred[dmid], relax=True)
+                                for case in cases:
+                                    if case not in case2args:
+                                        arguments.append('NULL')
+                                        continue
+                                    arg = case2args[case][0]  # use first argument now
+                                    if arg.dep_type == 'exo':
+                                        arguments.append(arg.midasi)
+                                    elif arg.dep_type == 'overt':
+                                        arguments.append(f'{arg.dmid + 1}%C')
+                                    else:
+                                        arguments.append(str(arg.dmid + 1))
+                            else:
+                                arguments = ['NULL'] * len(cases)
+                            items[5] = ','.join(f'{case}:{arg}' for case, arg in zip(cases, arguments))
 
                         writer.write('\t'.join(items) + '\n')
                         items = ['_'] * 8
