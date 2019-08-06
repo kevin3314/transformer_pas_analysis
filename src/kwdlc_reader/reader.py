@@ -225,7 +225,7 @@ class Document:
                 return
             target_dtid = self.tag2dtid[target_tag]
             if target_dtid >= source_dtid:
-                logger.warning(f'Coreference with self or latter entity is found in {source_sid}.')
+                logger.warning(f'Coreference with self or latter mention\t{source_tag.midasi}\t{source_sid}.')
                 return
         else:
             target_tag = target_dtid = None

@@ -5,7 +5,13 @@ from pathlib import Path
 from pyknp import Tag
 
 from kwdlc_reader.reader import KWDLCReader
-from kwdlc_reader import ALL_CASES, ALL_COREFS, ALL_EXOPHORS, Pas
+from kwdlc_reader import ALL_CASES, ALL_COREFS, ALL_EXOPHORS
+
+"""
+TODO
+- 複数のarg正解候補
+- ng_arg_ids
+"""
 
 
 def convert(kwdlc_dir: Path, output_dir: Path):
