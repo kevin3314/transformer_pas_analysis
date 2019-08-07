@@ -241,7 +241,7 @@ class Document:
             if rel.sid is not None:
                 if target_dtid in self._mentions:
                     target_entity = self._entities[self._mentions[target_dtid].eid]
-                    logger.info(f'Merge entity {entity.eid} and {target_entity.eid}.')
+                    logger.info(f'Merge entity{entity.eid} and {target_entity.eid}.')
                     entity.merge(target_entity)
                 else:
                     target_mention = Mention(rel.sid, target_tag, target_dtid)
@@ -249,15 +249,16 @@ class Document:
                     entity.add_mention(target_mention)
             # exophor
             else:
-                if entity.exophor is None:
-                    logger.info(f'Mark entity {entity.eid} as {rel.target}.')
-                    entity.exophor = rel.target
-                elif entity.exophor != rel.target:
+                if len(entity.exophors) == 0:
+                    logger.info(f'Mark entity{entity.eid} as {rel.target}.')
+                    entity.exophors.append(rel.target)
+                elif rel.target not in entity.exophors:
                     if rel.mode != '':
-                        entity.additional_exophor[rel.mode].append(rel.target)
+                        entity.exophors.append(rel.target)
+                        entity.mode = rel.mode
                     else:
-                        logger.warning(f'Overwrite entity {entity.eid} {entity.exophor} to {rel.target}.')
-                        entity.exophor = rel.target
+                        logger.warning(f'Overwrite entity{entity.eid} {entity.exophors} to {rel.target}\t{source_sid}.')
+                        entity.exophors = [rel.target]
         else:
             source_mention = Mention(source_sid, source_tag, source_dtid)
             self._mentions[source_dtid] = source_mention
@@ -370,6 +371,9 @@ class Document:
                     entity = self.get_entity(self.dtid2tag[arg.dtid])
                     if entity is None:
                         continue
+                    if entity.is_special:
+                        for exophor in entity.exophors:
+                            pas.add_argument(case, None, None, None, exophor, entity.mode)
                     for mention in entity.mentions:
                         if mention.dtid == arg.dtid:
                             continue

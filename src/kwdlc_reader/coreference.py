@@ -11,6 +11,7 @@ logger.setLevel(logging.WARNING)
 
 class Mention:
     """ 共参照における mention を扱うクラス
+
     Attributes:
         eid (int): 対象のentity id
         tag (Tag): mention の基本句
@@ -30,24 +31,38 @@ class Mention:
 
 class Entity:
     """ 共参照における entity を扱うクラス
-        Args:
-            eid (int): entity id
-            exophor (str?): entity が外界照応の場合はその種類
 
-        Attributes:
-            eid (int): entity id
-            exophor (str?): 外界照応詞
-            mentions (list): この entity への mention 集合
-            taigen (bool): entityが体言かどうか
-            yougen (bool): entityが用言かどうか
-        """
+    Args:
+        eid (int): entity id
+        exophor (str?): entity が外界照応の場合はその種類
+
+    Attributes:
+        eid (int): entity id
+        exophors (list): 外界照応詞
+        mentions (list): この entity への mention 集合
+        taigen (bool): entityが体言かどうか
+        yougen (bool): entityが用言かどうか
+    """
     def __init__(self, eid: int, exophor: Optional[str]):
         self.eid: int = eid
-        self.exophor = exophor
+        self.exophors: List[str] = [exophor] if exophor is not None else []
         self.mentions: List[Mention] = []
-        self.additional_exophor: Dict[str, List[str]] = defaultdict(list)  # TODO: revise name
+        # self.additional_exophor: Dict[str, List[str]] = defaultdict(list)
         self.taigen: bool = True
         self.yougen: bool = True
+        self.mode = ''
+
+    @property
+    def is_special(self) -> bool:
+        return len(self.exophor) > 0
+
+    @property
+    def exophor(self) -> Optional[str]:
+        if len(self.exophors) == 0:
+            return None
+        if len(self.exophors) > 1:
+            logger.warning('There exists other exophors set to this entity. Use first one.')
+        return self.exophors[0]
 
     def add_mention(self, mention: Mention):
         mention.eid = self.eid
@@ -64,13 +79,13 @@ class Entity:
         self.mentions += other.mentions
         other.mentions = []
         if other.exophor is not None:
-            if self.exophor is not None and self.exophor != other.exophor:
-                logger.warning(f'Overwrite entity {self.eid} {self.exophor} to {other.exophor}.')
-                self.exophor = other.exophor
+            if self.exophor is not None and self.exophor != other.exophor:  # TODO: consider exophors
+                logger.warning(f'Another exophor is set to entity{self.eid} ({self.exophors}) while merging.')
+                self.exophors.extend(other.exophors)
             else:
-                logger.info(f'Mark entity {self.eid} as {other.exophor}.')
-                self.exophor = other.exophor
+                logger.info(f'Mark entity{self.eid} as {other.exophors}.')
+                self.exophors = other.exophors
         else:
             if self.exophor is not None:
-                logger.info(f'Mark entity {other.eid} as {self.exophor}.')
-                other.exophor = self.exophor
+                logger.info(f'Mark entity {other.eid} as {self.exophors}.')
+                other.exophors = self.exophors

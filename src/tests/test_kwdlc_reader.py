@@ -95,6 +95,19 @@ def test_pas(fixture_kwdlc_reader: KWDLCReader):
     assert tuple(arguments['ニ'][0]) == (sid3, 6, 'メインフェイズ', 16, 'overt', '')
 
 
+def test_pas_relax(fixture_kwdlc_reader: KWDLCReader):
+    document = fixture_kwdlc_reader.process_document('w201106-0000060050')
+    predicates: List[Tag] = document.get_predicates()
+    arguments = document.get_arguments(predicates[9], relax=True)
+    sid3 = 'w201106-0000060050-3'
+    assert predicates[9].midasi == 'メインフェイズに'
+    assert len([_ for args in arguments.values() for _ in args]) == 4
+    assert tuple(arguments['ノ？'][0]) == (sid3, 5, '自分', 15, 'overt', '')
+    assert tuple(arguments['ノ？'][1]) == (None, None, '不特定:人', None, 'exo', 'AND')
+    assert tuple(arguments['ノ？'][2]) == (None, None, '著者', None, 'exo', 'AND')
+    assert tuple(arguments['ノ？'][3]) == (None, None, '読者', None, 'exo', 'AND')
+
+
 def test_coref(fixture_kwdlc_reader: KWDLCReader):
     document = fixture_kwdlc_reader.process_document('w201106-0000060050')
     entities: List[Entity] = document.get_all_entities()
@@ -105,8 +118,8 @@ def test_coref(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
-    assert entity.exophor == '不特定:人'
-    assert entity.additional_exophor == {'AND': ['著者', '読者']}
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == 'AND'
 
     document = fixture_kwdlc_reader.process_document('w201106-0000060560')
     entities: List[Entity] = document.get_all_entities()
