@@ -1,6 +1,7 @@
 import os
 import json
 import math
+import glob
 import argparse
 from typing import List
 
@@ -28,19 +29,22 @@ class Path:
     }
     bert_large_model = {
         'local': None,
-        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-10_BPE'
+        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-20_BPE'
     }
-    train_file = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.train.conll',
-        'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
+    train_dir = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/conll/out/train',
+        # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
+        'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/train'
     }
-    valid_file = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.dev.conll',
-        'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/dev.conll'
+    valid_dir = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/conll/out/valid',
+        # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/dev.conll'
+        'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/valid'
     }
-    test_file = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/sample.test.conll',
-        'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
+    test_dir = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/conll/out/test',
+        # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
+        'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/test'
     }
 
 
@@ -83,8 +87,7 @@ def main() -> None:
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
-    with open(Path.train_file[args.env]) as f:
-        num_train_examples = f.readlines().count('\n') + 1
+    num_train_examples = len(glob.glob(os.path.join(Path.train_dir[args.env], '*.conll')))
 
     models: List[str] = args.model if type(args.model) == list else [args.model]
     n_gpu: int = args.gpus
@@ -105,7 +108,7 @@ def main() -> None:
         train_dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.train_file[args.env],
+                'path': Path.train_dir[args.env],
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
@@ -117,7 +120,7 @@ def main() -> None:
         valid_dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.valid_file[args.env],
+                'path': Path.valid_dir[args.env],
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
@@ -129,7 +132,7 @@ def main() -> None:
         test_dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.test_file[args.env],
+                'path': Path.test_dir[args.env],
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,

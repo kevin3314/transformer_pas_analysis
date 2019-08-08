@@ -1,4 +1,5 @@
 import os
+import glob
 import logging
 from typing import NamedTuple, List, Tuple, Dict, Optional
 
@@ -78,7 +79,9 @@ class PASDataset(Dataset):
                  coreference: bool,
                  training: bool,
                  bert_model: str) -> None:
-        self.pas_examples = self._read_pas_examples(path, training, cases, coreference)
+        self.pas_examples = []
+        for input_file in glob.glob(os.path.join(path, '*.conll')):
+            self.pas_examples.append(self._read_pas_examples(input_file, training, cases, coreference))
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
         bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
         self.features = self._convert_examples_to_features(self.pas_examples,
@@ -104,29 +107,19 @@ class PASDataset(Dataset):
         return input_ids, input_mask, arguments_ids, ng_arg_mask, deps
 
     @staticmethod
-    def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool) -> List[PasExample]:
+    def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool) -> PasExample:
         """Read a file into a list of PasExample."""
 
-        examples: List[PasExample] = []
+        # 9       関わる  ガ:10,ヲ:NULL,ニ:7%C,ガ２:NULL _ _ _
+        example_id: int = 0
+        words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
+        dtid, dep, dtid_offset = -1, -1, 0
+        comment: Optional[str] = None
         with open(input_file, "r") as reader:
-            # 9       関わる  ガ:10,ヲ:NULL,ニ:7%C,ガ２:NULL _ _ _
-            example_id: int = 0
-            words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
-            dtid, dep, dtid_offset = -1, -1, 0
-            comment: Optional[str] = None
             for line in reader:
                 line = line.strip()
                 if line.startswith("#"):
                     comment = line
-                    continue
-                if not line:
-                    example = PasExample(example_id, words, lines, arguments_set, ng_arg_ids_set, dtids, ddeps, comment)
-                    examples.append(example)
-
-                    example_id += 1
-                    words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
-                    dtid, dep, dtid_offset = -1, -1, 0
-                    comment = None
                     continue
 
                 items = line.split("\t")
@@ -190,7 +183,7 @@ class PASDataset(Dataset):
                 ng_arg_ids_set.append(ng_arg_ids)  # 1 origin
                 lines.append(line)
 
-        return examples
+        return PasExample(example_id, words, lines, arguments_set, ng_arg_ids_set, dtids, ddeps, comment)
 
     def _convert_examples_to_features(self, examples: List[PasExample], max_seq_length: int, vocab_size: int,
                                       is_training: bool, num_case: int, num_expand_vocab: int,
