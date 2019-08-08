@@ -45,7 +45,7 @@ def convert(kwdlc_dir: Path, output_dir: Path):
                             items[1] = mrph.midasi
                             items[7] = mrph.spec().strip()
                             if '<内容語>' not in mrph.fstring and idx > 0:
-                                non_head_dmids.append(document.mrph2dmid[mrph])
+                                non_head_dmids.append(dmid)
                             if '<用言:' in tag.fstring \
                                     and '<省略解析なし>' not in tag.fstring \
                                     and '<内容語>' in mrph.fstring:
