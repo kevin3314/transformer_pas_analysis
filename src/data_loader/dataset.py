@@ -196,6 +196,8 @@ class PASDataset(Dataset):
         for example_index, example in enumerate(examples):
 
             all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
+            if len(all_tokens) > max_seq_length - num_expand_vocab:
+                continue
 
             tokens: List[str] = []
             segment_ids: List[int] = []
