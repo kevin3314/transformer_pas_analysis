@@ -2,9 +2,9 @@
 
 set -exu
 
-NN_BASED_ANAPHORA_RESOLUTION_DIR=/home/ueda/research/nn_based_anaphora_resolution
+NN_BASED_ANAPHORA_RESOLUTION_DIR=/home/ueda/work/nn_based_anaphora_resolution
 PYTHON2_COMMAND=/home/shibata/chainer-latest-24/bin/python
-EVAL_CORPUS_BASEDIR=/share/tool/nn_based_anaphora_resolution/corpus/kwdlc
+EVAL_CORPUS_BASEDIR=/mnt/hinoki/ueda/kwdlc/old
 echo $#
 OUTPUT_BASE_DIR=$1  # the first argument
 if [[ $2 = "valid" ]]; then
@@ -26,9 +26,9 @@ PYTHONPATH=${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts python ${NN_BASED_ANAPHOR
 
 # evaluate knp file
 if [[ ${TARGET} = "test" ]]; then
-    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR}/knp_add_feature --dev_id_file ${EVAL_CORPUS_BASEDIR}/dev.files --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > ${RESULT_FILE} 2> ${RESULT_LOG_FILE}
+    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR} --dev_id_file ${EVAL_CORPUS_BASEDIR}/valid.files --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > ${RESULT_FILE} 2> ${RESULT_LOG_FILE}
 else
-    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR}/knp_add_feature --dev_id_file ${EVAL_CORPUS_BASEDIR}/dev.files --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > /dev/null 2> ${RESULT_LOG_FILE}
+    ${PYTHON2_COMMAND} ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/scorer.py --knp_dir ${EVAL_CORPUS_BASEDIR} --dev_id_file ${EVAL_CORPUS_BASEDIR}/valid.files --test_id_file ${EVAL_CORPUS_BASEDIR}/test.files --system_dir ${OUT_KNP_DIR} --target ${TARGET} --inter_sentential --relax_evaluation --not_fix_case_analysis --relax_evaluation_multiple_argument --result_json ${RESULT_JSON_FILE} > /dev/null 2> ${RESULT_LOG_FILE}
 fi
 
 # convert result file to html format
