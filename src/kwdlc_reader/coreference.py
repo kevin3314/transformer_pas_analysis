@@ -54,7 +54,7 @@ class Entity:
 
     @property
     def is_special(self) -> bool:
-        return len(self.exophor) > 0
+        return len(self.exophors) > 0
 
     @property
     def exophor(self) -> Optional[str]:
