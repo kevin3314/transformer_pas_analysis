@@ -1,10 +1,14 @@
+import re
 import sys
 from logging import Logger
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, NamedTuple
+from pathlib import Path
 
 # import torch
+from pyknp import Tag
 
-from data_loader.dataset import PasExample, InputFeatures
+from data_loader.dataset import InputFeatures, PASDataset
+from kwdlc_reader import KWDLCReader, Document
 
 #
 # def _parse_result(result_str: str, metric_name: str, cases: List[str]):
@@ -93,83 +97,134 @@ def zero_anaphora_f1_writer_reader(result: dict):
 #     return correct / len(target)
 
 
-def output_pas_analysis(items: List[str],
-                        cases: List[str],
-                        arguments_set: List[List[int]],
-                        features: InputFeatures,
-                        tok_to_special: Dict[int, str],
-                        coreference: bool,
-                        logger: Logger):
-    target_token_index = features.orig_to_tok_index[int(items[0]) - 1]
-    target_arguments = arguments_set[target_token_index]
+class PredictionKNPWriter:
+    rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="([^\s]+?)"(?: sid="(.+?)" id="(.+?)")?/>')
+    tag_pat = re.compile(r'^\+ (-?\d)+\w ?')
 
-    if items[5] != "_":
-        # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
-        orig_arguments = {arg_string.split(":", 1)[0]: arg_string.split(":", 1)[1]
-                          for arg_string in items[5].split(",")}
+    def __init__(self,
+                 dataset: PASDataset,
+                 dataset_config: dict,
+                 logger: Logger,
+                 ) -> None:
+        self.gold_arguments_sets: List[List[List[Optional[str]]]] = \
+            [example.arguments_set for example in dataset.pas_examples]
+        self.all_features: List[InputFeatures] = dataset.features
+        self.reader: KWDLCReader = dataset.reader
+        self.special_tokens: List[str] = dataset.special_tokens
+        max_seq_length: int = dataset_config['max_seq_length']
+        self.tok_to_special: Dict[int, str] = {i + max_seq_length - len(self.special_tokens): token for i, token
+                                               in enumerate(self.special_tokens)}
+        self.coreference: bool = dataset_config['coreference']
+        input_dir: str = dataset_config['path']
+        self.input_files: List[Path] = sorted(Path(input_dir).glob('*.knp'))
+        self.logger = logger
 
-        argument_strings = []
-        for case, argument_index in zip(cases, target_arguments):
-            if coreference is True and case == "=":
+    def write(self,
+              arguments_sets: List[List[List[int]]],
+              output_dir: Optional[Path]
+              ) -> None:
+        """Write final predictions to the file."""
+
+        if output_dir is not None:
+            self.logger.info(f'Writing predictions to: {output_dir}')
+            output_dir.mkdir(exist_ok=True)
+
+        for input_file, features, arguments_set, gold_arguments_set in \
+                zip(self.input_files, self.all_features, arguments_sets, self.gold_arguments_sets):
+            document = self.reader.process_document(input_file.stem)
+            if document is None:
+                self.logger.warning(f'document: {document.doc_id} is skipped.')
                 continue
+            output_basename = document.doc_id + '.knp'
+            with output_dir.joinpath(output_basename).open('w') if output_dir is not None else sys.stdout as writer:
+                output_knp_lines = self._output_document(input_file,
+                                                         features,
+                                                         arguments_set,
+                                                         gold_arguments_set,
+                                                         document)
+                writer.write('\n'.join(output_knp_lines))
 
-            if "%C" in orig_arguments[case]:
-                argument_string = orig_arguments[case]
-            else:
-                # special
-                if argument_index in tok_to_special:
-                    argument_string = tok_to_special[argument_index]
-                elif features.tok_to_orig_index[argument_index] is None:
-                    # [SEP] or [CLS]
-                    logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
-                    argument_string = "NULL"
+    def _output_document(self,
+                         input_file: Path,
+                         features: InputFeatures,
+                         arguments_set: List[List[int]],
+                         gold_arguments_set: List[List[Optional[str]]],
+                         document: Document,
+                         ) -> List[str]:
+        with input_file.open() as fin:
+            dtid = 0
+            output_knp_lines = []
+            for line in fin:
+                if not line.startswith('+ '):
+                    output_knp_lines.append(line.strip())
+                    continue
+                rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
+                match = self.tag_pat.match(rel_removed)
+                if match is not None:
+                    rel_idx = match.end()
+                    rel_string = self._rel_string(dtid, arguments_set, gold_arguments_set, features, document)
+                    rel_inserted_line = rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:]
+                    output_knp_lines.append(rel_inserted_line)
                 else:
-                    argument_string = features.tok_to_orig_index[argument_index] + 1
+                    self.logger.warning(f'invalid format line: {line.strip()}')
+                    output_knp_lines.append(line.strip())
 
-            argument_strings.append(case + ":" + str(argument_string))
+                dtid += 1
 
-        items[5] = ",".join(argument_strings)
+        return output_knp_lines
 
-    if coreference is True and items[6] == "MASKED":
-        argument_index = target_arguments[-1]
-        # special
-        if argument_index in tok_to_special:
-            argument_string = tok_to_special[argument_index]
-        else:
-            argument_string = features.tok_to_orig_index[argument_index] + 1
-        items[6] = str(argument_string)
+    def _rel_string(self,
+                    dtid: int,
+                    arguments_set: List[List[int]],  # (max_seq_len, cases)
+                    gold_arguments_set: List[List[Optional[str]]],  # (mrph_len, cases)
+                    features: InputFeatures,
+                    document: Document,
+                    ) -> str:
+        rels: List[RelTag] = []
+        dmid2tag = {document.mrph2dmid[mrph]: tag for tag in document.tag_list() for mrph in tag.mrph_list()}
+        tag2sid = {tag: sentence.sid for sentence in document for tag in sentence.tag_list()}
+        tag = document.dtid2tag[dtid]
+        assert len(gold_arguments_set) == len(dmid2tag)
+        cases: List[str] = document.target_cases + (['='] if self.coreference else [])
+        for mrph in tag.mrph_list():
+            dmid = document.mrph2dmid[mrph]
+            token_index = features.orig_to_tok_index[dmid]
+            arguments: List[int] = arguments_set[token_index]
+            gold_arguments: List[Optional[str]] = gold_arguments_set[dmid]  # ['14', '23%C', 'NULL', 'NULL', None]
+            assert len(cases) == len(arguments)
+            assert len(cases) == len(gold_arguments)
+            for case, argument, gold_argument in zip(cases, arguments, gold_arguments):
+                if gold_argument is not None:
+                    if gold_argument.endswith('%C'):
+                        prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データををそのまま出力
+                    else:
+                        # special
+                        if argument in self.tok_to_special:
+                            special_anaphor = self.tok_to_special[argument]
+                            if special_anaphor in document.target_exophors:
+                                rels.append(RelTag(case, special_anaphor, None, None))
+                            continue
+                        elif features.tok_to_orig_index[argument] is None:
+                            # [SEP] or [CLS]
+                            self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
+                            continue
+                        else:
+                            prediction_dmid = features.tok_to_orig_index[argument]
+                    prediction_tag: Tag = dmid2tag[prediction_dmid]
+                    rels.append(RelTag(case, prediction_tag.midasi, tag2sid[prediction_tag], prediction_tag.tag_id))
 
-    return items
+        return ''.join([rel.to_string() for rel in rels])
 
 
-def write_prediction(all_examples: List[PasExample],
-                     all_features: List[InputFeatures],
-                     arguments_sets: List[List[List[int]]],
-                     output_prediction_file: Optional[str],
-                     dataset_config: dict,
-                     logger: Logger):
-    """Write final predictions to the file."""
-    special_tokens: List[str] = dataset_config['special_tokens']
-    max_seq_length: int = dataset_config['max_seq_length']
-    tok_to_special: Dict[int, str] = {i + max_seq_length - len(special_tokens): token for i, token
-                                      in enumerate(special_tokens)}
-    cases = dataset_config['cases']
-    coreference = dataset_config['coreference']
+class RelTag(NamedTuple):
+    type_: str
+    target: str
+    sid: Optional[str]
+    tid: Optional[int]
 
-    if output_prediction_file is not None:
-        logger.info(f"Writing predictions to: {output_prediction_file}")
-
-    if coreference is True:
-        cases.append("=")
-
-    with open(output_prediction_file, "w") if output_prediction_file is not None else sys.stdout as writer:
-        for example, feature, arguments_set in zip(all_examples, all_features, arguments_sets):
-            if example.comment is not None:
-                writer.write("{}\n".format(example.comment))
-
-            for line in example.lines:
-                items = line.split("\t")
-                items = output_pas_analysis(items, cases, arguments_set, feature, tok_to_special, coreference, logger)
-                writer.write("\t".join(items) + "\n")
-
-            writer.write("\n")
+    def to_string(self):
+        string = f'<rel type="{self.type_}" target="{self.target}"'
+        if self.sid is not None:
+            string += f' sid="{self.sid}" id="{self.tid}"'
+        string += '/>'
+        return string

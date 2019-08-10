@@ -63,7 +63,7 @@ class KWDLCReader:
         self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
         self.extract_nes: bool = extract_nes
 
-        self.file_paths: List[Path] = list(corpus_dir.glob(glob_pat))
+        self.file_paths: List[Path] = sorted(corpus_dir.glob(glob_pat))
         self.did2path: Dict[str, Path] = {path.stem: path for path in self.file_paths}
 
     @staticmethod

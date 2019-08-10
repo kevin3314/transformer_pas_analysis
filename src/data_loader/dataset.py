@@ -1,12 +1,15 @@
 import os
-import glob
 import logging
-from typing import NamedTuple, List, Tuple, Dict, Optional
+from typing import List, Dict, Optional
+from pathlib import Path
 
 import numpy as np
 from torch.utils.data import Dataset
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertConfig
+from pyknp import Tag
+
+from kwdlc_reader import KWDLCReader, Document
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -19,18 +22,14 @@ class PasExample:
     """A single training/test example for pas analysis."""
 
     def __init__(self,
-                 example_id: int,
                  words: List[str],
-                 lines: List[str],
                  arguments_set: List[List[Optional[str]]],
                  ng_arg_ids_set: List[List[int]],
                  dtids: List[int],
                  ddeps: List[int],
                  comment: Optional[str]
                  ) -> None:
-        self.example_id = example_id
         self.words = words
-        self.lines = lines
         self.arguments_set = arguments_set
         self.ng_arg_ids_set = ng_arg_ids_set
         self.dtids = dtids
@@ -41,8 +40,7 @@ class PasExample:
         return self.__repr__()
 
     def __repr__(self):
-        return f'id: {self.example_id}, word: {" ".join(self.words)}, ' \
-            f'arguments: {" ".join(args.__repr__() for args in self.arguments_set)}'
+        return f'word: {" ".join(self.words)}, arguments: {" ".join(args.__repr__() for args in self.arguments_set)}'
 
 
 class InputFeatures:
@@ -75,22 +73,25 @@ class PASDataset(Dataset):
                  path: str,
                  max_seq_length: int,
                  cases: List[str],
-                 special_tokens: List[str],
+                 exophors: List[str],
                  coreference: bool,
                  training: bool,
                  bert_model: str) -> None:
         self.pas_examples = []
-        for input_file in glob.glob(os.path.join(path, '*.conll')):
-            self.pas_examples.append(self._read_pas_examples(input_file, training, cases, coreference))
+        self.reader = KWDLCReader(Path(path),
+                                  target_cases=cases,
+                                  target_corefs=['=', '=構', '=≒'] if coreference else [],
+                                  target_exophors=exophors)
+        self.special_tokens = self.reader.target_exophors + ['NULL'] + (['NA'] if coreference else [])
+        for document in self.reader.process_all_documents():
+            self.pas_examples.append(self._read_pas_examples(document, training, coreference))
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
         bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
         self.features = self._convert_examples_to_features(self.pas_examples,
                                                            max_seq_length=max_seq_length,
                                                            vocab_size=bert_config.vocab_size,
                                                            is_training=training,
-                                                           num_case=len(cases),
-                                                           num_expand_vocab=len(special_tokens),
-                                                           special_tokens=special_tokens,
+                                                           num_case=len(self.reader.target_cases),
                                                            coreference=coreference)
         self.training = training
 
@@ -107,89 +108,149 @@ class PASDataset(Dataset):
         return input_ids, input_mask, arguments_ids, ng_arg_mask, deps
 
     @staticmethod
-    def _read_pas_examples(input_file: str, is_training: bool, cases: List[str], coreference: bool) -> PasExample:
+    def _read_pas_examples(document: Document,
+                           is_training: bool,
+                           coreference: bool
+                           ) -> PasExample:
         """Read a file into a list of PasExample."""
 
-        # 9       関わる  ガ:10,ヲ:NULL,ニ:7%C,ガ２:NULL _ _ _
-        example_id: int = 0
-        words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
-        dtid, dep, dtid_offset = -1, -1, 0
-        comment: Optional[str] = None
-        with open(input_file, "r") as reader:
-            for line in reader:
-                line = line.strip()
-                if line.startswith("#"):
-                    comment = line
-                    continue
-
-                items = line.split("\t")
-                word = items[1]
-                dep_string = items[2]
-                argument_string = items[5]
-                coreference_string = items[6] if coreference else None
-                ng_arg_string = items[8]
-
-                if dep_string != "_":
-                    assert dep_string[-1] in ['D', 'P', 'I', 'A']
-                    dtid += 1
-                    dep = int(dep_string[:-1])
-                dtids.append(dtid)
-                ddeps.append(dep + dtid_offset if dep != -1 else -1)
-                if word == '。':
-                    dtid_offset = dtid + 1
-
-                if argument_string == "_":
-                    arguments = [None] * len(cases)
-                    ng_arg_ids = []
-                else:
-                    arguments: List[Optional[str]] = []
-                    for i, argument in enumerate(argument_string.split(",")):
-                        case, arg = argument.split(":", maxsplit=1)
-                        assert cases[i] == case
-                        arguments.append(arg)
-                    if ng_arg_string != "_":
-                        ng_arg_ids = [int(ng_arg_id) for ng_arg_id in ng_arg_string.split("/")]
+        cases = document.target_cases
+        comment = f'# A-ID:{document.doc_id}'
+        words = []
+        dtids = []
+        ddeps = []
+        arguments_set = []
+        ng_arg_ids_set = []
+        dmid = 0
+        non_head_dmids = []
+        for sentence in document:
+            dmid2pred: Dict[int, Tag] = {pas.dmid: pas.predicate for pas in document.pas_list()}
+            for tag in sentence.tag_list():
+                for idx, mrph in enumerate(tag.mrph_list()):
+                    words.append(mrph.midasi)
+                    dtids.append(document.tag2dtid[tag])
+                    ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
+                    if '<内容語>' not in mrph.fstring and idx > 0:
+                        non_head_dmids.append(dmid)
+                    if '<用言:' in tag.fstring \
+                            and '<省略解析なし>' not in tag.fstring \
+                            and '<内容語>' in mrph.fstring:
+                        arguments: List[Optional[str]] = []
+                        if dmid in dmid2pred:
+                            case2args = document.get_arguments(dmid2pred[dmid], relax=True)
+                            for case in cases:
+                                if case not in case2args:
+                                    arguments.append('NULL')
+                                    continue
+                                arg = case2args[case][0]  # use first argument now
+                                if arg.dep_type == 'exo':
+                                    arguments.append(arg.midasi)
+                                elif arg.dep_type == 'overt':
+                                    arguments.append(f'{arg.dmid + 1}%C')
+                                else:
+                                    arguments.append(str(arg.dmid + 1))
+                        else:
+                            arguments = ['NULL'] * len(cases)
+                        ng_arg_ids = non_head_dmids + list(range(dmid, len(document.mrph2dmid)))
                     else:
+                        arguments = [None] * len(cases)
                         ng_arg_ids = []
 
-                if coreference_string is not None:
-                    if coreference_string == "_":
-                        arguments.append(None)
-                    elif coreference_string == "NA":
-                        arguments.append("NA")
-                    else:
-                        arguments.append(coreference_string)
+                    # TODO: coreference
+                    if coreference:
+                        pass
 
-                # mask PAS and coreference labels
-                if is_training is False:
-                    if argument_string != "_":
-                        # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
-                        arguments = []
-                        for i, argument in enumerate(argument_string.split(",")):
-                            case, arg = argument.split(":", maxsplit=1)
-                            # don't mask overt case
-                            if "%C" not in arg:
-                                arg = "MASKED"
-                            arguments.append(f"{case}:{arg}")
-                        items[5] = ",".join(arguments)
+                    arguments_set.append(arguments)
+                    ng_arg_ids_set.append(ng_arg_ids)
+                    dmid += 1
 
-                    if coreference_string is not None:
-                        if coreference_string != "_":
-                            items[6] = "MASKED"
-                    line = "\t".join(items)
+        return PasExample(words, arguments_set, ng_arg_ids_set, dtids, ddeps, comment)
 
-                words.append(word)
-                arguments_set.append(arguments)
-                ng_arg_ids_set.append(ng_arg_ids)  # 1 origin
-                lines.append(line)
+        # # 9       関わる  ガ:10,ヲ:NULL,ニ:7%C,ガ２:NULL _ _ _
+        # example_id: int = 0
+        # words, arguments_set, ng_arg_ids_set, lines, dtids, ddeps = [], [], [], [], [], []
+        # dtid, dep, dtid_offset = -1, -1, 0
+        # comment: Optional[str] = None
+        # with open(input_file, "r") as reader:
+        #     for line in reader:
+        #         line = line.strip()
+        #         if line.startswith("#"):
+        #             comment = line
+        #             continue
+        #
+        #         items = line.split("\t")
+        #         word = items[1]
+        #         dep_string = items[2]
+        #         argument_string = items[5]
+        #         coreference_string = items[6] if coreference else None
+        #         ng_arg_string = items[8]
+        #
+        #         if dep_string != "_":
+        #             assert dep_string[-1] in ['D', 'P', 'I', 'A']
+        #             dtid += 1
+        #             dep = int(dep_string[:-1])
+        #         dtids.append(dtid)
+        #         ddeps.append(dep + dtid_offset if dep != -1 else -1)
+        #         if word == '。':
+        #             dtid_offset = dtid + 1
+        #
+        #         if argument_string == "_":
+        #             arguments = [None] * len(cases)
+        #             ng_arg_ids = []
+        #         else:
+        #             arguments: List[Optional[str]] = []
+        #             for i, argument in enumerate(argument_string.split(",")):
+        #                 case, arg = argument.split(":", maxsplit=1)
+        #                 assert cases[i] == case
+        #                 arguments.append(arg)
+        #             if ng_arg_string != "_":
+        #                 ng_arg_ids = [int(ng_arg_id) for ng_arg_id in ng_arg_string.split("/")]
+        #             else:
+        #                 ng_arg_ids = []
+        #
+        #         if coreference_string is not None:
+        #             if coreference_string == "_":
+        #                 arguments.append(None)
+        #             elif coreference_string == "NA":
+        #                 arguments.append("NA")
+        #             else:
+        #                 arguments.append(coreference_string)
+        #
+        # # mask PAS and coreference labels
+        # if is_training is False:
+        #     if argument_string != "_":
+        #         # ガ:55%C,ヲ:57,ニ:NULL,ガ２:NULL
+        #         arguments = []
+        #         for i, argument in enumerate(argument_string.split(",")):
+        #             case, arg = argument.split(":", maxsplit=1)
+        #             # don't mask overt case
+        #             if "%C" not in arg:
+        #                 arg = "MASKED"
+        #             arguments.append(f"{case}:{arg}")
+        #         items[5] = ",".join(arguments)
+        #
+        #     if coreference_string is not None:
+        #         if coreference_string != "_":
+        #             items[6] = "MASKED"
+        #     line = "\t".join(items)
+        #
+        # words.append(word)
+        # arguments_set.append(arguments)
+        # ng_arg_ids_set.append(ng_arg_ids)  # 1 origin
+        # lines.append(line)
 
-        return PasExample(example_id, words, lines, arguments_set, ng_arg_ids_set, dtids, ddeps, comment)
+        # return PasExample(words, arguments_set, ng_arg_ids_set, dtids, ddeps, comment)
 
-    def _convert_examples_to_features(self, examples: List[PasExample], max_seq_length: int, vocab_size: int,
-                                      is_training: bool, num_case: int, num_expand_vocab: int,
-                                      special_tokens: List[str], coreference: bool):
+    def _convert_examples_to_features(self,
+                                      examples: List[PasExample],
+                                      max_seq_length: int,
+                                      vocab_size: int,
+                                      is_training: bool,
+                                      num_case: int,
+                                      coreference: bool):
         """Loads a data file into a list of `InputBatch`s."""
 
+        num_expand_vocab = len(self.special_tokens)
         features = []
         num_case_w_coreference = num_case + 1 if coreference else num_case
 
@@ -235,7 +296,7 @@ class PASDataset(Dataset):
                                 argument_index = orig_to_tok_index[int(argument) - 1]
                         else:
                             # special token
-                            argument_index = max_seq_length - num_expand_vocab + special_tokens.index(argument)
+                            argument_index = max_seq_length - num_expand_vocab + self.special_tokens.index(argument)
                         arguments.append(argument_index)
 
                     arguments_set.append(arguments)

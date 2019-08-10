@@ -32,17 +32,17 @@ class Path:
         'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-20_BPE'
     }
     train_dir = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/conll/out/train',
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
         # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
         'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/train'
     }
     valid_dir = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/conll/out/valid',
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
         # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/dev.conll'
         'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/valid'
     }
     test_dir = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/conll/out/test',
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test',
         # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
         'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/test'
     }
@@ -64,7 +64,7 @@ def main() -> None:
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
     parser.add_argument('--coreference', action='store_true', default=False,
                         help='Perform coreference resolution.')
-    parser.add_argument('--special-tokens', type=str, default='著者,読者,不特定:人,NULL,NA',
+    parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='Case strings. Separate by ","')
@@ -87,7 +87,7 @@ def main() -> None:
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
-    num_train_examples = len(glob.glob(os.path.join(Path.train_dir[args.env], '*.conll')))
+    num_train_examples = len(glob.glob(os.path.join(Path.train_dir[args.env], '*.knp')))
 
     models: List[str] = args.model if type(args.model) == list else [args.model]
     n_gpu: int = args.gpus
@@ -112,7 +112,7 @@ def main() -> None:
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
-                'special_tokens': args.special_tokens.split(','),
+                'exophors': args.exophors.split(','),
                 'training': True,
                 'bert_model': bert_model[args.env],
             },
@@ -124,7 +124,7 @@ def main() -> None:
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
-                'special_tokens': args.special_tokens.split(','),
+                'exophors': args.exophors.split(','),
                 'training': False,
                 'bert_model': bert_model[args.env],
             },
@@ -136,7 +136,7 @@ def main() -> None:
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
-                'special_tokens': args.special_tokens.split(','),
+                'exophors': args.exophors.split(','),
                 'training': False,
                 'bert_model': bert_model[args.env],
             },

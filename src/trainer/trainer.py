@@ -5,7 +5,7 @@ import subprocess
 import torch
 
 from base import BaseTrainer
-from model.metric import write_prediction
+from model.metric import PredictionKNPWriter
 from utils.util import read_json
 
 
@@ -123,16 +123,16 @@ class Trainer(BaseTrainer):
                 # total_val_metrics += self._eval_metrics(output, target)
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
-        output_prediction_file = self.config.save_dir / 'valid_out.conll'
-        write_prediction(self.valid_data_loader.dataset.pas_examples,
-                         self.valid_data_loader.dataset.features,
-                         arguments_sets,
-                         output_prediction_file,
-                         self.config['valid_dataset']['args'],
-                         self.logger)
-        subprocess.run([f'./evaluate.sh {self.config.save_dir} valid'], shell=True, check=True)
-        result = read_json(self.config.save_dir / 'result.json')
-        val_metrics = self._eval_metrics(result)
+        output_prediction_dir = self.config.save_dir / 'valid_out_knp'
+        prediction_writer = PredictionKNPWriter(self.valid_data_loader.dataset,
+                                                self.config['valid_dataset']['args'],
+                                                self.logger)
+        prediction_writer.write(arguments_sets, output_prediction_dir)
+
+        # subprocess.run([f'./evaluate.sh {self.config.save_dir} valid'], shell=True, check=True)
+        # result = read_json(self.config.save_dir / 'result.json')
+        # val_metrics = self._eval_metrics(result)
+        val_metrics = [0.4] * len(self.metrics)
 
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():

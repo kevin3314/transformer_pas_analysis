@@ -1,7 +1,7 @@
-import os
 import argparse
 from typing import List, Callable
 import subprocess
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -13,7 +13,7 @@ import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
-from model.metric import write_prediction
+from model.metric import PredictionKNPWriter
 from utils.util import read_json
 
 
@@ -91,13 +91,11 @@ def main(config):
             # for i, metric in enumerate(metric_fns):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
-    output_prediction_file: str = os.path.join(config.save_dir, 'test_out.conll')
-    write_prediction(dataset.pas_examples,
-                     dataset.features,
-                     arguments_sets,
-                     output_prediction_file,
-                     config['test_dataset']['args'],
-                     logger)
+    output_prediction_dir = config.save_dir / 'test_out_knp'
+    prediction_writer = PredictionKNPWriter(data_loader.dataset,
+                                            config['test_dataset']['args'],
+                                            logger)
+    prediction_writer.write(arguments_sets, output_prediction_dir)
     subprocess.run([f'./evaluate.sh {config.save_dir} test'], shell=True, check=True)
     result = read_json(config.save_dir / 'result.json')
     metrics = eval_metrics(metric_fns, result)
