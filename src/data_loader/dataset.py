@@ -161,7 +161,7 @@ class PASDataset(Dataset):
                         ng_arg_ids = non_head_dmids + list(range(sentence_tail_dmid + 1, len(document.mrph2dmid)))
                         ng_arg_ids = [x + 1 for x in ng_arg_ids]  # 1 origin
                     else:
-                        arguments = OrderedDict({case: None} for case in cases)
+                        arguments = OrderedDict((case, None) for case in cases)
                         ng_arg_ids = []
 
                     # TODO: coreference
