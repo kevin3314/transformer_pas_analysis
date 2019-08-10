@@ -159,6 +159,7 @@ class PredictionKNPWriter:
                     output_knp_lines.append(line.strip())
                     continue
                 rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
+                assert '<rel ' not in rel_removed
                 match = self.tag_pat.match(rel_removed)
                 if match is not None:
                     rel_idx = match.end()
@@ -167,7 +168,7 @@ class PredictionKNPWriter:
                     output_knp_lines.append(rel_inserted_line)
                 else:
                     self.logger.warning(f'invalid format line: {line.strip()}')
-                    output_knp_lines.append(line.strip())
+                    output_knp_lines.append(rel_removed)
 
                 dtid += 1
 

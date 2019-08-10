@@ -13,7 +13,7 @@ from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_CORE
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING)
+logger.setLevel(logging.WARNING)
 
 """
 # TODO
