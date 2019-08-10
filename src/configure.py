@@ -34,17 +34,17 @@ class Path:
     train_dir = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
         # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
-        'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/train'
+        'server': '/mnt/hinoki/ueda/kwdlc/old/train'
     }
     valid_dir = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
         # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/dev.conll'
-        'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/valid'
+        'server': '/mnt/hinoki/ueda/kwdlc/old/valid'
     }
     test_dir = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test',
         # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
-        'server': '/mnt/hinoki/ueda/bert/pas_analysis/data/test'
+        'server': '/mnt/hinoki/ueda/kwdlc/old/test'
     }
 
 
