@@ -85,13 +85,12 @@ class PASDataset(Dataset):
                                   target_exophors=exophors)
         self.special_tokens = self.reader.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         for document in self.reader.process_all_documents():
-            self.pas_examples.append(self._read_pas_examples(document, training, coreference))
+            self.pas_examples.append(self._read_pas_examples(document, coreference))
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
         bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
         self.features = self._convert_examples_to_features(self.pas_examples,
                                                            max_seq_length=max_seq_length,
                                                            vocab_size=bert_config.vocab_size,
-                                                           is_training=training,
                                                            num_case=len(self.reader.target_cases),
                                                            coreference=coreference)
         self.training = training
@@ -110,7 +109,6 @@ class PASDataset(Dataset):
 
     @staticmethod
     def _read_pas_examples(document: Document,
-                           is_training: bool,
                            coreference: bool
                            ) -> PasExample:
         """Read a file into a list of PasExample."""
@@ -152,13 +150,14 @@ class PASDataset(Dataset):
                                     arguments[case] = arg.midasi
                                 # overt
                                 elif arg.dep_type == 'overt':
-                                    arguments[case] = f'{arg.dmid + 1}%C'
+                                    arguments[case] = str(arg.dmid) + '%C'
                                 # normal
                                 else:
-                                    arguments[case] = str(arg.dmid + 1)
+                                    arguments[case] = str(arg.dmid)
                             else:
                                 arguments[case] = 'NULL'
-                        ng_arg_ids = non_head_dmids + list(range(sentence_tail_dmid + 1, len(document.mrph2dmid)))
+                        ng_arg_ids = non_head_dmids + [dmid] + \
+                            list(range(sentence_tail_dmid + 1, len(document.mrph2dmid)))
                         ng_arg_ids = [x + 1 for x in ng_arg_ids]  # 1 origin
                     else:
                         arguments = OrderedDict((case, None) for case in cases)
@@ -178,7 +177,6 @@ class PASDataset(Dataset):
                                       examples: List[PasExample],
                                       max_seq_length: int,
                                       vocab_size: int,
-                                      is_training: bool,
                                       num_case: int,
                                       coreference: bool):
         """Loads a data file into a list of `InputBatch`s."""
@@ -213,28 +211,25 @@ class PASDataset(Dataset):
                     deps.append([0] * max_seq_length)
                     continue
 
-                if is_training is False:
-                    arguments_set.append([-1] * num_case_w_coreference)
-                else:
-                    arguments: List[int] = []
-                    for case, argument in example.arguments_set[orig_index].items():
-                        if argument is None or "%C" in argument:
-                            # none or overt
+                arguments: List[int] = []
+                for case, argument in example.arguments_set[orig_index].items():
+                    if argument is None or '%C' in argument:
+                        # none or overt
+                        argument_index = -1
+                    elif argument.isdigit():
+                        if case != '=' and int(argument) + 1 in example.ng_arg_ids_set[orig_index]:
+                            # ng_arg_id (except for coreference resolution)
+                            logger.debug("ng_arg_id: {} {} {}".format(example.comment, token, argument))
                             argument_index = -1
-                        elif argument.isdigit():
-                            if case != '=' and int(argument) in example.ng_arg_ids_set[orig_index]:
-                                # ng_arg_id (except for coreference resolution)
-                                logger.debug("ng_arg_id: {} {} {}".format(example.comment, token, argument))
-                                argument_index = -1
-                            else:
-                                # normal
-                                argument_index = orig_to_tok_index[int(argument) - 1]
                         else:
-                            # special token
-                            argument_index = max_seq_length - num_expand_vocab + self.special_tokens.index(argument)
-                        arguments.append(argument_index)
+                            # normal
+                            argument_index = orig_to_tok_index[int(argument)]
+                    else:
+                        # special token
+                        argument_index = max_seq_length - num_expand_vocab + self.special_tokens.index(argument)
+                    arguments.append(argument_index)
 
-                    arguments_set.append(arguments)
+                arguments_set.append(arguments)
 
                 ddep = example.ddeps[orig_index]
                 deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
@@ -244,7 +239,8 @@ class PASDataset(Dataset):
                 ng_arg_ids_set.append(
                     [0] +  # [MASK]
                     [orig_to_tok_index[ng_arg_id - 1] for ng_arg_id in example.ng_arg_ids_set[orig_index]] +
-                    [len(all_tokens) - 1]  # [SEP]
+                    [len(all_tokens) - 1] +  # [SEP]
+                    list(range(len(all_tokens), max_seq_length - num_expand_vocab))  # PAD
                 )
 
             input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
@@ -301,7 +297,7 @@ class PASDataset(Dataset):
                     segment_ids=segment_ids,
                     arguments_set=arguments_set,
                     ng_arg_mask=[[0 if x in ng_arg_ids else 1 for x in range(max_seq_length)] for ng_arg_ids in
-                                 ng_arg_ids_set],
+                                 ng_arg_ids_set],  # 0 -> mask, 1 -> keep
                     deps=deps,
                 )
             )
