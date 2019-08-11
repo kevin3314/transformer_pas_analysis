@@ -1,7 +1,10 @@
 import argparse
 import collections
+import random
 
 import pytorch_pretrained_bert.optimization as module_optim
+import torch
+import numpy as np
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -13,6 +16,12 @@ from trainer import Trainer
 
 
 def main(config):
+    torch.manual_seed(42)
+    random.seed(42)
+    np.random.seed(42)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     logger = config.get_logger('train')
 
     # setup data_loader instances
