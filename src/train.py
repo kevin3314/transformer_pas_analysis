@@ -4,7 +4,7 @@ import random
 
 import pytorch_pretrained_bert.optimization as module_optim
 import torch
-import numpy as np
+import numpy
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -18,7 +18,7 @@ from trainer import Trainer
 def main(config):
     torch.manual_seed(42)
     random.seed(42)
-    np.random.seed(42)
+    numpy.random.seed(42)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -65,8 +65,8 @@ if __name__ == '__main__':
                         help='config file path (default: None)')
     parser.add_argument('-r', '--resume', default=None, type=str,
                         help='path to latest checkpoint (default: None)')
-    parser.add_argument('-d', '--device', default=None, type=str,
-                        help='indices of GPUs to enable (default: all)')
+    parser.add_argument('-d', '--device', default='', type=str,
+                        help='indices of GPUs to enable (default: "")')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed for initialization')
 
