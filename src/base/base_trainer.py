@@ -23,9 +23,10 @@ class BaseTrainer:
         self.optimizer = optimizer
 
         cfg_trainer = config['trainer']
-        self.epochs = cfg_trainer['epochs']
-        self.save_period = cfg_trainer['save_period']
-        self.monitor = cfg_trainer.get('monitor', 'off')
+        self.epochs: int = cfg_trainer['epochs']
+        self.save_period: int = cfg_trainer['save_period']
+        self.save_model: bool = cfg_trainer['save_model']
+        self.monitor: str = cfg_trainer.get('monitor', 'off')
 
         # configuration to monitor model performance and save best
         if self.monitor == 'off':
@@ -103,7 +104,7 @@ class BaseTrainer:
                                      "Training stops.".format(self.early_stop))
                     break
 
-            if epoch % self.save_period == 0:
+            if self.save_model and epoch % self.save_period == 0:
                 self._save_checkpoint(epoch, save_best=best)
 
     def _prepare_device(self, n_gpu_use):

@@ -83,6 +83,8 @@ def main() -> None:
                         help='number of gpus to use')
     parser.add_argument('--use-bert-large', action='store_true', default=False,
                         help='whether to use BERT_LARGE model')
+    parser.add_argument('--no-save-model', action='store_true', default=False,
+                        help='whether to save trained model')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
@@ -201,6 +203,7 @@ def main() -> None:
             'epochs': args.epoch,
             'save_dir': 'result/',
             'save_period': 1,
+            'save_model': not args.no_save_model,
             'verbosity': 2,
             'monitor': 'max val_zero_anaphora_f1',
             'early_stop': 10,
