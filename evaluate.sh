@@ -15,14 +15,11 @@ else
     echo "Error: The second argument must be 'valid' or 'test'."
     exit 1;
 fi
-OUT_KNP_DIR=${OUTPUT_BASE_DIR}/${TARGET}_out_knp
+OUT_KNP_DIR=${OUTPUT_BASE_DIR}/$2_out_knp
 RESULT_FILE=${OUTPUT_BASE_DIR}/result.txt
 RESULT_LOG_FILE=${OUTPUT_BASE_DIR}/result.log
 RESULT_HTML_FILE=${OUTPUT_BASE_DIR}/result.html
 RESULT_JSON_FILE=${OUTPUT_BASE_DIR}/result.json
-
-# convert conll file to knp file
-PYTHONPATH=${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts python ${NN_BASED_ANAPHORA_RESOLUTION_DIR}/scripts/corpus/conll2knp.py --output_dir ${OUT_KNP_DIR} < ${OUTPUT_BASE_DIR}/$2_out.conll
 
 # evaluate knp file
 if [[ ${TARGET} = "test" ]]; then
