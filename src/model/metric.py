@@ -106,7 +106,7 @@ class PredictionKNPWriter:
                  dataset_config: dict,
                  logger: Logger,
                  ) -> None:
-        self.gold_arguments_sets: List[List[List[Optional[str]]]] = \
+        self.gold_arguments_sets: List[List[Dict[str, Optional[str]]]] = \
             [example.arguments_set for example in dataset.pas_examples]
         self.all_features: List[InputFeatures] = dataset.features
         self.reader: KWDLCReader = dataset.reader
@@ -148,7 +148,7 @@ class PredictionKNPWriter:
                          input_file: Path,
                          features: InputFeatures,
                          arguments_set: List[List[int]],
-                         gold_arguments_set: List[List[Optional[str]]],
+                         gold_arguments_set: List[Dict[str, Optional[str]]],
                          document: Document,
                          ) -> List[str]:
         with input_file.open() as fin:
@@ -177,7 +177,7 @@ class PredictionKNPWriter:
     def _rel_string(self,
                     dtid: int,
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
-                    gold_arguments_set: List[List[Optional[str]]],  # (mrph_len, cases)
+                    gold_arguments_set: List[Dict[str, Optional[str]]],  # (mrph_len, cases)
                     features: InputFeatures,
                     document: Document,
                     ) -> str:
@@ -191,11 +191,14 @@ class PredictionKNPWriter:
             dmid = document.mrph2dmid[mrph]
             token_index = features.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
-            gold_arguments: List[Optional[str]] = gold_arguments_set[dmid]  # ['14', '23%C', 'NULL', 'NULL', None]
+            # {'ガ': '14', 'ヲ': '23%C', 'ニ': 'NULL', 'ガ２': 'NULL', '=': None}
+            gold_arguments: Dict[str, Optional[str]] = gold_arguments_set[dmid]
             assert len(cases) == len(arguments)
             assert len(cases) == len(gold_arguments)
-            for case, argument, gold_argument in zip(cases, arguments, gold_arguments):
+            for (case, gold_argument), argument in zip(gold_arguments.items(), arguments):
+                # Noneは解析対象としない
                 if gold_argument is not None:
+                    # overt
                     if gold_argument.endswith('%C'):
                         prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データををそのまま出力
                     else:
@@ -205,10 +208,11 @@ class PredictionKNPWriter:
                             if special_anaphor in document.target_exophors:
                                 rels.append(RelTag(case, special_anaphor, None, None))
                             continue
+                        # [SEP] or [CLS]
                         elif features.tok_to_orig_index[argument] is None:
-                            # [SEP] or [CLS]
                             self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
                             continue
+                        # normal
                         else:
                             prediction_dmid = features.tok_to_orig_index[argument]
                     prediction_tag: Tag = dmid2tag[prediction_dmid]
