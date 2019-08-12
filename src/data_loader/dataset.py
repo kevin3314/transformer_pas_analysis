@@ -115,11 +115,7 @@ class PASDataset(Dataset):
 
         cases = document.target_cases
         comment = f'# A-ID:{document.doc_id}'
-        words = []
-        dtids = []
-        ddeps = []
-        arguments_set = []
-        ng_arg_ids_set = []
+        words, dtids, ddeps, arguments_set, ng_arg_ids_set = [], [], [], [], []
         dmid = 0
         non_head_dmids = []
         for sentence in document:
@@ -127,7 +123,11 @@ class PASDataset(Dataset):
                 for idx, mrph in enumerate(tag.mrph_list()):
                     if '<内容語>' not in mrph.fstring and idx > 0:
                         non_head_dmids.append(document.mrph2dmid[mrph])
-            sentence_tail_dmid = document.mrph2dmid[sentence.mrph_list()[-1]]
+            mrph_list = sentence.mrph_list()
+            if mrph_list:
+                sentence_tail_dmid = document.mrph2dmid[mrph_list[-1]]
+            else:
+                sentence_tail_dmid = 99999
             dmid2pred: Dict[int, Tag] = {pas.dmid: pas.predicate for pas in document.pas_list()}
             for tag in sentence.tag_list():
                 for mrph in tag.mrph_list():
@@ -165,7 +165,12 @@ class PASDataset(Dataset):
 
                     # TODO: coreference
                     if coreference:
-                        pass
+                        if '<体言>' in tag.fstring and '<内容語>' in mrph.fstring:
+                            entity = document.get_entity(tag)
+                            if entity is None:
+                                arguments['='] = 'NA'
+                            else:
+                                document.get_all_mentions()
 
                     arguments_set.append(arguments)
                     ng_arg_ids_set.append(ng_arg_ids)
