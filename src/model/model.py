@@ -15,6 +15,7 @@ class BaselineModel(BaseModel):
         super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model)
+        # torch.save(list(self.bert.state_dict().values()), 'values.bin'); exit(1)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
 

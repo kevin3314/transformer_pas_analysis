@@ -98,7 +98,7 @@ def zero_anaphora_f1_writer_reader(result: dict):
 
 
 class PredictionKNPWriter:
-    rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="([^\s]+?)"(?: sid="(.+?)" id="(.+?)")?/>')
+    rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="([^\s]+?)"(?: sid="(.*?)" id="(.+?)")?/>')
     tag_pat = re.compile(r'^\+ (-?\d)+\w ?')
 
     def __init__(self,
