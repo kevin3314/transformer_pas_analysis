@@ -82,7 +82,8 @@ class PASDataset(Dataset):
         self.reader = KWDLCReader(Path(path),
                                   target_cases=cases,
                                   target_corefs=['=', '=構', '=≒'] if coreference else [],
-                                  target_exophors=exophors)
+                                  target_exophors=exophors,
+                                  extract_nes=False)
         self.special_tokens = self.reader.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         for document in self.reader.process_all_documents():
             self.pas_examples.append(self._read_pas_examples(document, coreference))
