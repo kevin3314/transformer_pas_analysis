@@ -1,7 +1,7 @@
 import os
 import json
 import math
-import glob
+import pathlib
 import argparse
 from typing import List
 
@@ -32,19 +32,28 @@ class Path:
         'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-20_BPE'
     }
     train_dir = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
-        # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/train.conll'
+        'local': '/Users/NobuhiroUeda/Data/kwdlc/old/train',
         'server': '/mnt/hinoki/ueda/kwdlc/old/train'
     }
+    train_dir_debug = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
+        'server': '/mnt/hinoki/ueda/kwdlc/old/sample/train'
+    }
     valid_dir = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
-        # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/dev.conll'
+        'local': '/Users/NobuhiroUeda/Data/kwdlc/old/valid',
         'server': '/mnt/hinoki/ueda/kwdlc/old/valid'
     }
+    valid_dir_debug = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
+        'server': '/mnt/hinoki/ueda/kwdlc/old/sample/valid'
+    }
     test_dir = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test',
-        # 'server': '/share/tool/nn_based_anaphora_resolution/corpus/kwdlc/conll/latest/test.conll'
+        'local': '/Users/NobuhiroUeda/Data/kwdlc/old/test',
         'server': '/mnt/hinoki/ueda/kwdlc/old/test'
+    }
+    test_dir_debug = {
+        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test',
+        'server': '/mnt/hinoki/ueda/kwdlc/old/sample/test'
     }
 
 
@@ -85,11 +94,14 @@ def main() -> None:
                         help='whether to use BERT_LARGE model')
     parser.add_argument('--no-save-model', action='store_true', default=False,
                         help='whether to save trained model')
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='use small corpus file')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
-    num_train_examples = len(glob.glob(os.path.join(Path.train_dir[args.env], '*.knp')))
+    train_dir = pathlib.Path(Path.train_dir_debug[args.env] if args.debug else Path.train_dir[args.env])
+    num_train_examples = len(list(train_dir.glob('*.knp')))
 
     models: List[str] = args.model if type(args.model) == list else [args.model]
     n_gpu: int = args.gpus
@@ -110,7 +122,7 @@ def main() -> None:
         train_dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.train_dir[args.env],
+                'path': Path.train_dir_debug[args.env] if args.debug else Path.train_dir[args.env],
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
@@ -122,7 +134,7 @@ def main() -> None:
         valid_dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.valid_dir[args.env],
+                'path': Path.valid_dir_debug[args.env] if args.debug else Path.valid_dir[args.env],
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
@@ -134,7 +146,7 @@ def main() -> None:
         test_dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.test_dir[args.env],
+                'path': Path.test_dir_debug[args.env] if args.debug else Path.test_dir[args.env],
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,

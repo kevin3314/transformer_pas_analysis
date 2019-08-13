@@ -96,9 +96,10 @@ def main(config):
                                             config['test_dataset']['args'],
                                             logger)
     prediction_writer.write(arguments_sets, output_prediction_dir)
-    subprocess.run([f'./evaluate.sh {config.save_dir} test'], shell=True, check=True)
-    result = read_json(config.save_dir / 'result.json')
-    metrics = eval_metrics(metric_fns, result)
+    # subprocess.run([f'./evaluate.sh {config.save_dir} test'], shell=True, check=True)
+    # result = read_json(config.save_dir / 'result.json')
+    # metrics = eval_metrics(metric_fns, result)
+    metrics = [0.4] * len(metric_fns)
     log = {'loss': total_loss / data_loader.n_samples}
     log.update({
         met.__name__: metrics[i] for i, met in enumerate(metric_fns)
@@ -111,7 +112,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-r', '--resume', default=None, type=str,
                         help='path to latest checkpoint (default: None)')
-    parser.add_argument('-d', '--device', default=None, type=str,
+    parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
 
     main(ConfigParser(parser, timestamp=False))

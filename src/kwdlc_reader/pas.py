@@ -24,8 +24,8 @@ class Argument:
     """
 
     def __init__(self,
-                 sid: str,
-                 tid: int,
+                 sid: Optional[str],
+                 tid: Optional[int],
                  midasi: str,
                  dtid: Optional[int],
                  dmid: Optional[int],

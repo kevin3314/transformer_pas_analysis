@@ -131,13 +131,15 @@ class PASDataset(Dataset):
                 sentence_tail_dmid = 99999
             dmid2pred: Dict[int, Tag] = {pas.dmid: pas.predicate for pas in document.pas_list()}
             for tag in sentence.tag_list():
+                pas_head_found = False
                 for mrph in tag.mrph_list():
                     words.append(mrph.midasi)
                     dtids.append(document.tag2dtid[tag])
                     ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
                     if '<用言:' in tag.fstring \
                             and '<省略解析なし>' not in tag.fstring \
-                            and '<内容語>' in mrph.fstring:
+                            and '<内容語>' in mrph.fstring \
+                            and pas_head_found is False:
                         arguments: Dict[str, str] = OrderedDict()
                         for case in cases:
                             if dmid in dmid2pred:
@@ -160,6 +162,7 @@ class PASDataset(Dataset):
                         ng_arg_ids = non_head_dmids + [dmid] + \
                             list(range(sentence_tail_dmid + 1, len(document.mrph2dmid)))
                         ng_arg_ids = [x + 1 for x in ng_arg_ids]  # 1 origin
+                        pas_head_found = True
                     else:
                         arguments = OrderedDict((case, None) for case in cases)
                         ng_arg_ids = []
