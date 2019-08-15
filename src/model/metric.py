@@ -27,55 +27,68 @@ from kwdlc_reader import KWDLCReader, Document
 
 
 def case_analysis_f1_ga(result: dict):
-    return result['ガ']['case_analysis']['F']
+    return result['ガ'].f1
+    # return result['ガ']['case_analysis']['F']
 
 
 def case_analysis_f1_wo(result: dict):
-    return result['ヲ']['case_analysis']['F']
+    return result['ヲ'].f1
+    # return result['ヲ']['case_analysis']['F']
 
 
 def case_analysis_f1_ni(result: dict):
-    return result['ニ']['case_analysis']['F']
+    return result['ニ'].f1
+    # return result['ニ']['case_analysis']['F']
 
 
 def case_analysis_f1_ga2(result: dict):
-    return result['ガ２']['case_analysis']['F']
+    return result['ガ２'].f1
+    # return result['ガ２']['case_analysis']['F']
 
 
 def case_analysis_f1(result: dict):
-    return result['all_case']['case_analysis']['F']
+    return result['all_case'].f1
+    # return result['all_case']['case_analysis']['F']
 
 
 def zero_anaphora_f1_ga(result: dict):
-    return result['ガ']['anaphora_all']['F']
+    return result['ガ'].f1
+    # return result['ガ']['anaphora_all']['F']
 
 
 def zero_anaphora_f1_wo(result: dict):
-    return result['ヲ']['anaphora_all']['F']
+    return result['ヲ'].f1
+    # return result['ヲ']['anaphora_all']['F']
 
 
 def zero_anaphora_f1_ni(result: dict):
-    return result['ニ']['anaphora_all']['F']
+    return result['ニ'].f1
+    # return result['ニ']['anaphora_all']['F']
 
 
 def zero_anaphora_f1_ga2(result: dict):
-    return result['ガ２']['anaphora_all']['F']
+    return result['ガ２'].f1
+    # return result['ガ２']['anaphora_all']['F']
 
 
 def zero_anaphora_f1(result: dict):
-    return result['all_case']['anaphora_all']['F']
+    return result['all_case'].f1
+    # return result['all_case']['anaphora_all']['F']
 
 
 def zero_anaphora_f1_inter(result: dict):
-    return result['all_case']['anaphora_inter_sentential']['F']
+    return result['all_case'].f1
+    # return result['all_case']['anaphora_inter_sentential']['F']
 
 
 def zero_anaphora_f1_intra(result: dict):
-    return result['all_case']['anaphora_intra_sentential']['F']
+    return result['all_case'].f1
+    # return result['all_case']['anaphora_intra_sentential']['F']
 
 
 def zero_anaphora_f1_writer_reader(result: dict):
-    return result['all_case']['anaphora_writer_reader']['F']
+    return result['all_case'].f1
+    # return result['all_case']['anaphora_writer_reader']['F']
 
 
 # def my_metric(output, target):
@@ -142,7 +155,7 @@ class PredictionKNPWriter:
                                                          arguments_set,
                                                          gold_arguments_set,
                                                          document)
-                writer.write('\n'.join(output_knp_lines))
+                writer.write('\n'.join(output_knp_lines) + '\n')
 
     def _output_document(self,
                          input_file: Path,
@@ -216,9 +229,12 @@ class PredictionKNPWriter:
                         else:
                             prediction_dmid = features.tok_to_orig_index[argument]
                     prediction_tag: Tag = dmid2tag[prediction_dmid]
-                    rels.append(RelTag(case, prediction_tag.midasi, tag2sid[prediction_tag], prediction_tag.tag_id))
+                    target = ''.join(mrph.midasi for mrph in prediction_tag.mrph_list() if '<内容語>' in mrph.fstring)
+                    if not target:
+                        target = prediction_tag.midasi
+                    rels.append(RelTag(case, target, tag2sid[prediction_tag], prediction_tag.tag_id))
 
-        return ''.join([rel.to_string() for rel in rels])
+        return ''.join(rel.to_string() for rel in rels)
 
 
 class RelTag(NamedTuple):

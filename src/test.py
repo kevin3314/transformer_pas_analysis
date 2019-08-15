@@ -1,6 +1,5 @@
 import argparse
 from typing import List, Callable
-import subprocess
 from pathlib import Path
 
 import torch
@@ -14,7 +13,7 @@ import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
 from model.metric import PredictionKNPWriter
-from utils.util import read_json
+from scorer import Scorer
 
 
 def eval_metrics(metrics: List[Callable], result: dict):
@@ -91,15 +90,17 @@ def main(config):
             # for i, metric in enumerate(metric_fns):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
-    output_prediction_dir = config.save_dir / 'test_out_knp'
+    prediction_output_dir = config.save_dir / 'test_out_knp'
     prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                             config['test_dataset']['args'],
                                             logger)
-    prediction_writer.write(arguments_sets, output_prediction_dir)
-    # subprocess.run([f'./evaluate.sh {config.save_dir} test'], shell=True, check=True)
-    # result = read_json(config.save_dir / 'result.json')
-    # metrics = eval_metrics(metric_fns, result)
-    metrics = [0.4] * len(metric_fns)
+    prediction_writer.write(arguments_sets, prediction_output_dir)
+
+    scorer = Scorer(prediction_output_dir, data_loader.dataset.reader)
+    scorer.print_result()
+    scorer.write_html(config.save_dir / 'result.html')
+
+    metrics = eval_metrics(metric_fns, scorer.result_dict())
     log = {'loss': total_loss / data_loader.n_samples}
     log.update({
         met.__name__: metrics[i] for i, met in enumerate(metric_fns)
