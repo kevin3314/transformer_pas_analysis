@@ -48,9 +48,11 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             dtid2pred_pred: Dict[int, Tag] = {document_pred.tag2dtid[tag]: tag
-                                              for predicates in self.sid2predicates_pred.values() for tag in predicates}
+                                              for sid in document_pred.sid2sentence.keys()
+                                              for tag in self.sid2predicates_pred[sid]}
             dtid2pred_gold: Dict[int, Tag] = {document_gold.tag2dtid[tag]: tag
-                                              for predicates in self.sid2predicates_gold.values() for tag in predicates}
+                                              for sid in document_gold.sid2sentence.keys()
+                                              for tag in self.sid2predicates_gold[sid]}
 
             # calculate precision
             for dtid, predicate_pred in dtid2pred_pred.items():
@@ -153,7 +155,8 @@ class Scorer:
         td {font-size: 11pt;}
         td {border: 1px solid #606060;}
         td {vertical-align: top;}
-        pre {font-family: "ＭＳ ゴシック","Osaka-Mono","Osaka-等幅","さざなみゴシック","Sazanami Gothic",DotumChe,GulimChe,BatangChe,MingLiU, NSimSun, Terminal; white-space:pre;}
+        pre {font-family: "ＭＳ ゴシック","Osaka-Mono","Osaka-等幅","さざなみゴシック","Sazanami Gothic",DotumChe,GulimChe,
+        BatangChe,MingLiU, NSimSun, Terminal; white-space:pre;}
         -->
 
         </style>
