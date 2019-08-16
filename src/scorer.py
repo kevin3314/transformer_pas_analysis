@@ -4,6 +4,7 @@ import argparse
 import textwrap
 from pathlib import Path
 from typing import List, Dict, Optional
+from collections import defaultdict
 from functools import reduce
 import operator
 
@@ -30,22 +31,33 @@ class Scorer:
         self.doc_ids: List[str] = list(reader_gold.did2path.keys())
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in reader_pred.process_all_documents()}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in reader_gold.process_all_documents()}
+        self.sid2predicates_pred: Dict[str, List[Tag]] = defaultdict(list)
+        self.sid2predicates_gold: Dict[str, List[Tag]] = defaultdict(list)
+        for pas in [pas for doc in self.did2document_pred.values() for pas in doc.pas_list()]:
+            self.sid2predicates_pred[pas.sid].append(pas.predicate)
+        for pas in [pas for doc in self.did2document_gold.values() for pas in doc.pas_list()]:
+            tag = pas.predicate
+            if '<用言:' in tag.fstring \
+                    and '<省略解析なし>' not in tag.fstring \
+                    and any('<内容語>' in mrph.fstring for mrph in tag.mrph_list()):
+                self.sid2predicates_gold[pas.sid].append(tag)
+
         self.measures: Dict[str, Measure] = {case: Measure() for case in self.cases}
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
-            predicates_pred = document_pred.get_predicates()
-            predicates_gold = document_gold.get_predicates()
-            dtid2pred_pred = {document_pred.tag2dtid[tag]: tag for tag in predicates_pred}
-            dtid2pred_gold = {document_gold.tag2dtid[tag]: tag for tag in predicates_gold}
+            dtid2pred_pred: Dict[int, Tag] = {document_pred.tag2dtid[tag]: tag
+                                              for predicates in self.sid2predicates_pred.values() for tag in predicates}
+            dtid2pred_gold: Dict[int, Tag] = {document_gold.tag2dtid[tag]: tag
+                                              for predicates in self.sid2predicates_gold.values() for tag in predicates}
 
             # calculate precision
             for dtid, predicate_pred in dtid2pred_pred.items():
                 if dtid in dtid2pred_gold:
                     predicate_gold = dtid2pred_gold[dtid]
-                    arguments_pred = document_pred.get_arguments(predicate_pred)
-                    arguments_gold = document_gold.get_arguments(predicate_gold)
+                    arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
+                    arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
                     for case in self.cases:
                         argument_pred: List[Argument] = arguments_pred[case]
                         argument_gold: List[Argument] = arguments_gold[case]
@@ -53,28 +65,27 @@ class Scorer:
                             continue
                         assert len(argument_pred) == 1
                         arg = argument_pred[0]
-                        # if any(arg in argument_gold for arg in argument_pred):
                         if arg in argument_gold:
-                            self.measures[case].tp += 1
+                            self.measures[case].correct += 1
                         self.measures[case].denom_pred += 1
 
             # calculate recall
             for predicate_gold in dtid2pred_gold.values():
-                arguments_gold = document_gold.get_arguments(predicate_gold)
+                arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
                 for case in self.cases:
                     argument_gold: List[Argument] = arguments_gold[case]
                     if argument_gold:
                         # print(case + ': ' + argument_gold[0].midasi)
                         self.measures[case].denom_gold += 1
 
-    def __getitem__(self, case: Optional[str]) -> Optional['Measure']:
-        if case is not None:
-            if case not in self.cases:
-                logger.warning(f'unknown case: {case}')
-                return None
-            return self.measures[case]
-        else:
-            return reduce(operator.add, self.measures.values(), Measure())
+    # def __getitem__(self, case: Optional[str]) -> Optional['Measure']:
+    #     if case is not None:
+    #         if case not in self.cases:
+    #             logger.warning(f'unknown case: {case}')
+    #             return None
+    #         return self.measures[case]
+    #     else:
+    #         return reduce(operator.add, self.measures.values(), Measure())
 
     def result_dict(self) -> dict:
         result = {}
@@ -117,13 +128,13 @@ class Scorer:
                 writer.write('<tr>')
                 writer.write('<td><pre>\n')
                 for sid in document_gold.sid2sentence.keys():
-                    self._draw_tree(sid, document_gold, fh=writer)
+                    self._draw_tree(sid, self.sid2predicates_gold[sid], document_gold, fh=writer)
                     writer.write('\n')
                 writer.write('</pre>')
 
                 writer.write('<td><pre>\n')
                 for sid in document_pred.sid2sentence.keys():
-                    self._draw_tree(sid, document_pred, fh=writer)
+                    self._draw_tree(sid, self.sid2predicates_pred[sid], document_pred, fh=writer)
                     writer.write('\n')
                 writer.write('</pre>\n</tr>\n')
 
@@ -152,9 +163,13 @@ class Scorer:
         </head>
         ''')
 
-    def _draw_tree(self, sid: str, document: Document, fh=None) -> None:
+    def _draw_tree(self,
+                   sid: str,
+                   predicates: List[Tag],
+                   document: Document,
+                   fh=None
+                   ) -> None:
         sentence: BList = document.sid2sentence[sid]
-        predicates: List[Tag] = document.get_predicates()
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().strip().split('\n')
@@ -173,34 +188,39 @@ class Scorer:
 
 
 class Measure:
-    def __init__(self, denom_pred: int = 0, denom_gold: int = 0, tp: int = 0):
+    def __init__(self,
+                 denom_pred: int = 0,
+                 denom_gold: int = 0,
+                 correct: int = 0):
         self.denom_pred = denom_pred
         self.denom_gold = denom_gold
-        self.tp = tp
+        self.correct = correct
 
     def __add__(self, other: 'Measure'):
-        return Measure(self.denom_pred + other.denom_pred, self.denom_gold + other.denom_gold, self.tp + other.tp)
+        return Measure(self.denom_pred + other.denom_pred,
+                       self.denom_gold + other.denom_gold,
+                       self.correct + other.correct)
 
     @property
     def precision(self) -> float:
         if self.denom_pred == 0:
             logger.warning('zero division at precision')
             return 0
-        return self.tp / self.denom_pred
+        return self.correct / self.denom_pred
 
     @property
     def recall(self) -> float:
         if self.denom_gold == 0:
             logger.warning('zero division at recall')
             return 0
-        return self.tp / self.denom_gold
+        return self.correct / self.denom_gold
 
     @property
     def f1(self) -> float:
         if self.denom_pred + self.denom_gold == 0:
             logger.warning('zero division at f1')
             return 0
-        return 2 * self.tp / (self.denom_pred + self.denom_gold)
+        return 2 * self.correct / (self.denom_pred + self.denom_gold)
 
 
 def main():
