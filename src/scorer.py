@@ -43,6 +43,7 @@ class Scorer:
                 self.sid2predicates_gold[pas.sid].append(tag)
 
         self.measures: Dict[str, Measure] = {case: Measure() for case in self.cases}
+        self.comp_result = {}
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
@@ -67,8 +68,15 @@ class Scorer:
                             continue
                         assert len(argument_pred) == 1
                         arg = argument_pred[0]
+                        # ignore overt case
+                        if arg.dep_type == 'overt':
+                            self.comp_result[(doc_id, dtid, case)] = 'overt'
+                            continue
                         if arg in argument_gold:
+                            self.comp_result[(doc_id, dtid, case)] = 'correct'
                             self.measures[case].correct += 1
+                        else:
+                            self.comp_result[(doc_id, dtid, case)] = 'wrong'
                         self.measures[case].denom_pred += 1
 
             # calculate recall
@@ -175,7 +183,7 @@ class Scorer:
         sentence: BList = document.sid2sentence[sid]
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
-            tree_strings = string.getvalue().strip().split('\n')
+            tree_strings = string.getvalue().rstrip('\n').split('\n')
         tag_list = sentence.tag_list()
         assert len(tree_strings) == len(tag_list)
         for i, (line, tag) in enumerate(zip(tree_strings, tag_list)):
@@ -184,8 +192,16 @@ class Scorer:
                 tree_strings[i] += '  '
                 for case in self.cases:
                     argument = arguments[case]
-                    arg = argument[0].midasi if argument else 'NULL'
-                    tree_strings[i] += f'{case}:{arg} '
+                    if argument:
+                        arg = argument[0].midasi
+                        if self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'overt':
+                            tree_strings[i] += f'<font color="green">{arg}:{case}</font> '
+                        elif self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'correct':
+                            tree_strings[i] += f'<font color="blue">{arg}:{case}</font> '
+                        else:
+                            tree_strings[i] += f'<font color="red">{arg}:{case}</font> '
+                    else:
+                        tree_strings[i] += f'<font color="gray">NULL:{case}</font> '
 
         print('\n'.join(tree_strings), file=fh)
 
