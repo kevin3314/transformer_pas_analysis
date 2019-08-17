@@ -85,6 +85,8 @@ class Scorer:
                 for case in self.cases:
                     argument_gold: List[Argument] = arguments_gold[case]
                     if argument_gold:
+                        if argument_gold[0].dep_type == 'overt':  # dataset.pyとの一貫性を保つため[0]を用いる
+                            continue
                         # print(case + ': ' + argument_gold[0].midasi)
                         self.measures[case].denom_gold += 1
 
