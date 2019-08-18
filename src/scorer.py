@@ -180,7 +180,8 @@ class Scorer:
                    sid: str,
                    predicates: List[Tag],
                    document: Document,
-                   fh=None
+                   fh=None,
+                   html: bool = True
                    ) -> None:
         sentence: BList = document.sid2sentence[sid]
         with io.StringIO() as string:
@@ -197,15 +198,25 @@ class Scorer:
                     if argument:
                         arg = argument[0].midasi
                         if self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'overt':
-                            tree_strings[i] += f'<font color="green">{arg}:{case}</font> '
+                            color = 'green'
                         elif self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'correct':
-                            tree_strings[i] += f'<font color="blue">{arg}:{case}</font> '
+                            color = 'blue'
                         else:
-                            tree_strings[i] += f'<font color="red">{arg}:{case}</font> '
+                            color = 'red'
                     else:
-                        tree_strings[i] += f'<font color="gray">NULL:{case}</font> '
+                        arg = 'NULL'
+                        color = 'gray'
+                    if html:
+                        tree_strings[i] += f'<font color="{color}">{arg}:{case}</font> '
+                    else:
+                        tree_strings[i] += f'{arg}:{case} '
 
         print('\n'.join(tree_strings), file=fh)
+
+    def draw_first_tree(self):
+        sid, predicates = sorted(self.sid2predicates_pred.items())[0]
+        _, document = sorted(self.did2document_pred.items())[0]
+        self._draw_tree(sid, predicates, document, html=False)
 
 
 class Measure:

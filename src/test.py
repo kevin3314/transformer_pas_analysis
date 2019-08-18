@@ -60,7 +60,7 @@ def main(config):
     device, device_ids = prepare_device(config['n_gpu'], logger)
 
     # prepare model for testing
-    logger.info('Loading checkpoint: {} ...'.format(config.resume))
+    logger.info(f'Loading checkpoint: {config.resume} ...')
     state_dict = torch.load(config.resume, map_location=device)['state_dict']
     model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
     model = model.to(device)
