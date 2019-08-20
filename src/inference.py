@@ -14,7 +14,7 @@ from data_loader.dataset import PASDataset
 from test import prepare_device
 
 
-def main(config):
+def main(config, tab: bool):
     logger = config.get_logger('test')
 
     dataset_config: dict = config['test_dataset']['args']
@@ -59,15 +59,17 @@ def main(config):
 
         arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (1, seq, case)
 
-    output_dir = Path('output')
-    output_dir.mkdir(exist_ok=True)
     prediction_writer = PredictionKNPWriter(dataset,
                                             dataset_config,
                                             logger)
-    prediction_writer.write(arguments_set.tolist(), output_dir)
-
-    scorer = Scorer(output_dir, dataset.reader)
-    scorer.draw_first_tree()
+    if tab is True:
+        prediction_writer.write(arguments_set.tolist(), None)
+    else:
+        output_dir = Path('output')
+        output_dir.mkdir(exist_ok=True)
+        prediction_writer.write(arguments_set.tolist(), output_dir)
+        scorer = Scorer(output_dir, dataset.reader)
+        scorer.draw_first_tree()
 
 
 if __name__ == '__main__':
@@ -77,5 +79,6 @@ if __name__ == '__main__':
                         help='path to trained checkpoint (default: None)')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
-
-    main(ConfigParser(parser, timestamp=False))
+    parser.add_argument('-tab', action='store_true', default=False,
+                        help='output details')
+    main(ConfigParser(parser, timestamp=False), parser.parse_args().tab)
