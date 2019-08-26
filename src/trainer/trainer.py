@@ -1,12 +1,11 @@
 import numpy as np
 from typing import List
-import subprocess
 
 import torch
 
 from base import BaseTrainer
 from model.metric import PredictionKNPWriter
-from utils.util import read_json
+from scorer import Scorer
 
 
 class Trainer(BaseTrainer):
@@ -123,16 +122,16 @@ class Trainer(BaseTrainer):
                 # total_val_metrics += self._eval_metrics(output, target)
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
-        output_prediction_dir = self.config.save_dir / 'valid_out_knp'
+        prediction_output_dir = self.config.save_dir / 'valid_out_knp'
         prediction_writer = PredictionKNPWriter(self.valid_data_loader.dataset,
                                                 self.config['valid_dataset']['args'],
                                                 self.logger)
-        prediction_writer.write(arguments_sets, output_prediction_dir)
+        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
-        # subprocess.run([f'./evaluate.sh {self.config.save_dir} valid'], shell=True, check=True)
-        # result = read_json(self.config.save_dir / 'result.json')
-        # val_metrics = self._eval_metrics(result)
-        val_metrics = [0.4] * len(self.metrics)
+        scorer = Scorer(documents_pred, self.valid_data_loader.dataset.reader)
+        scorer.write_html(self.config.save_dir / 'result.html')
+
+        val_metrics = self._eval_metrics(scorer.result_dict())
 
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
