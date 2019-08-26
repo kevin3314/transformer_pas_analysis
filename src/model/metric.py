@@ -1,16 +1,15 @@
 import re
-import sys
 from logging import Logger
-from typing import List, Optional, Dict, NamedTuple
+from typing import List, Optional, Dict, NamedTuple, Union
 from pathlib import Path
+from io import TextIOWrapper
 
-# import torch
 from pyknp import Tag
 
 from data_loader.dataset import InputFeatures, PASDataset
-from kwdlc_reader import KWDLCReader, Document
+from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document
 
-#
+
 # def _parse_result(result_str: str, metric_name: str, cases: List[str]):
 #     result_lines: List[str] = result_str.split('\n')
 #     start_idx: int = result_lines.index(metric_name) + 1
@@ -128,62 +127,84 @@ class PredictionKNPWriter:
         self.tok_to_special: Dict[int, str] = {i + max_seq_length - len(self.special_tokens): token for i, token
                                                in enumerate(self.special_tokens)}
         self.coreference: bool = dataset_config['coreference']
-        input_dir: str = dataset_config['path']
-        self.input_files: List[Path] = sorted(Path(input_dir).glob('*.knp'))
+        self.input_files: List[Path] = list(dataset.reader.did2path.values())
         self.logger = logger
 
     def write(self,
               arguments_sets: List[List[List[int]]],
-              output_dir: Optional[Path]
-              ) -> None:
+              destination: Union[Path, TextIOWrapper, None],
+              ) -> List[Document]:
         """Write final predictions to the file."""
 
-        if output_dir is not None:
-            self.logger.info(f'Writing predictions to: {output_dir}')
-            output_dir.mkdir(exist_ok=True)
+        if isinstance(destination, Path):
+            self.logger.info(f'Writing predictions to: {destination}')
+            destination.mkdir(exist_ok=True)
 
+        documents_pred: List[Document] = []
         for input_file, features, arguments_set, gold_arguments_set in \
                 zip(self.input_files, self.all_features, arguments_sets, self.gold_arguments_sets):
-            document = self.reader.process_document(input_file.stem)
+            if input_file is not None:
+                document = self.reader.process_document(input_file.stem)
+                with input_file.open() as fin:
+                    knp_string = ''.join(fin.readlines())
+            else:
+                assert isinstance(self.reader, KWDLCStringReader)
+                document = self.reader.process_document()
+                knp_string = self.reader.knp_string
             if document is None:
                 self.logger.warning(f'document: {document.doc_id} is skipped.')
                 continue
-            output_basename = document.doc_id + '.knp'
-            with output_dir.joinpath(output_basename).open('w') if output_dir is not None else sys.stdout as writer:
-                output_knp_lines = self._output_document(input_file,
-                                                         features,
-                                                         arguments_set,
-                                                         gold_arguments_set,
-                                                         document)
-                writer.write('\n'.join(output_knp_lines) + '\n')
+            output_knp_lines = self._output_document(knp_string,
+                                                     features,
+                                                     arguments_set,
+                                                     gold_arguments_set,
+                                                     document)
+            output_string = '\n'.join(output_knp_lines) + '\n'
+            if isinstance(destination, Path):
+                output_basename = document.doc_id + '.knp'
+                with destination.joinpath(output_basename).open('w') as writer:
+                    writer.write(output_string)
+            elif isinstance(destination, TextIOWrapper):
+                destination.write(output_string)
+            else:
+                pass
+            documents_pred.append(
+                Document(output_string,
+                         document.doc_id,
+                         document.target_cases,
+                         document.target_corefs,
+                         document.target_exophors,
+                         document.extract_nes)
+            )
+
+        return documents_pred
 
     def _output_document(self,
-                         input_file: Path,
+                         knp_string: str,
                          features: InputFeatures,
                          arguments_set: List[List[int]],
                          gold_arguments_set: List[Dict[str, Optional[str]]],
                          document: Document,
                          ) -> List[str]:
-        with input_file.open() as fin:
-            dtid = 0
-            output_knp_lines = []
-            for line in fin:
-                if not line.startswith('+ '):
-                    output_knp_lines.append(line.strip())
-                    continue
-                rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
-                assert '<rel ' not in rel_removed
-                match = self.tag_pat.match(rel_removed)
-                if match is not None:
-                    rel_idx = match.end()
-                    rel_string = self._rel_string(dtid, arguments_set, gold_arguments_set, features, document)
-                    rel_inserted_line = rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:]
-                    output_knp_lines.append(rel_inserted_line)
-                else:
-                    self.logger.warning(f'invalid format line: {line.strip()}')
-                    output_knp_lines.append(rel_removed)
+        dtid = 0
+        output_knp_lines = []
+        for line in knp_string.strip().split('\n'):
+            if not line.startswith('+ '):
+                output_knp_lines.append(line.strip())
+                continue
+            rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
+            assert '<rel ' not in rel_removed
+            match = self.tag_pat.match(rel_removed)
+            if match is not None:
+                rel_idx = match.end()
+                rel_string = self._rel_string(dtid, arguments_set, gold_arguments_set, features, document)
+                rel_inserted_line = rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:]
+                output_knp_lines.append(rel_inserted_line)
+            else:
+                self.logger.warning(f'invalid format line: {line.strip()}')
+                output_knp_lines.append(rel_removed)
 
-                dtid += 1
+            dtid += 1
 
         return output_knp_lines
 

@@ -94,9 +94,9 @@ def main(config):
     prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                             config['test_dataset']['args'],
                                             logger)
-    prediction_writer.write(arguments_sets, prediction_output_dir)
+    documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
-    scorer = Scorer(prediction_output_dir, data_loader.dataset.reader)
+    scorer = Scorer(documents_pred, data_loader.dataset.reader)
     scorer.print_result()
     scorer.write_html(config.save_dir / 'result.html')
 

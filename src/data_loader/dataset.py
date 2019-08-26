@@ -1,4 +1,3 @@
-import os
 import logging
 from typing import List, Dict, Optional
 from pathlib import Path
@@ -7,10 +6,9 @@ from collections import OrderedDict
 import numpy as np
 from torch.utils.data import Dataset
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.modeling import BertConfig
 from pyknp import Tag
 
-from kwdlc_reader import KWDLCReader, Document
+from kwdlc_reader import KWDLCDirectoryReader, KWDLCStringReader, Document
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -71,27 +69,34 @@ class InputFeatures:
 
 class PASDataset(Dataset):
     def __init__(self,
-                 path: str,
+                 path: Optional[str],
                  max_seq_length: int,
                  cases: List[str],
                  exophors: List[str],
                  coreference: bool,
                  training: bool,
-                 bert_model: str) -> None:
-        self.pas_examples = []
-        self.reader = KWDLCReader(Path(path),
-                                  target_cases=cases,
-                                  target_corefs=['=', '=構', '=≒'] if coreference else [],
-                                  target_exophors=exophors,
-                                  extract_nes=False)
+                 bert_model: str,
+                 knp_string: Optional[str] = None,
+                 ) -> None:
+        if path is not None:
+            self.reader = KWDLCDirectoryReader(Path(path),
+                                               target_cases=cases,
+                                               target_corefs=['=', '=構', '=≒'] if coreference else [],
+                                               target_exophors=exophors,
+                                               extract_nes=False)
+        else:
+            assert knp_string is not None
+            self.reader = KWDLCStringReader(knp_string,
+                                            target_cases=cases,
+                                            target_corefs=['=', '=構', '=≒'] if coreference else [],
+                                            target_exophors=exophors,
+                                            extract_nes=False)
         self.special_tokens = self.reader.target_exophors + ['NULL'] + (['NA'] if coreference else [])
-        for document in self.reader.process_all_documents():
-            self.pas_examples.append(self._read_pas_examples(document, coreference))
+        self.pas_examples = [self._read_pas_examples(doc, coreference) for doc in self.reader.process_all_documents()]
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
-        bert_config = BertConfig.from_json_file(os.path.join(bert_model, 'bert_config.json'))
         self.features = self._convert_examples_to_features(self.pas_examples,
                                                            max_seq_length=max_seq_length,
-                                                           vocab_size=bert_config.vocab_size,
+                                                           vocab_size=len(self.tokenizer.vocab),
                                                            num_case=len(self.reader.target_cases),
                                                            coreference=coreference)
         self.training = training

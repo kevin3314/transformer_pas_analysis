@@ -3,14 +3,14 @@ import logging
 import argparse
 import textwrap
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from collections import defaultdict
 from functools import reduce
 import operator
 
 from pyknp import BList, Tag
 
-from kwdlc_reader import KWDLCReader, Document, Argument
+from kwdlc_reader import KWDLCDirectoryReader, Document, Argument
 
 
 logger = logging.getLogger(__name__)
@@ -18,18 +18,12 @@ logger.setLevel(logging.WARNING)
 
 
 class Scorer:
-    def __init__(self, prediction_output_dir: Path, reader_gold: KWDLCReader):
-        reader_pred = KWDLCReader(
-            prediction_output_dir,
-            target_cases=reader_gold.target_cases,
-            target_corefs=reader_gold.target_corefs,
-            target_exophors=reader_gold.target_exophors,
-            extract_nes=False
-        )
-        assert sorted(reader_pred.did2path.keys()) == sorted(reader_gold.did2path.keys())
+    def __init__(self, documents_pred: List[Document], reader_gold: KWDLCDirectoryReader):
+
+        assert sorted(doc.doc_id for doc in documents_pred) == sorted(reader_gold.did2path.keys())
         self.cases = reader_gold.target_cases
         self.doc_ids: List[str] = list(reader_gold.did2path.keys())
-        self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in reader_pred.process_all_documents()}
+        self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in reader_gold.process_all_documents()}
         self.sid2predicates_pred: Dict[str, List[Tag]] = defaultdict(list)
         self.sid2predicates_gold: Dict[str, List[Tag]] = defaultdict(list)
@@ -89,15 +83,6 @@ class Scorer:
                             continue
                         # print(case + ': ' + argument_gold[0].midasi)
                         self.measures[case].denom_gold += 1
-
-    # def __getitem__(self, case: Optional[str]) -> Optional['Measure']:
-    #     if case is not None:
-    #         if case not in self.cases:
-    #             logger.warning(f'unknown case: {case}')
-    #             return None
-    #         return self.measures[case]
-    #     else:
-    #         return reduce(operator.add, self.measures.values(), Measure())
 
     def result_dict(self) -> dict:
         result = {}
@@ -269,15 +254,23 @@ def main():
                         help='Special tokens. Separate by ",".')
     args = parser.parse_args()
 
-    reader_gold = KWDLCReader(
+    reader_gold = KWDLCDirectoryReader(
         Path(args.gold_dir),
         target_cases=args.case_string.split(','),
         target_corefs=['=', '=構', '=≒'],
         target_exophors=args.exophors.split(','),
         extract_nes=False
     )
+    reader_pred = KWDLCDirectoryReader(
+        Path(args.prediction_dir),
+        target_cases=reader_gold.target_cases,
+        target_corefs=reader_gold.target_corefs,
+        target_exophors=reader_gold.target_exophors,
+        extract_nes=False
+    )
+    documents_pred = list(reader_pred.process_all_documents())
 
-    scorer = Scorer(Path(args.prediction_dir), reader_gold)
+    scorer = Scorer(documents_pred, reader_gold)
     if args.result_html:
         scorer.write_html(Path(args.result_html))
     scorer.print_result()

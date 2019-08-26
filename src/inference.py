@@ -4,33 +4,36 @@ from typing import List
 from pathlib import Path
 
 import torch
+from pyknp import KNP
 
 import model.model as module_arch
 from parse_config import ConfigParser
 from model.metric import PredictionKNPWriter
-from scorer import Scorer
 from kwdlc_reader import Document
 from data_loader.dataset import PASDataset
 from test import prepare_device
 
 
-def main(config, tab: bool):
+def main(config, args):
     logger = config.get_logger('test')
 
+    if args.input is not None:
+        input_string = args.input
+    else:
+        input_string = ''.join(sys.stdin.readlines())
+
+    input_sentences = []
+    for s in input_string.strip().split('。'):
+        input_sentences.append(s.strip() + '。')
+
+    knp_string = ''
+    knp = KNP()
+    for input_sentence in input_sentences:
+        knp_string += knp.parse(input_sentence).all()
+
     dataset_config: dict = config['test_dataset']['args']
-
-    knp_string = ''.join(sys.stdin.readlines())
-    input_dir = Path('input/')
-    input_dir.mkdir(exist_ok=True)
-    with (input_dir / '0.knp').open('w') as f:
-        f.write(knp_string)
-    # document = Document(path.parent,
-    #                     target_cases=dataset_config['cases'],
-    #                     target_corefs=['=', '=構', '=≒'],
-    #                     target_exophors=dataset_config['exophors'],
-    #                     extract_nes=False)
-
-    dataset_config['path'] = str(input_dir)
+    dataset_config['path'] = None
+    dataset_config['knp_string'] = knp_string
     dataset = PASDataset(**dataset_config)
 
     # build model architecture
@@ -62,14 +65,14 @@ def main(config, tab: bool):
     prediction_writer = PredictionKNPWriter(dataset,
                                             dataset_config,
                                             logger)
-    if tab is True:
-        prediction_writer.write(arguments_set.tolist(), None)
+    if args.tab is True:
+        prediction_writer.write(arguments_set.tolist(), sys.stdout)
     else:
         output_dir = Path('output')
         output_dir.mkdir(exist_ok=True)
-        prediction_writer.write(arguments_set.tolist(), output_dir)
-        scorer = Scorer(output_dir, dataset.reader)
-        scorer.draw_first_tree()
+        document_pred: Document = prediction_writer.write(arguments_set.tolist(), output_dir)[0]
+        for sid in document_pred.sid2sentence.keys():
+            document_pred.draw_tree(sid, sys.stdout)
 
 
 if __name__ == '__main__':
@@ -79,6 +82,8 @@ if __name__ == '__main__':
                         help='path to trained checkpoint (default: None)')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
+    parser.add_argument('--input', default=None, type=str,
+                        help='sentences to analysis (if not specified, use stdin)')
     parser.add_argument('-tab', action='store_true', default=False,
                         help='output details')
-    main(ConfigParser(parser, timestamp=False), parser.parse_args().tab)
+    main(ConfigParser(parser, timestamp=False), parser.parse_args())

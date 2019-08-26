@@ -1,3 +1,4 @@
+import io
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Iterator
@@ -19,11 +20,8 @@ logger.setLevel(logging.WARNING)
 # TODO
 
 # MEMO
-- アノテーション基準には著者読者とのcorefは=:著者と書いてあるが、<rel>タグの中身はatype='=≒', target='著者'となっている
 - corefタグは用言に対しても振られる
-- Entityクラスに用言か体言かをもたせる？
 - 用言かつ体言の基本句もある
-- 前文/後文への照応もある(<rel type="=" target="後文"/>)
 - 述語から項への係り受けもdep?
 - BasePhraseクラス作っちゃう？
 - 不特定:１などは他の不特定:１と同一の対象
@@ -32,42 +30,33 @@ logger.setLevel(logging.WARNING)
 
 
 class KWDLCReader:
-    """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
+    """ KWDLC(または Kyoto Corpus)の文書集合を扱う基底クラス
 
     Args:
-        corpus_dir (Path): コーパスの存在するディレクトリ
-        glob_pat (str): コーパスとして扱うファイルのパターン
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
         target_exophors (list): 抽出の対象とする外界照応詞
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-
-    Attributes:
-        target_cases (list): 抽出の対象とする格
-        target_corefs (list): 抽出の対象とする共参照関係(=など)
-        target_exophors (list): 抽出の対象とする外界照応詞
-        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-        file_paths (list): コーパスのファイルリスト
-        did2path (dict): 文書IDとその文書のファイルを紐付ける辞書
     """
     def __init__(self,
-                 corpus_dir: Path,
-                 glob_pat: str = '*.knp',
-                 target_cases: Optional[List[str]] = None,
-                 target_corefs: Optional[List[str]] = None,
-                 target_exophors: Optional[List[str]] = None,
-                 extract_nes: bool = True,
+                 target_cases: Optional[List[str]],
+                 target_corefs: Optional[List[str]],
+                 target_exophors: Optional[List[str]],
+                 extract_nes: bool,
                  ) -> None:
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
         self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
         self.extract_nes: bool = extract_nes
 
-        self.file_paths: List[Path] = sorted(corpus_dir.glob(glob_pat))
-        self.did2path: Dict[str, Path] = {path.stem: path for path in self.file_paths}
+        self.did2path = {}  # should be overwritten in derived class
 
     @staticmethod
-    def _get_target(input_: Optional[list], all_: list, default: list, type_: str) -> list:
+    def _get_target(input_: Optional[list],
+                    all_: list,
+                    default: list,
+                    type_: str
+                    ) -> list:
         if input_ is None:
             return default
         target = []
@@ -85,23 +74,127 @@ class KWDLCReader:
         if doc_id not in self.did2path:
             logger.error(f'Unknown document id: {doc_id}')
             return None
-        path = self.did2path[doc_id]
-        return Document(path, self.target_cases, self.target_corefs, self.target_exophors, self.extract_nes)
+        with self.did2path[doc_id].open() as f:
+            knp_string = f.read()
+        return Document(knp_string,
+                        doc_id,
+                        self.target_cases,
+                        self.target_corefs,
+                        self.target_exophors,
+                        self.extract_nes)
 
     def process_documents(self, doc_ids: List[str]) -> Iterator[Optional['Document']]:
         for doc_id in doc_ids:
             yield self.process_document(doc_id)
 
-    def process_all_documents(self) -> Iterator[Optional['Document']]:
-        for path in self.file_paths:
-            yield Document(path, self.target_cases, self.target_corefs, self.target_exophors, self.extract_nes)
+    def process_all_documents(self) -> Iterator['Document']:
+        for doc_id, path in self.did2path.items():
+            with path.open() as f:
+                knp_string = f.read()
+            yield Document(knp_string,
+                           doc_id,
+                           self.target_cases,
+                           self.target_corefs,
+                           self.target_exophors,
+                           self.extract_nes)
+
+
+class KWDLCDirectoryReader(KWDLCReader):
+    """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
+
+    Args:
+        corpus_dir (Path): コーパスの存在するディレクトリ
+        glob_pat (str): コーパスとして扱うファイルのパターン
+        target_cases (list): 抽出の対象とする格
+        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        target_exophors (list): 抽出の対象とする外界照応詞
+        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+    """
+    def __init__(self,
+                 corpus_dir: Path,
+                 glob_pat: str = '*.knp',
+                 target_cases: Optional[List[str]] = None,
+                 target_corefs: Optional[List[str]] = None,
+                 target_exophors: Optional[List[str]] = None,
+                 extract_nes: bool = True,
+                 ) -> None:
+        super().__init__(target_cases, target_corefs, target_exophors, extract_nes)
+        file_paths: List[Path] = sorted(corpus_dir.glob(glob_pat))
+        self.did2path: Dict[str, Path] = OrderedDict((path.stem, path) for path in file_paths)
+
+
+class KWDLCFileReader(KWDLCReader):
+    """ KWDLC(または Kyoto Corpus)の1文書をファイル入力から扱うクラス
+
+    Args:
+        file_path (Path): 1文書が入ったKWDLCファイル
+        target_cases (list): 抽出の対象とする格
+        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        target_exophors (list): 抽出の対象とする外界照応詞
+        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+    """
+    def __init__(self,
+                 file_path: Path,
+                 target_cases: Optional[List[str]] = None,
+                 target_corefs: Optional[List[str]] = None,
+                 target_exophors: Optional[List[str]] = None,
+                 extract_nes: bool = True,
+                 ) -> None:
+        super().__init__(target_cases, target_corefs, target_exophors, extract_nes)
+        self.did2path: Dict[str, Path] = {'doc1': file_path}
+
+
+class KWDLCStringReader(KWDLCReader):
+    """ KWDLC(または Kyoto Corpus)の1文書をファイル入力から扱うクラス
+
+    Args:
+        knp_string (str): 1文書分のKWDLCデータの文字列
+        target_cases (list): 抽出の対象とする格
+        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        target_exophors (list): 抽出の対象とする外界照応詞
+        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+    """
+    def __init__(self,
+                 knp_string: str,
+                 target_cases: Optional[List[str]] = None,
+                 target_corefs: Optional[List[str]] = None,
+                 target_exophors: Optional[List[str]] = None,
+                 extract_nes: bool = True,
+                 ) -> None:
+        super().__init__(target_cases, target_corefs, target_exophors, extract_nes)
+        self.did2path = {'doc1': None}
+        self.knp_string = knp_string
+
+    def process_document(self, doc_id: str = 'doc1') -> Optional['Document']:
+        if doc_id != 'doc1':
+            logger.error(f'Unknown document id: {doc_id}')
+            return None
+        return Document(self.knp_string,
+                        doc_id,
+                        self.target_cases,
+                        self.target_corefs,
+                        self.target_exophors,
+                        self.extract_nes)
+
+    def process_documents(self, doc_ids: List[str]) -> Iterator[Optional['Document']]:
+        for doc_id in doc_ids:
+            yield self.process_document(doc_id)
+
+    def process_all_documents(self) -> Iterator['Document']:
+        yield Document(self.knp_string,
+                       'doc1',
+                       self.target_cases,
+                       self.target_corefs,
+                       self.target_exophors,
+                       self.extract_nes)
 
 
 class Document:
     """ KWDLC(または Kyoto Corpus)の1文書を扱うクラス
 
         Args:
-            file_path (str): 文書ファイルのパス
+            knp_string (str): 文書ファイルの内容(knp形式)
+            doc_id (str): 文書ID
             target_cases (list): 抽出の対象とする格
             target_corefs (list): 抽出の対象とする共参照関係(=など)
             target_exophors (list): 抽出の対象とする外界照応詞
@@ -121,27 +214,27 @@ class Document:
             named_entities (list): 抽出した固有表現
         """
     def __init__(self,
-                 file_path: Path,
+                 knp_string: str,
+                 doc_id: str,
                  target_cases: List[str],
                  target_corefs: List[str],
                  target_exophors: List[str],
                  extract_nes: bool,
                  ) -> None:
-        self.doc_id = file_path.stem
+        self.doc_id = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
         self.target_exophors: List[str] = target_exophors
         self.extract_nes: bool = extract_nes
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
-        with file_path.open() as f:
-            buff = ''
-            for line in f:
-                buff += line
-                if line == 'EOS\n':
-                    sentence = BList(buff)
-                    self.sid2sentence[sentence.sid] = sentence
-                    buff = ''
+        buff = []
+        for line in knp_string.strip().split('\n'):
+            buff.append(line)
+            if line.strip() == 'EOS':
+                sentence = BList('\n'.join(buff) + '\n')
+                self.sid2sentence[sentence.sid] = sentence
+                buff = []
 
         self.bnst2dbid = {}
         self.tag2dtid = {}
@@ -380,6 +473,24 @@ class Document:
                         pas.add_argument(case, mention.tag, mention.sid, mention.dtid, mention.midasi, '')
 
         return pas.arguments
+
+    def draw_tree(self, sid: str, fh) -> None:
+        predicates: List[Tag] = self.get_predicates()
+        sentence: BList = self[sid]
+        with io.StringIO() as string:
+            sentence.draw_tag_tree(fh=string)
+            tree_strings = string.getvalue().rstrip('\n').split('\n')
+        tag_list = sentence.tag_list()
+        assert len(tree_strings) == len(tag_list)
+        for i, (line, tag) in enumerate(zip(tree_strings, tag_list)):
+            if tag in predicates:
+                arguments = self.get_arguments(tag)
+                tree_strings[i] += '  '
+                for case in self.target_cases:
+                    argument = arguments[case]
+                    arg = argument[0].midasi if argument else 'NULL'
+                    tree_strings[i] += f'{arg}:{case} '
+        print('\n'.join(tree_strings), file=fh)
 
     def __len__(self):
         return len(self.sid2sentence)
