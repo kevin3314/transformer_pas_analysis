@@ -21,15 +21,11 @@ def main(config, args):
         input_string = args.input
     else:
         input_string = ''.join(sys.stdin.readlines())
+    input_string = ''.join(input_string.split())  # remove space character
 
-    input_sentences = []
-    for s in input_string.strip().split('。'):
-        input_sentences.append(s.strip() + '。')
-
-    knp_string = ''
+    input_sentences = [s.strip() + '。' for s in input_string.rstrip('。').split('。')]
     knp = KNP()
-    for input_sentence in input_sentences:
-        knp_string += knp.parse(input_sentence).all()
+    knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
     dataset_config: dict = config['test_dataset']['args']
     dataset_config['path'] = None
@@ -68,9 +64,7 @@ def main(config, args):
     if args.tab is True:
         prediction_writer.write(arguments_set.tolist(), sys.stdout)
     else:
-        output_dir = Path('output')
-        output_dir.mkdir(exist_ok=True)
-        document_pred: Document = prediction_writer.write(arguments_set.tolist(), output_dir)[0]
+        document_pred: Document = prediction_writer.write(arguments_set.tolist(), None)[0]
         for sid in document_pred.sid2sentence.keys():
             document_pred.draw_tree(sid, sys.stdout)
 
