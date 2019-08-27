@@ -289,17 +289,8 @@ class PASDataset(Dataset):
 
             if example_index == 0:
                 logger.info('*** Example ***')
-                logger.info(f'example_index: {example_index}')
                 logger.info(f'tokens: {" ".join(tokens)}')
                 logger.info(f'input_ids: {" ".join(str(x) for x in input_ids)}')
-                logger.info(f'input_mask: {" ".join(str(x) for x in input_mask)}')
-                logger.info(f'segment_ids: {" ".join(str(x) for x in segment_ids)}')
-                logger.info(f'arguments: '
-                            f'{" ".join(",".join(str(arg) for arg in arguments) for arguments in arguments_set)}')
-                logger.info(f'ng_arg_ids_set: '
-                            f'{" ".join(",".join(str(x) for x in ng_arg_ids) for ng_arg_ids in ng_arg_ids_set)}')
-                logger.info(f'deps: '
-                            f'{" ".join("".join(str(x) for x in dep) for dep in deps)}')
 
             features.append(
                 InputFeatures(
