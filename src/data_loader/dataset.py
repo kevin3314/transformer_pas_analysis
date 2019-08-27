@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 import numpy as np
 from torch.utils.data import Dataset
-from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_pretrained_bert import BertConfig, BertTokenizer
 from pyknp import Tag
 
 from kwdlc_reader import KWDLCDirectoryReader, KWDLCStringReader, Document
@@ -94,9 +94,11 @@ class PASDataset(Dataset):
         self.special_tokens = self.reader.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         self.pas_examples = [self._read_pas_examples(doc, coreference) for doc in self.reader.process_all_documents()]
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False)
+        bert_config = BertConfig.from_json_file(Path(bert_model) / 'bert_config.json')
         self.features = self._convert_examples_to_features(self.pas_examples,
                                                            max_seq_length=max_seq_length,
-                                                           vocab_size=len(self.tokenizer.vocab),
+                                                           # don't use len(self.tokenizer.vocab)
+                                                           vocab_size=bert_config.vocab_size,
                                                            num_case=len(self.reader.target_cases),
                                                            coreference=coreference)
         self.training = training
