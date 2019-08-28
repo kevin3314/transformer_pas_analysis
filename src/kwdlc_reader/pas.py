@@ -85,12 +85,12 @@ class Pas:
         self.mrph2dmid = mrph2dmid
         self.dmid = self._get_content_word(tag)
 
-    def _get_content_word(self, tag: Tag) -> int:
+    def _get_content_word(self, tag: Tag, sid: str) -> int:
         for mrph in tag.mrph_list():
             if '<内容語>' in mrph.fstring:
                 return self.mrph2dmid[mrph]
         else:
-            logger.warning(f'cannot find content word:\n{tag.spec()}')
+            logger.warning(f'cannot find content word: {tag.midasi}\t{sid}')
             return self.mrph2dmid[tag.mrph_list()[0]]
 
     def add_argument(self,
@@ -107,7 +107,7 @@ class Pas:
             dmid = None
         else:
             tid = tag.tag_id
-            dmid = self._get_content_word(tag)
+            dmid = self._get_content_word(tag, sid)
         dep_type = self._get_dep_type(self.predicate, tag, self.sid, sid, case)
         argument = Argument(sid, tid, midasi, dtid, dmid, dep_type, mode)
         self.arguments[case].append(argument)
