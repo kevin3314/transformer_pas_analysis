@@ -1,7 +1,5 @@
 import sys
 import argparse
-from typing import List
-from pathlib import Path
 
 import torch
 from pyknp import KNP

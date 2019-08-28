@@ -2,7 +2,7 @@ import argparse
 import collections
 import random
 
-import pytorch_pretrained_bert.optimization as module_optim
+import pytorch_transformers.optimization as module_optim
 import torch
 import numpy
 
@@ -48,13 +48,13 @@ def main(config):
     ]
     optimizer = config.initialize('optimizer', module_optim, optimizer_grouped_parameters)
 
-    # lr_scheduler = config.initialize('lr_scheduler', torch.optim.lr_scheduler, optimizer)
+    lr_scheduler = config.initialize('lr_scheduler', module_optim, optimizer)
 
     trainer = Trainer(model, loss, metrics, optimizer,
                       config=config,
                       data_loader=train_data_loader,
                       valid_data_loader=valid_data_loader,
-                      lr_scheduler=None)
+                      lr_scheduler=lr_scheduler)
 
     trainer.train()
 

@@ -183,12 +183,9 @@ def main() -> None:
             },
         }
         optimizer = {
-            'type': 'BertAdam',
+            'type': 'AdamW',
             'args': {
                 'lr': args.lr,
-                'warmup': args.warmup_proportion,
-                't_total': math.ceil(num_train_examples / args.batch_size) * args.epoch,
-                'schedule': 'warmup_linear',
                 'weight_decay': 0.01,
             },
         }
@@ -211,6 +208,14 @@ def main() -> None:
             'zero_anaphora_f1_writer_reader',
             'zero_anaphora_f1',
         ]
+        t_total = math.ceil(num_train_examples / args.batch_size) * args.epoch
+        lr_scheduler = {
+            'type': 'WarmupLinearSchedule',
+            'args': {
+                'warmup_steps': t_total * args.warmup_proportion,
+                't_total': t_total,
+            }
+        }
         trainer = {
             'epochs': args.epoch,
             'save_dir': 'result/',
@@ -235,6 +240,7 @@ def main() -> None:
             optimizer=optimizer,
             loss=loss,
             metrics=metrics,
+            lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
         config.dump(args.config)

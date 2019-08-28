@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-# import torch.nn.functional as F
-from pytorch_pretrained_bert.modeling import BertModel
+from pytorch_transformers import BertModel
 
 from base import BaseModel
 
@@ -46,8 +45,7 @@ class BaselineModel(BaseModel):
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
-                                       attention_mask=attention_mask,
-                                       output_all_encoded_layers=False)
+                                       attention_mask=attention_mask)
 
         g_logits = torch.Tensor()
         if self.parsing_algorithm == "biaffine":
@@ -119,8 +117,7 @@ class BaseAsymModel(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
-                                       attention_mask=attention_mask,
-                                       output_all_encoded_layers=False)
+                                       attention_mask=attention_mask)
         batch_size, sequence_len, hidden_dim = sequence_output.size()
 
         h_i = self.l_pred(sequence_output)  # (b, seq, hid)
@@ -184,8 +181,7 @@ class DependencyModel(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
-                                       attention_mask=attention_mask,
-                                       output_all_encoded_layers=False)
+                                       attention_mask=attention_mask)
         batch_size, sequence_len, hidden_dim = sequence_output.size()
 
         h_i = self.W_a(sequence_output)  # (b, seq, case*hid)
@@ -233,7 +229,7 @@ class LayerAttentionModel(BaseModel):
                  arc_representation_dim: int) -> None:
         super().__init__()
 
-        self.bert = BertModel.from_pretrained(bert_model)
+        self.bert = BertModel.from_pretrained(bert_model, output_hidden_states=True)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -255,8 +251,7 @@ class LayerAttentionModel(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # [(b, seq, hid)]
         sequence_output, _ = self.bert(input_ids,
-                                       attention_mask=attention_mask,
-                                       output_all_encoded_layers=True)
+                                       attention_mask=attention_mask)
         sequence_output = torch.stack(sequence_output, dim=1)  # (b, l, seq, hid)
         batch_size, num_layer, sequence_len, hidden_dim = sequence_output.size()
 
@@ -330,8 +325,7 @@ class MultitaskDepModel(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
-                                       attention_mask=attention_mask,
-                                       output_all_encoded_layers=False)
+                                       attention_mask=attention_mask)
         batch_size, sequence_len, hidden_dim = sequence_output.size()
 
         # dependency parsing

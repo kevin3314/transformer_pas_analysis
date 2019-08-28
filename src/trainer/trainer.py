@@ -62,6 +62,7 @@ class Trainer(BaseTrainer):
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
+            self.writer.add_scalar('lr', self.lr_scheduler.get_lr()[0])
             self.writer.add_scalar('loss', loss.item())
             total_loss += loss.item() * input_ids.size(0)
             # total_metrics += self._eval_metrics(output, target)
@@ -74,6 +75,9 @@ class Trainer(BaseTrainer):
                     100.0 * batch_idx / len(self.data_loader),
                     loss.item()))
 
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
+
         log = {
             'loss': total_loss / self.data_loader.n_samples,
             # 'metrics': (total_metrics / len(self.data_loader)).tolist()
@@ -82,9 +86,6 @@ class Trainer(BaseTrainer):
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
             log = {**log, **val_log}
-
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
 
         return log
 

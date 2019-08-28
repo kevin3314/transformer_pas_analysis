@@ -17,6 +17,7 @@ torch = "*"
 mojimoji = "*"
 flask = "*"
 tensorboard = "*"
+pytorch-transformers = "*"
 
 [requires]
 python_version = "3.6"
