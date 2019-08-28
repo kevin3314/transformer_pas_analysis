@@ -33,7 +33,7 @@ class Path:
     }
     train_dir = {
         'local': '/Users/NobuhiroUeda/Data/kwdlc/old/train',
-        'server': '/mnt/hinoki/ueda/kwdlc/old/train'
+        'server': '/mnt/hinoki/ueda/kwdlc/new/train'
     }
     train_dir_debug = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
@@ -41,7 +41,7 @@ class Path:
     }
     valid_dir = {
         'local': '/Users/NobuhiroUeda/Data/kwdlc/old/valid',
-        'server': '/mnt/hinoki/ueda/kwdlc/old/valid'
+        'server': '/mnt/hinoki/ueda/kwdlc/new/valid'
     }
     valid_dir_debug = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
@@ -49,7 +49,7 @@ class Path:
     }
     test_dir = {
         'local': '/Users/NobuhiroUeda/Data/kwdlc/old/test',
-        'server': '/mnt/hinoki/ueda/kwdlc/old/test'
+        'server': '/mnt/hinoki/ueda/kwdlc/new/test'
     }
     test_dir_debug = {
         'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test',
