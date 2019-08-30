@@ -99,6 +99,7 @@ def main(config):
     scorer = Scorer(documents_pred, data_loader.dataset.reader)
     scorer.print_result()
     scorer.write_html(config.save_dir / 'result.html')
+    scorer.export_result_csv(config.save_dir / 'result.csv')
 
     metrics = eval_metrics(metric_fns, scorer.result_dict())
     log = {'loss': total_loss / data_loader.n_samples}
