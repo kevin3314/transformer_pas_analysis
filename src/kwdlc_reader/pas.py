@@ -83,14 +83,14 @@ class Pas:
         self.dtid = dtid
         self.sid = sid
         self.mrph2dmid = mrph2dmid
-        self.dmid = self._get_content_word(tag)
+        self.dmid = self._get_content_word(tag, sid)
 
     def _get_content_word(self, tag: Tag, sid: str) -> int:
         for mrph in tag.mrph_list():
             if '<内容語>' in mrph.fstring:
                 return self.mrph2dmid[mrph]
         else:
-            logger.warning(f'cannot find content word: {tag.midasi}\t{sid}')
+            logger.warning(f'cannot find content word in: {tag.midasi}\t{sid}')
             return self.mrph2dmid[tag.mrph_list()[0]]
 
     def add_argument(self,

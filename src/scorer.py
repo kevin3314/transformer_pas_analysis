@@ -3,15 +3,13 @@ import logging
 import argparse
 import textwrap
 from pathlib import Path
-from typing import List, Dict
-from collections import defaultdict
-from functools import reduce
-import operator
+from typing import List, Dict, Union
+from collections import OrderedDict
 
 from pyknp import BList, Tag
 
 from kwdlc_reader import KWDLCDirectoryReader, Document, Argument
-
+from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -25,8 +23,8 @@ class Scorer:
         self.doc_ids: List[str] = list(reader_gold.did2path.keys())
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in reader_gold.process_all_documents()}
-        self.sid2predicates_pred: Dict[str, List[Tag]] = defaultdict(list)
-        self.sid2predicates_gold: Dict[str, List[Tag]] = defaultdict(list)
+        self.sid2predicates_pred: Dict[str, List[Tag]] = OrderedDefaultDict(list)
+        self.sid2predicates_gold: Dict[str, List[Tag]] = OrderedDefaultDict(list)
         for pas in [pas for doc in self.did2document_pred.values() for pas in doc.pas_list()]:
             self.sid2predicates_pred[pas.sid].append(pas.predicate)
         for pas in [pas for doc in self.did2document_gold.values() for pas in doc.pas_list()]:
@@ -36,8 +34,13 @@ class Scorer:
                     and any('<内容語>' in mrph.fstring for mrph in tag.mrph_list()):
                 self.sid2predicates_gold[pas.sid].append(tag)
 
-        self.measures: Dict[str, Measure] = {case: Measure() for case in self.cases}
+        self.measures: Dict[str, Dict[str, Measure]] = \
+            OrderedDict((case, OrderedDefaultDict(lambda: Measure())) for case in self.cases)
         self.comp_result = {}
+        self.deptype2analysis = {'dep': 'case_analysis',
+                                 'intra': 'zero_intra_sentential',
+                                 'inter': 'zero_inter_sentential',
+                                 'exo': 'zero_exophora'}
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
@@ -62,16 +65,32 @@ class Scorer:
                             continue
                         assert len(argument_pred) == 1
                         arg = argument_pred[0]
-                        # ignore overt case
-                        if arg.dep_type == 'overt':
+                        if arg.dep_type == 'overt':  # ignore overt case
                             self.comp_result[(doc_id, dtid, case)] = 'overt'
                             continue
+                        analysis = self.deptype2analysis[arg.dep_type]
                         if arg in argument_gold:
-                            self.comp_result[(doc_id, dtid, case)] = 'correct'
-                            self.measures[case].correct += 1
+                            self.measures[case][analysis].correct += 1
+                            self.comp_result[(doc_id, dtid, case)] = analysis
                         else:
                             self.comp_result[(doc_id, dtid, case)] = 'wrong'
-                        self.measures[case].denom_pred += 1
+                        self.measures[case][analysis].denom_pred += 1
+                        # if arg in argument_gold:
+                        #     if arg.dep_type == 'dep':
+                        #         self.comp_result[(doc_id, dtid, case)] = 'case_analysis'
+                        #     elif arg.dep_type == 'intra':
+                        #         self.comp_result[(doc_id, dtid, case)] = 'zero_intra'
+                        #     elif arg.dep_type == 'inter':
+                        #         self.comp_result[(doc_id, dtid, case)] = 'zero_inter'
+                        #     elif arg.dep_type == 'exo':
+                        #         self.comp_result[(doc_id, dtid, case)] = 'exophora'
+                        #     else:
+                        #         logger.warning(f'unknown dep_type: {arg.dep_type}')
+                        #         continue
+                        #     self.measures[case].correct += 1
+                        # else:
+                        #     self.comp_result[(doc_id, dtid, case)] = 'wrong'
+                        # self.measures[case].denom_pred += 1
 
             # calculate recall
             for predicate_gold in dtid2pred_gold.values():
@@ -79,30 +98,58 @@ class Scorer:
                 for case in self.cases:
                     argument_gold: List[Argument] = arguments_gold[case]
                     if argument_gold:
-                        if argument_gold[0].dep_type == 'overt':  # dataset.pyとの一貫性を保つため[0]を用いる
+                        arg = argument_gold[0]  # dataset.pyとの一貫性を保つため[0]を用いる
+                        if arg.dep_type == 'overt':  # ignore overt case
                             continue
-                        # print(case + ': ' + argument_gold[0].midasi)
-                        self.measures[case].denom_gold += 1
+                        analysis = self.deptype2analysis[arg.dep_type]
+                        self.measures[case][analysis].denom_gold += 1
 
-    def result_dict(self) -> dict:
-        result = {}
-        for case, measure in self.measures.items():
-            result[case] = measure
-        measure = reduce(operator.add, self.measures.values(), Measure())
-        result['all_case'] = measure
+    def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
+        result = OrderedDict()
+        all_case_result = OrderedDefaultDict(lambda: Measure())
+        for case, measures in self.measures.items():
+            case_result = {anal: Measure() for anal in self.deptype2analysis.values()}
+            for analysis, measure in measures.items():
+                case_result[analysis] = measure
+                all_case_result[analysis] += measure
+            case_result['zero_all'] = case_result['zero_intra_sentential'] + \
+                                      case_result['zero_inter_sentential'] + \
+                                      case_result['zero_exophora']
+            case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
+            all_case_result['zero_all'] += case_result['zero_all']
+            all_case_result['all'] += case_result['all']
+            result[case] = case_result
+        result['all_case'] = all_case_result
+        # measure = reduce(operator.add, self.measures.values(), Measure())
         return result
 
     def print_result(self):
-        for case, measure in self.result_dict().items():
+        for case, measures in self.result_dict().items():
             if case in self.cases:
-                print(f'--{case}格--')
+                print(f'{case}格')
             else:
-                print(f'--{case}--')
-            print(f'precision: {measure.precision:.3} ({measure.denom_pred})')
-            print(f'recall   : {measure.recall:.3} ({measure.denom_gold})')
-            print(f'F        : {measure.f1:.3}')
+                print(f'{case}')
+            for analysis, measure in measures.items():
+                print(f'  {analysis}')
+                print(f'    precision: {measure.precision:.3} ({measure.denom_pred})')
+                print(f'    recall   : {measure.recall:.3} ({measure.denom_gold})')
+                print(f'    F        : {measure.f1:.3}')
 
-    def write_html(self, output_file: Path):
+    def export_result_csv(self, path: Union[str, Path], sep: str = ', '):
+        if isinstance(path, str):
+            path = Path(path)
+        result_dict = self.result_dict()
+        with path.open('wt') as f:
+            f.write('case' + sep)
+            f.write(sep.join(result_dict['all_case'].keys()) + '\n')
+            for case, measures in result_dict.items():
+                f.write(f'{case}' + sep)
+                f.write(sep.join(f'{measure.f1:.3}' for measure in measures.values()))
+                f.write('\n')
+
+    def write_html(self, output_file: Union[str, Path]):
+        if isinstance(output_file, str):
+            output_file = Path(output_file)
         with output_file.open('w') as writer:
             writer.write('<html lang="ja">\n')
             writer.write(self._html_header())
@@ -184,7 +231,8 @@ class Scorer:
                         arg = argument[0].midasi
                         if self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'overt':
                             color = 'green'
-                        elif self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'correct':
+                        elif self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) \
+                                in self.deptype2analysis.values():
                             color = 'blue'
                         else:
                             color = 'red'
@@ -197,11 +245,6 @@ class Scorer:
                         tree_strings[i] += f'{arg}:{case} '
 
         print('\n'.join(tree_strings), file=fh)
-
-    def draw_first_tree(self):
-        sid, predicates = sorted(self.sid2predicates_pred.items())[0]
-        _, document = sorted(self.did2document_pred.items())[0]
-        self._draw_tree(sid, predicates, document, html=False)
 
 
 class Measure:
@@ -222,21 +265,21 @@ class Measure:
     def precision(self) -> float:
         if self.denom_pred == 0:
             logger.warning('zero division at precision')
-            return 0
+            return 0.0
         return self.correct / self.denom_pred
 
     @property
     def recall(self) -> float:
         if self.denom_gold == 0:
             logger.warning('zero division at recall')
-            return 0
+            return 0.0
         return self.correct / self.denom_gold
 
     @property
     def f1(self) -> float:
         if self.denom_pred + self.denom_gold == 0:
             logger.warning('zero division at f1')
-            return 0
+            return 0.0
         return 2 * self.correct / (self.denom_pred + self.denom_gold)
 
 
@@ -248,6 +291,8 @@ def main():
                         help='path to directory where gold KWDLC files exist (default: None)')
     parser.add_argument('--result-html', default=None, type=str,
                         help='path to html file which prediction result is exported (default: None)')
+    parser.add_argument('--result-csv', default=None, type=str,
+                        help='path to csv file which prediction result is exported (default: None)')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='Case strings. Separate by ","')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
@@ -273,6 +318,8 @@ def main():
     scorer = Scorer(documents_pred, reader_gold)
     if args.result_html:
         scorer.write_html(Path(args.result_html))
+    if args.result_csv:
+        scorer.export_result_csv(args.result_csv)
     scorer.print_result()
 
 
