@@ -10,103 +10,56 @@ from data_loader.dataset import InputFeatures, PASDataset
 from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document
 
 
-# def _parse_result(result_str: str, metric_name: str, cases: List[str]):
-#     result_lines: List[str] = result_str.split('\n')
-#     start_idx: int = result_lines.index(metric_name) + 1
-#     f1_dic: Dict[str: float] = {}
-#     for idx, line in list(enumerate(result_lines))[start_idx:]:
-#         if line in cases:
-#             f1_line = result_lines[idx + 3]
-#             assert f1_line.startswith('F:')
-#             f1_dic[line] = int(f1_line[2:])
-#             cases.remove(line)
-#         if not cases:
-#             break
-#     return f1_dic
-
-
 def case_analysis_f1_ga(result: dict):
-    return result['ガ'].f1
-    # return result['ガ']['case_analysis']['F']
+    return result['ガ']['case_analysis'].f1
 
 
 def case_analysis_f1_wo(result: dict):
-    return result['ヲ'].f1
-    # return result['ヲ']['case_analysis']['F']
+    return result['ヲ']['case_analysis'].f1
 
 
 def case_analysis_f1_ni(result: dict):
-    return result['ニ'].f1
-    # return result['ニ']['case_analysis']['F']
+    return result['ニ']['case_analysis'].f1
 
 
 def case_analysis_f1_ga2(result: dict):
-    return result['ガ２'].f1
-    # return result['ガ２']['case_analysis']['F']
+    return result['ガ２']['case_analysis'].f1
 
 
 def case_analysis_f1(result: dict):
-    return result['all_case'].f1
-    # return result['all_case']['case_analysis']['F']
+    return result['all_case']['case_analysis'].f1
 
 
 def zero_anaphora_f1_ga(result: dict):
-    return result['ガ'].f1
-    # return result['ガ']['anaphora_all']['F']
+    return result['ガ']['zero_all'].f1
 
 
 def zero_anaphora_f1_wo(result: dict):
-    return result['ヲ'].f1
-    # return result['ヲ']['anaphora_all']['F']
+    return result['ヲ']['zero_all'].f1
 
 
 def zero_anaphora_f1_ni(result: dict):
-    return result['ニ'].f1
-    # return result['ニ']['anaphora_all']['F']
+    return result['ニ']['zero_all'].f1
 
 
 def zero_anaphora_f1_ga2(result: dict):
-    return result['ガ２'].f1
-    # return result['ガ２']['anaphora_all']['F']
+    return result['ガ２']['zero_all'].f1
 
 
 def zero_anaphora_f1(result: dict):
-    return result['all_case'].f1
-    # return result['all_case']['anaphora_all']['F']
+    return result['all_case']['zero_all'].f1
 
 
 def zero_anaphora_f1_inter(result: dict):
-    return result['all_case'].f1
-    # return result['all_case']['anaphora_inter_sentential']['F']
+    return result['all_case']['zero_inter_sentential'].f1
 
 
 def zero_anaphora_f1_intra(result: dict):
-    return result['all_case'].f1
-    # return result['all_case']['anaphora_intra_sentential']['F']
+    return result['all_case']['zero_intra_sentential'].f1
 
 
-def zero_anaphora_f1_writer_reader(result: dict):
-    return result['all_case'].f1
-    # return result['all_case']['anaphora_writer_reader']['F']
-
-
-# def my_metric(output, target):
-#     with torch.no_grad():
-#         pred = torch.argmax(output, dim=1)
-#         assert pred.shape[0] == len(target)
-#         correct = 0
-#         correct += torch.sum(pred == target).item()
-#     return correct / len(target)
-#
-#
-# def my_metric2(output, target, k=3):
-#     with torch.no_grad():
-#         pred = torch.topk(output, k, dim=1)[1]
-#         assert pred.shape[0] == len(target)
-#         correct = 0
-#         for i in range(k):
-#             correct += torch.sum(pred[:, i] == target).item()
-#     return correct / len(target)
+def zero_anaphora_f1_exophora(result: dict):
+    return result['all_case']['zero_exophora'].f1
 
 
 class PredictionKNPWriter:

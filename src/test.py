@@ -97,7 +97,7 @@ def main(config):
     documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
     scorer = Scorer(documents_pred, data_loader.dataset.reader)
-    scorer.print_result()
+    # scorer.print_result()
     scorer.write_html(config.save_dir / 'result.html')
     scorer.export_result_csv(config.save_dir / 'result.csv')
 
@@ -106,15 +106,19 @@ def main(config):
     log.update({
         met.__name__: metrics[i] for i, met in enumerate(metric_fns)
     })
-    logger.info(log)
+    # print logged information to the screen
+    for key, value in log.items():
+        logger.info('{:35s}: {:.4f}'.format(str(key), value))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-r', '--resume', default=None, type=str,
-                        help='path to latest checkpoint (default: None)')
+    parser.add_argument('-r', '--resume', required=True, type=str,
+                        help='path to checkpoint to test')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
+    parser.add_argument('-c', '--config', default=None, type=str,
+                        help='config file path (default: None)')
 
     main(ConfigParser(parser, timestamp=False))

@@ -75,7 +75,7 @@ class BaseTrainer:
                 else:
                     log[key] = value
 
-            # print logged informations to the screen
+            # print logged information to the screen
             for key, value in log.items():
                 self.logger.info('{:35s}: {:.4f}'.format(str(key), value))
 

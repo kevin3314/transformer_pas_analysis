@@ -205,7 +205,7 @@ def main() -> None:
             'zero_anaphora_f1_ga2',
             'zero_anaphora_f1_inter',
             'zero_anaphora_f1_intra',
-            'zero_anaphora_f1_writer_reader',
+            'zero_anaphora_f1_exophora',
             'zero_anaphora_f1',
         ]
         t_total = math.ceil(num_train_examples / args.batch_size) * args.epoch

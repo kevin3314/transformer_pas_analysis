@@ -26,7 +26,7 @@ def api():
     inp = ''.join(request.args['input'].split())  # remove space character
 
     input_sentences = [s.strip() + '。' for s in inp.strip('。').split('。')]
-    knp = KNP()
+    knp = KNP(option='-tab -dpnd')
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
     dataset_config: dict = config['test_dataset']['args']
@@ -71,7 +71,7 @@ def api():
     html_string += '</pre>\n'
 
     return make_response(jsonify({
-        "input": inp,
+        "input": ''.join(input_sentences),
         "output": html_string
     }))
 

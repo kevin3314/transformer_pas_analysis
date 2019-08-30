@@ -22,7 +22,7 @@ def main(config, args):
     input_string = ''.join(input_string.split())  # remove space character
 
     input_sentences = [s.strip() + '。' for s in input_string.rstrip('。').split('。')]
-    knp = KNP()
+    knp = KNP(option='-tab -dpnd')
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
     dataset_config: dict = config['test_dataset']['args']
@@ -70,12 +70,14 @@ def main(config, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-r', '--resume', default=None, type=str,
-                        help='path to trained checkpoint (default: None)')
+    parser.add_argument('-r', '--resume', required=True, type=str,
+                        help='path to trained checkpoint')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('--input', default=None, type=str,
                         help='sentences to analysis (if not specified, use stdin)')
     parser.add_argument('-tab', action='store_true', default=False,
-                        help='output details')
+                        help='whether to output details')
+    parser.add_argument('-c', '--config', default=None, type=str,
+                        help='config file path (default: None)')
     main(ConfigParser(parser, timestamp=False), parser.parse_args())
