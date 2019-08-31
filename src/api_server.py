@@ -26,6 +26,8 @@ def api():
     inp = ''.join(request.args['input'].split())  # remove space character
 
     input_sentences = [s.strip() + '。' for s in inp.strip('。').split('。')]
+    logger.info(f'input: ' + ''.join(input_sentences))
+
     knp = KNP(option='-tab -dpnd')
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
@@ -64,8 +66,9 @@ def api():
     for sid in document_pred.sid2sentence.keys():
         with io.StringIO() as string:
             document_pred.draw_tree(sid, string)
-            tree_strings = string.getvalue().rstrip('\n').split('\n')
-        html_string += '\n'.join(tree_strings) + '\n'
+            tree_string = string.getvalue()
+        logger.info('output:\n' + tree_string)
+        html_string += tree_string
     html_string += '</pre>\n'
 
     return make_response(jsonify({
