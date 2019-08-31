@@ -46,9 +46,7 @@ def api():
 
         arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (1, seq, case)
 
-    prediction_writer = PredictionKNPWriter(dataset,
-                                            dataset_config,
-                                            logger)
+    prediction_writer = PredictionKNPWriter(dataset, logger)
     document_pred: Document = prediction_writer.write(arguments_set.tolist(), None)[0]
 
     html_string = textwrap.dedent('''

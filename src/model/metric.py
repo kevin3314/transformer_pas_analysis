@@ -68,18 +68,14 @@ class PredictionKNPWriter:
 
     def __init__(self,
                  dataset: PASDataset,
-                 dataset_config: dict,
                  logger: Logger,
                  ) -> None:
         self.gold_arguments_sets: List[List[Dict[str, Optional[str]]]] = \
             [example.arguments_set for example in dataset.pas_examples]
         self.all_features: List[InputFeatures] = dataset.features
         self.reader: KWDLCReader = dataset.reader
-        self.special_tokens: List[str] = dataset.special_tokens
-        max_seq_length: int = dataset_config['max_seq_length']
-        self.tok_to_special: Dict[int, str] = {i + max_seq_length - len(self.special_tokens): token for i, token
-                                               in enumerate(self.special_tokens)}
-        self.coreference: bool = dataset_config['coreference']
+        self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
+        self.coreference: bool = dataset.coreference
         self.input_files: List[Path] = list(dataset.reader.did2path.values())
         self.logger = logger
 
@@ -190,8 +186,8 @@ class PredictionKNPWriter:
                         prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データををそのまま出力
                     else:
                         # special
-                        if argument in self.tok_to_special:
-                            special_anaphor = self.tok_to_special[argument]
+                        if argument in self.index_to_special:
+                            special_anaphor = self.index_to_special[argument]
                             if special_anaphor in document.target_exophors:
                                 rels.append(RelTag(case, special_anaphor, None, None))
                             continue

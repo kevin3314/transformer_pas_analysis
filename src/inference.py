@@ -32,7 +32,7 @@ def main(config, args):
 
     # build model architecture
     model = config.initialize('arch', module_arch)
-    model.expand_vocab(len(dataset.special_tokens))  # same as that in dataset.py.
+    model.expand_vocab(dataset.num_special_tokens)  # same as that in dataset.py.
     logger.info(model)
 
     device, device_ids = prepare_device(1, logger)
@@ -56,9 +56,7 @@ def main(config, args):
 
         arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (1, seq, case)
 
-    prediction_writer = PredictionKNPWriter(dataset,
-                                            dataset_config,
-                                            logger)
+    prediction_writer = PredictionKNPWriter(dataset, logger)
     if args.tab is True:
         prediction_writer.write(arguments_set.tolist(), sys.stdout)
     else:

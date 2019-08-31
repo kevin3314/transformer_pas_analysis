@@ -1,6 +1,5 @@
 import argparse
 from typing import List, Callable
-from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -91,9 +90,7 @@ def main(config):
             #     total_metrics[i] += metric(ret_dict) * batch_size
 
     prediction_output_dir = config.save_dir / 'test_out_knp'
-    prediction_writer = PredictionKNPWriter(data_loader.dataset,
-                                            config['test_dataset']['args'],
-                                            logger)
+    prediction_writer = PredictionKNPWriter(data_loader.dataset, logger)
     documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
     scorer = Scorer(documents_pred, data_loader.dataset.reader)

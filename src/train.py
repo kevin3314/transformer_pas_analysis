@@ -32,7 +32,7 @@ def main(config):
 
     # build model architecture, then print to console
     model = config.initialize('arch', module_arch)
-    model.expand_vocab(len(train_dataset.special_tokens))  # same as that in dataset.py. TODO: consider resume case
+    model.expand_vocab(train_dataset.num_special_tokens)  # same as that in dataset.py. TODO: consider resume case
     logger.info(model)
 
     # get function handles of loss and metrics

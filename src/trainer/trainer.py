@@ -121,12 +121,9 @@ class Trainer(BaseTrainer):
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.writer.add_scalar('loss', loss.item())
                 # total_val_metrics += self._eval_metrics(output, target)
-                # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         prediction_output_dir = self.config.save_dir / 'valid_out_knp'
-        prediction_writer = PredictionKNPWriter(self.valid_data_loader.dataset,
-                                                self.config['valid_dataset']['args'],
-                                                self.logger)
+        prediction_writer = PredictionKNPWriter(self.valid_data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
         scorer = Scorer(documents_pred, self.valid_data_loader.dataset.reader)
