@@ -79,10 +79,10 @@ def api():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', default=None, type=str,
-                        help='path to trained checkpoint (default: None)')
-    parser.add_argument('--host', default='127.0.0.1', type=str,
-                        help='host ip address (default: 127.0.0.1)')
+    parser.add_argument('--model', required=True, type=str,
+                        help='path to trained checkpoint')
+    parser.add_argument('--host', default='0.0.0.0', type=str,
+                        help='host ip address (default: 0.0.0.0)')
     parser.add_argument('--port', default=12345, type=int,
                         help='host port number (default: 12345)')
     args = parser.parse_args()
