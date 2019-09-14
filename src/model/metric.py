@@ -1,8 +1,8 @@
+import io
 import re
 from logging import Logger
 from typing import List, Optional, Dict, NamedTuple, Union
 from pathlib import Path
-from io import TextIOWrapper
 
 from pyknp import Tag
 
@@ -81,13 +81,15 @@ class PredictionKNPWriter:
 
     def write(self,
               arguments_sets: List[List[List[int]]],
-              destination: Union[Path, TextIOWrapper, None],
+              destination: Union[Path, io.TextIOBase, None],
               ) -> List[Document]:
         """Write final predictions to the file."""
 
         if isinstance(destination, Path):
             self.logger.info(f'Writing predictions to: {destination}')
             destination.mkdir(exist_ok=True)
+        elif not (destination is None or isinstance(destination, io.TextIOBase)):
+            self.logger.warning('invalid output destination')
 
         documents_pred: List[Document] = []
         for input_file, features, arguments_set, gold_arguments_set in \
@@ -113,7 +115,7 @@ class PredictionKNPWriter:
                 output_basename = document.doc_id + '.knp'
                 with destination.joinpath(output_basename).open('w') as writer:
                     writer.write(output_string)
-            elif isinstance(destination, TextIOWrapper):
+            elif isinstance(destination, io.TextIOBase):
                 destination.write(output_string)
             else:
                 pass

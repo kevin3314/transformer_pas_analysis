@@ -41,7 +41,7 @@ def analyze_raw_data_from_client(knp_result: str):
         arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (1, seq, case)
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
-    with io.StringIO as string:
+    with io.StringIO() as string:
         _ = prediction_writer.write(arguments_set.tolist(), string)
         knp_result = string.getvalue()
     return knp_result
