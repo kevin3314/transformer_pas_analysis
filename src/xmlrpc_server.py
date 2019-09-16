@@ -11,7 +11,7 @@ from xmlrpc.server import SimpleXMLRPCServer
 import torch
 
 from data_loader.dataset import PASDataset
-from model.metric import PredictionKNPWriter
+from writer.prediction_writer import PredictionKNPWriter
 import model.model as module_arch
 
 logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ import data_loader.dataset as module_dataset
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from parse_config import ConfigParser
+from utils.parse_config import ConfigParser
 from trainer import Trainer
 
 

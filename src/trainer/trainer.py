@@ -4,7 +4,7 @@ from typing import List
 import torch
 
 from base import BaseTrainer
-from model.metric import PredictionKNPWriter
+from writer.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
 
 

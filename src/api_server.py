@@ -11,7 +11,7 @@ import torch
 from pyknp import KNP
 
 from data_loader.dataset import PASDataset
-from model.metric import PredictionKNPWriter
+from writer.prediction_writer import PredictionKNPWriter
 from kwdlc_reader import Document
 import model.model as module_arch
 

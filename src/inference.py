@@ -5,8 +5,8 @@ import torch
 from pyknp import KNP
 
 import model.model as module_arch
-from parse_config import ConfigParser
-from model.metric import PredictionKNPWriter
+from utils.parse_config import ConfigParser
+from writer.prediction_writer import PredictionKNPWriter
 from kwdlc_reader import Document
 from data_loader.dataset import PASDataset
 from test import prepare_device
