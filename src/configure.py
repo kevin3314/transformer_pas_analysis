@@ -84,6 +84,8 @@ def main() -> None:
     parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
                              'E.g., 0.1 = 10% of training.')
+    parser.add_argument("--warmup_steps", default=None, type=int,
+                        help="Linear warmup over warmup_steps.")
     parser.add_argument('--env', choices=['local', 'server'], default='server',
                         help='development environment')
     parser.add_argument('--additional-name', type=str, default=None,
@@ -212,7 +214,7 @@ def main() -> None:
         lr_scheduler = {
             'type': 'WarmupLinearSchedule',
             'args': {
-                'warmup_steps': t_total * args.warmup_proportion,
+                'warmup_steps': t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps,
                 't_total': t_total,
             }
         }
