@@ -95,8 +95,11 @@ class Scorer:
             # calculate recall
             for predicate_gold in dtid2pred_gold.values():
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
+                predicate_gold_dtid = document_gold.tag2dtid(predicate_gold)
                 for case in self.cases:
-                    argument_gold: List[Argument] = arguments_gold[case]
+                    argument_gold: List[Argument] = list(filter(
+                        lambda argument: argument.dtid is None or argument.dtid < predicate_gold_dtid,
+                        arguments_gold[case]))
                     if argument_gold:
                         arg = argument_gold[0]  # dataset.pyとの一貫性を保つため[0]を用いる
                         if arg.dep_type == 'overt':  # ignore overt case
