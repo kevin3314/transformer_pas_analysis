@@ -84,7 +84,7 @@ def main() -> None:
     parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
                              'E.g., 0.1 = 10% of training.')
-    parser.add_argument("--warmup_steps", default=None, type=int,
+    parser.add_argument("--warmup-steps", default=None, type=int,
                         help="Linear warmup over warmup_steps.")
     parser.add_argument('--env', choices=['local', 'server'], default='server',
                         help='development environment')
