@@ -94,9 +94,9 @@ def main(config):
     documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
     scorer = Scorer(documents_pred, data_loader.dataset.reader)
-    # scorer.print_result()
     scorer.write_html(config.save_dir / 'result.html')
-    scorer.export_result_csv(config.save_dir / 'result.csv')
+    scorer.export_txt(config.save_dir / 'result.txt')
+    scorer.export_csv(config.save_dir / 'result.csv')
 
     metrics = eval_metrics(metric_fns, scorer.result_dict())
     log = {'loss': total_loss / data_loader.n_samples}

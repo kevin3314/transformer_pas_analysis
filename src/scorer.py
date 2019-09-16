@@ -126,29 +126,41 @@ class Scorer:
         # measure = reduce(operator.add, self.measures.values(), Measure())
         return result
 
-    def print_result(self):
+    def export_txt(self, destination: Union[str, Path, io.TextIOBase]):
+        lines = []
         for case, measures in self.result_dict().items():
             if case in self.cases:
-                print(f'{case}格')
+                lines.append(f'{case}格')
             else:
-                print(f'{case}')
+                lines.append(f'{case}')
             for analysis, measure in measures.items():
-                print(f'  {analysis}')
-                print(f'    precision: {measure.precision:.3} ({measure.denom_pred})')
-                print(f'    recall   : {measure.recall:.3} ({measure.denom_gold})')
-                print(f'    F        : {measure.f1:.3}')
+                lines.append(f'  {analysis}')
+                lines.append(f'    precision: {measure.precision:.3} ({measure.denom_pred})')
+                lines.append(f'    recall   : {measure.recall:.3} ({measure.denom_gold})')
+                lines.append(f'    F        : {measure.f1:.3}')
+        text = '\n'.join(lines) + '\n'
 
-    def export_result_csv(self, path: Union[str, Path], sep: str = ', '):
-        if isinstance(path, str):
-            path = Path(path)
+        if isinstance(destination, str) or isinstance(destination, Path):
+            with Path(destination).open('wt') as writer:
+                writer.write(text)
+        elif isinstance(destination, io.TextIOBase):
+            destination.write(text)
+
+    def export_csv(self, destination: Union[str, Path, io.TextIOBase], sep: str = ', '):
+        text = ''
         result_dict = self.result_dict()
-        with path.open('wt') as f:
-            f.write('case' + sep)
-            f.write(sep.join(result_dict['all_case'].keys()) + '\n')
-            for case, measures in result_dict.items():
-                f.write(f'{case}' + sep)
-                f.write(sep.join(f'{measure.f1:.3}' for measure in measures.values()))
-                f.write('\n')
+        text += 'case' + sep
+        text += sep.join(result_dict['all_case'].keys()) + '\n'
+        for case, measures in result_dict.items():
+            text += f'{case}' + sep
+            text += sep.join(f'{measure.f1:.3}' for measure in measures.values())
+            text += '\n'
+
+        if isinstance(destination, str) or isinstance(destination, Path):
+            with Path(destination).open('wt') as writer:
+                writer.write(text)
+        elif isinstance(destination, io.TextIOBase):
+            destination.write(text)
 
     def write_html(self, output_file: Union[str, Path]):
         if isinstance(output_file, str):

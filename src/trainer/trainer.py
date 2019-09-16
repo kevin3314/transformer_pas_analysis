@@ -128,6 +128,7 @@ class Trainer(BaseTrainer):
 
         scorer = Scorer(documents_pred, self.valid_data_loader.dataset.reader)
         scorer.write_html(self.config.save_dir / 'result.html')
+        scorer.export_txt(self.config.save_dir / 'result.txt')
 
         val_metrics = self._eval_metrics(scorer.result_dict())
 
