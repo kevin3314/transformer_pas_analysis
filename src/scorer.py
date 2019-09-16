@@ -1,4 +1,5 @@
 import io
+import sys
 import logging
 import argparse
 import textwrap
@@ -93,12 +94,16 @@ class Scorer:
                         # self.measures[case].denom_pred += 1
 
             # calculate recall
-            for predicate_gold in dtid2pred_gold.values():
+            tag2sid_gold = {tag: sentence.sid for sentence in document_gold for tag in sentence.tag_list()}
+            for predicate_dtid, predicate_gold in dtid2pred_gold.items():
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
-                predicate_gold_dtid: int = document_gold.tag2dtid[predicate_gold]
+                predicate_sid_gold: str = tag2sid_gold[predicate_gold]
                 for case in self.cases:
+                    # filter out cataphoras
                     argument_gold: List[Argument] = list(filter(
-                        lambda argument: argument.dtid is None or argument.dtid < predicate_gold_dtid,
+                        lambda arg_: not (arg_.dtid is not None and
+                                          arg_.dtid > predicate_dtid and
+                                          arg_.sid != predicate_sid_gold),
                         arguments_gold[case]))
                     if argument_gold:
                         arg = argument_gold[0]  # dataset.pyとの一貫性を保つため[0]を用いる
@@ -334,8 +339,8 @@ def main():
     if args.result_html:
         scorer.write_html(Path(args.result_html))
     if args.result_csv:
-        scorer.export_result_csv(args.result_csv)
-    scorer.print_result()
+        scorer.export_csv(args.result_csv)
+    scorer.export_txt(sys.stdout)
 
 
 if __name__ == '__main__':
