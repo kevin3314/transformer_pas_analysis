@@ -95,7 +95,7 @@ class Scorer:
             # calculate recall
             for predicate_gold in dtid2pred_gold.values():
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
-                predicate_gold_dtid = document_gold.tag2dtid(predicate_gold)
+                predicate_gold_dtid: int = document_gold.tag2dtid[predicate_gold]
                 for case in self.cases:
                     argument_gold: List[Argument] = list(filter(
                         lambda argument: argument.dtid is None or argument.dtid < predicate_gold_dtid,
