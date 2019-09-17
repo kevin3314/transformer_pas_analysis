@@ -7,7 +7,7 @@ from pathlib import Path
 from pyknp import Tag
 
 from data_loader.dataset import InputFeatures, PASDataset
-from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document
+from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document, Pas, Argument
 
 
 class PredictionKNPWriter:
@@ -26,6 +26,7 @@ class PredictionKNPWriter:
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
         self.input_files: List[Path] = list(dataset.reader.did2path.values())
+        self.dtid2cfid: Dict[int, str] = {}
         self.logger = logger
 
     def write(self,
@@ -59,7 +60,17 @@ class PredictionKNPWriter:
                                                  arguments_set,
                                                  gold_arguments_set,
                                                  document)
+            document_pred = Document('\n'.join(output_knp_lines) + '\n',
+                                     document.doc_id,
+                                     document.target_cases,
+                                     document.target_corefs,
+                                     document.target_exophors,
+                                     document.extract_nes)
+            documents_pred.append(document_pred)
+
+            output_knp_lines = self._add_pas_analysis(output_knp_lines, document_pred)
             output_string = '\n'.join(output_knp_lines) + '\n'
+
             if isinstance(destination, Path):
                 output_basename = document.doc_id + '.knp'
                 with destination.joinpath(output_basename).open('w') as writer:
@@ -68,14 +79,6 @@ class PredictionKNPWriter:
                 destination.write(output_string)
             else:
                 pass
-            documents_pred.append(
-                Document(output_string,
-                         document.doc_id,
-                         document.target_cases,
-                         document.target_corefs,
-                         document.target_exophors,
-                         document.extract_nes)
-            )
 
         return documents_pred
 
@@ -98,7 +101,7 @@ class PredictionKNPWriter:
 
             # <格解析結果:>タグから overt case を見つける(inference用)
             match = self.case_analysis_pat.search(line)
-            overt_dict = self._extract_overt_from_case_analysis_result(match, sent_idx, document)
+            overt_dict = self._extract_overt_from_case_analysis_result(dtid, match, sent_idx, document)
 
             rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
             assert '<rel ' not in rel_removed
@@ -116,8 +119,9 @@ class PredictionKNPWriter:
 
         return output_knp_lines
 
-    @staticmethod
-    def _extract_overt_from_case_analysis_result(match: Optional,
+    def _extract_overt_from_case_analysis_result(self,
+                                                 dtid: int,
+                                                 match: Optional,
                                                  sent_idx: int,
                                                  document: Document
                                                  ) -> Dict[str, int]:
@@ -128,6 +132,7 @@ class PredictionKNPWriter:
         c0 = case_analysis_result.find(':')
         c1 = case_analysis_result.find(':', c0 + 1)
         cfid = case_analysis_result[:c0] + ':' + case_analysis_result[c0 + 1:c1]
+        self.dtid2cfid[dtid] = cfid
 
         if case_analysis_result.count(':') < 2:  # For copula
             return {}
@@ -198,6 +203,51 @@ class PredictionKNPWriter:
                     rels.append(RelTag(case, target, tag2sid[prediction_tag], prediction_tag.tag_id))
 
         return ''.join(rel.to_string() for rel in rels)
+
+    def _add_pas_analysis(self,
+                          knp_lines: List[str],
+                          document: Document,
+                          ) -> List[str]:
+        sid2index = {sid: i for i, sid in enumerate(document.sid2sentence.keys())}
+        dtid = 0
+        output_knp_lines = []
+        for line in knp_lines:
+            if not line.startswith('+ '):
+                output_knp_lines.append(line.strip())
+                continue
+            if dtid in document._pas:
+                pas_string = self._pas_string(document._pas[dtid], self.dtid2cfid[dtid], sid2index)
+                output_knp_lines.append(line + pas_string)
+            else:
+                output_knp_lines.append(line)
+
+            dtid += 1
+
+        return output_knp_lines
+
+    def _pas_string(self,
+                    pas: Pas,
+                    cfid: str,
+                    sid2index: Dict[str, int],
+                    ) -> str:
+        dtype2caseflag = {'overt': 'C', 'dep': 'N', 'intra': 'O', 'inter': 'O', 'exo': 'E'}
+        case_elements = []
+        for case in self.reader.target_cases:
+            items = ['-'] * 6
+            items[0] = case
+            argument = pas.arguments[case]
+            if argument:
+                arg: Argument = argument[0]
+                items[1] = dtype2caseflag[arg.dep_type]
+                items[2] = arg.midasi
+                if arg.tid is not None:
+                    items[3] = str(arg.tid)
+                    items[4] = str(sid2index[pas.sid] - sid2index[arg.sid])
+                    items[5] = arg.sid
+            else:
+                items[1] = 'U'
+            case_elements.append('/'.join(items))
+        return f"<述語項構造:{cfid}:{';'.join(case_elements)}>"
 
 
 class RelTag(NamedTuple):
