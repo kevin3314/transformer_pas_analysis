@@ -238,12 +238,16 @@ class PredictionKNPWriter:
             argument = pas.arguments[case]
             if argument:
                 arg: Argument = argument[0]
-                items[1] = dtype2caseflag[arg.dep_type]
-                items[2] = arg.midasi
+                items[1] = dtype2caseflag[arg.dep_type]  # フラグ (C/N/O/D/E/U)
+                items[2] = arg.midasi  # 見出し
                 if arg.tid is not None:
-                    items[3] = str(arg.tid)
-                    items[4] = str(sid2index[pas.sid] - sid2index[arg.sid])
-                    items[5] = arg.sid
+                    items[3] = str(arg.tid)  # tag id
+                    items[4] = str(sid2index[pas.sid] - sid2index[arg.sid])  # N文前
+                    items[5] = str(-1)  # Entity ID
+                else:
+                    items[3] = str(-1)
+                    items[4] = str(-1)
+                    items[5] = str(-1)
             else:
                 items[1] = 'U'
             case_elements.append('/'.join(items))
