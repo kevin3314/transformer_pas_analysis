@@ -28,7 +28,7 @@ def api():
     input_sentences = [s.strip() + '。' for s in inp.strip('。').split('。')]
     logger.info(f'input: ' + ''.join(input_sentences))
 
-    knp = KNP(option='-tab -dpnd')
+    knp = KNP(option='-tab')
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
     dataset_config: dict = config['test_dataset']['args']

@@ -22,7 +22,7 @@ def main(config, args):
     input_string = ''.join(input_string.split())  # remove space character
 
     input_sentences = [s.strip() + '。' for s in input_string.rstrip('。').split('。')]
-    knp = KNP(option='-tab -dpnd')
+    knp = KNP(option='-tab')
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
     dataset_config: dict = config['test_dataset']['args']

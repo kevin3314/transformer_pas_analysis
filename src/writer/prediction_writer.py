@@ -13,6 +13,7 @@ from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document
 class PredictionKNPWriter:
     rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
     tag_pat = re.compile(r'^\+ (-?\d)+\w ?')
+    case_analysis_pat = re.compile(r'<格解析結果:(.+?)>')
 
     def __init__(self,
                  dataset: PASDataset,
@@ -53,11 +54,11 @@ class PredictionKNPWriter:
             if document is None:
                 self.logger.warning(f'document: {document.doc_id} is skipped.')
                 continue
-            output_knp_lines = self._output_document(knp_string,
-                                                     features,
-                                                     arguments_set,
-                                                     gold_arguments_set,
-                                                     document)
+            output_knp_lines = self._rewrite_rel(knp_string,
+                                                 features,
+                                                 arguments_set,
+                                                 gold_arguments_set,
+                                                 document)
             output_string = '\n'.join(output_knp_lines) + '\n'
             if isinstance(destination, Path):
                 output_basename = document.doc_id + '.knp'
@@ -78,25 +79,33 @@ class PredictionKNPWriter:
 
         return documents_pred
 
-    def _output_document(self,
-                         knp_string: str,
-                         features: InputFeatures,
-                         arguments_set: List[List[int]],
-                         gold_arguments_set: List[Dict[str, Optional[str]]],
-                         document: Document,
-                         ) -> List[str]:
+    def _rewrite_rel(self,
+                     knp_string: str,
+                     features: InputFeatures,
+                     arguments_set: List[List[int]],
+                     gold_arguments_set: List[Dict[str, Optional[str]]],
+                     document: Document,
+                     ) -> List[str]:
         dtid = 0
+        sent_idx = 0
         output_knp_lines = []
         for line in knp_string.strip().split('\n'):
             if not line.startswith('+ '):
                 output_knp_lines.append(line.strip())
+                if line == 'EOS':
+                    sent_idx += 1
                 continue
+
+            # <格解析結果:>タグから overt case を見つける(inference用)
+            match = self.case_analysis_pat.search(line)
+            overt_dict = self._extract_overt_from_case_analysis_result(match, sent_idx, document)
+
             rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
             assert '<rel ' not in rel_removed
             match = self.tag_pat.match(rel_removed)
             if match is not None:
                 rel_idx = match.end()
-                rel_string = self._rel_string(dtid, arguments_set, gold_arguments_set, features, document)
+                rel_string = self._rel_string(dtid, arguments_set, gold_arguments_set, features, document, overt_dict)
                 rel_inserted_line = rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:]
                 output_knp_lines.append(rel_inserted_line)
             else:
@@ -107,12 +116,43 @@ class PredictionKNPWriter:
 
         return output_knp_lines
 
+    @staticmethod
+    def _extract_overt_from_case_analysis_result(match: Optional,
+                                                 sent_idx: int,
+                                                 document: Document
+                                                 ) -> Dict[str, int]:
+        if match is None:
+            return {}
+        sentence = document.sentences[sent_idx]
+        case_analysis_result = match.group(1)
+        c0 = case_analysis_result.find(':')
+        c1 = case_analysis_result.find(':', c0 + 1)
+        cfid = case_analysis_result[:c0] + ':' + case_analysis_result[c0 + 1:c1]
+
+        if case_analysis_result.count(':') < 2:  # For copula
+            return {}
+
+        overt_dict = {}
+        for k in case_analysis_result[c1 + 1:].split(';'):
+            items = k.split('/')
+            caseflag = items[1]
+            if caseflag == 'C':
+                case = items[0]
+                midasi = items[2]
+                tid = int(items[3])
+                target_tag: Tag = sentence.tag_list()[tid]
+                for mrph in target_tag.mrph_list():
+                    if mrph.midasi == midasi:
+                        overt_dict[case] = document.mrph2dmid[mrph]
+        return overt_dict
+
     def _rel_string(self,
                     dtid: int,
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
                     gold_arguments_set: List[Dict[str, Optional[str]]],  # (mrph_len, cases)
                     features: InputFeatures,
                     document: Document,
+                    overt_dict: Dict[str, int],
                     ) -> str:
         rels: List[RelTag] = []
         dmid2tag = {document.mrph2dmid[mrph]: tag for tag in document.tag_list() for mrph in tag.mrph_list()}
@@ -129,11 +169,14 @@ class PredictionKNPWriter:
             assert len(cases) == len(arguments)
             assert len(cases) == len(gold_arguments)
             for (case, gold_argument), argument in zip(gold_arguments.items(), arguments):
-                # Noneは解析対象としない
+                # 助詞などの非解析対象形態素については gold_argument が None になっている
                 if gold_argument is not None:
-                    # overt
+                    # overt(train/test)
                     if gold_argument.endswith('%C'):
-                        prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データををそのまま出力
+                        prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データをそのまま出力
+                    # overt(inference)
+                    elif case in overt_dict:
+                        prediction_dmid = int(overt_dict[case])
                     else:
                         # special
                         if argument in self.index_to_special:
