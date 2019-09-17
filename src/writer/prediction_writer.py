@@ -241,8 +241,8 @@ class PredictionKNPWriter:
                 items[1] = dtype2caseflag[arg.dep_type]  # フラグ (C/N/O/D/E/U)
                 items[2] = arg.midasi  # 見出し
                 if arg.tid is not None:
-                    items[4] = str(sid2index[pas.sid] - sid2index[arg.sid])  # N文前
-                    items[3] = str(arg.tid)  # tag id
+                    items[3] = str(sid2index[pas.sid] - sid2index[arg.sid])  # N文前
+                    items[4] = str(arg.tid)  # tag id
                     items[5] = str(-1)  # Entity ID TODO
                 else:
                     items[3] = str(-1)
