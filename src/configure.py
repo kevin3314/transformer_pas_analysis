@@ -29,7 +29,7 @@ class Path:
     }
     bert_large_model = {
         'local': None,
-        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-20_BPE'
+        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE'
     }
     train_dir = {
         'local': '/Users/NobuhiroUeda/Data/kwdlc/old/train',
