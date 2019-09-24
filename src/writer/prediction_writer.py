@@ -215,7 +215,7 @@ class PredictionKNPWriter:
             if not line.startswith('+ '):
                 output_knp_lines.append(line.strip())
                 continue
-            if dtid in document._pas:
+            if dtid in document._pas and dtid in self.dtid2cfid:
                 pas_string = self._pas_string(document._pas[dtid], self.dtid2cfid[dtid], sid2index)
                 output_knp_lines.append(line + pas_string)
             else:
