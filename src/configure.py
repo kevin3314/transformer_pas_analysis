@@ -1,9 +1,10 @@
 import os
 import json
 import math
-import pathlib
+# import pathlib
 import argparse
 from typing import List
+import itertools
 
 
 class Config:
@@ -23,38 +24,153 @@ class Config:
 
 
 class Path:
-    bert_model = {
-        'local': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-        'server': '/mnt/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE'
-    }
-    bert_large_model = {
-        'local': None,
-        'server': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE'
-    }
-    train_dir = {
-        'local': '/Users/NobuhiroUeda/Data/kwdlc/old/train',
-        'server': '/mnt/hinoki/ueda/kwdlc/new/train'
-    }
-    train_dir_debug = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
-        'server': '/mnt/hinoki/ueda/kwdlc/old/sample/train'
-    }
-    valid_dir = {
-        'local': '/Users/NobuhiroUeda/Data/kwdlc/old/valid',
-        'server': '/mnt/hinoki/ueda/kwdlc/new/valid'
-    }
-    valid_dir_debug = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
-        'server': '/mnt/hinoki/ueda/kwdlc/old/sample/valid'
-    }
-    test_dir = {
-        'local': '/Users/NobuhiroUeda/Data/kwdlc/old/test',
-        'server': '/mnt/hinoki/ueda/kwdlc/new/test'
-    }
-    test_dir_debug = {
-        'local': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test',
-        'server': '/mnt/hinoki/ueda/kwdlc/old/sample/test'
-    }
+    class CorpusPath:
+        def __init__(self, train, valid, test):
+            self.paths = dict()
+            self.paths['train'] = train
+            self.paths['valid'] = valid
+            self.paths['test'] = test
+
+        def get(self, dataset: str, env: str, debug: bool = False):
+            dic = self.paths[dataset][env]
+            if debug:
+                return dic['debug']
+            else:
+                return dic['release']
+
+    class BertPath:
+        def __init__(self):
+            self.path = {
+                'local': {
+                    'base': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+                    'large': None
+                },
+                'server': {
+                    'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+                    'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE'
+                }
+            }
+
+        def get(self, env: str, large: bool = False):
+            return self.path[env]['large' if large else 'base']
+
+    # def __init__(self, type_ = None, **paths):
+    #     self.name = 'set'
+    #     for key, path in paths.items():
+    #         setattr(self, key, path)
+    #
+    # def get(self, *args, **kwargs):
+    #     v = kwargs[self.name]
+    #     # remove self.name from dict
+    #     # k, v = list(kwargs.items())[0]
+    #     return getattr(self, v).get(kwargs)
+
+    kwdlc = CorpusPath(
+        train={
+            'local': {
+                'release': '/Users/NobuhiroUeda/Data/kwdlc/old/train',
+                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train'
+            },
+            'server': {
+                'release': '/mnt/hinoki/ueda/kwdlc/new/train',
+                'debug': '/mnt/hinoki/ueda/kwdlc/old/sample/train'
+            }
+        },
+        valid={
+            'local': {
+                'release': '/Users/NobuhiroUeda/Data/kwdlc/old/valid',
+                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid'
+            },
+            'server': {
+                'release': '/mnt/hinoki/ueda/kwdlc/new/valid',
+                'debug': '/mnt/hinoki/ueda/kwdlc/old/sample/valid'
+            }
+        },
+        test={
+            'local': {
+                'release': '/Users/NobuhiroUeda/Data/kwdlc/old/test',
+                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test'
+            },
+            'server': {
+                'release': '/mnt/hinoki/ueda/kwdlc/new/test',
+                'debug': '/mnt/hinoki/ueda/kwdlc/old/sample/test'
+            }
+        }
+    )
+
+    kc = CorpusPath(
+        train={
+            'local': {
+                'release': '/Users/NobuhiroUeda/Data/kc/split/train',
+                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kc/train'
+            },
+            'server': {
+                'release': '/mnt/hinoki/ueda/kc/split/train',
+                'debug': None
+            }
+        },
+        valid={
+            'local': {
+                'release': '/Users/NobuhiroUeda/Data/kc/split/valid',
+                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kc/valid'
+            },
+            'server': {
+                'release': '/mnt/hinoki/ueda/kc/split/valid',
+                'debug': None
+            }
+        },
+        test={
+            'local': {
+                'release': '/Users/NobuhiroUeda/Data/kc/split/test',
+                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kc/test'
+            },
+            'server': {
+                'release': '/mnt/hinoki/ueda/kc/split/test',
+                'debug': None
+            }
+        }
+    )
+
+    bert_model = BertPath()
+
+
+# path = Path(
+#     kwdlc=Path(
+#         train=Path(
+#             local=Path(
+#                 debug='/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
+#                 release='/Users/NobuhiroUeda/Data/kwdlc/old/train'),
+#             server=Path(
+#                 debug='/mnt/hinoki/ueda/kwdlc/old/sample/train',
+#                 release='/mnt/hinoki/ueda/kwdlc/new/train')
+#         ),
+#         valid=Path(
+#             local=Path(
+#                 debug='/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
+#                 release='/Users/NobuhiroUeda/Data/kwdlc/old/valid'),
+#             server=Path(
+#                 debug='/mnt/hinoki/ueda/kwdlc/old/sample/valid',
+#                 release='/mnt/hinoki/ueda/kwdlc/new/valid')
+#         ),
+#         test=Path(
+#             local=Path(
+#                 debug='',
+#                 release=''),
+#             server=Path(
+#                 debug='',
+#                 release=''
+#             )
+#         )
+#     ),
+#     kc=Path(
+#         train=Path(local=Path(),
+#                    server=Path()),
+#         valid=Path(local=Path(),
+#                    server=Path()),
+#         test=Path(local=Path(),
+#                   server=Path())
+#     )
+# )
 
 
 def main() -> None:
@@ -98,92 +214,100 @@ def main() -> None:
                         help='whether to save trained model')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='use small corpus file')
+    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], ngargs='*',
+                        help='corpus to use in training')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
     cases: List[str] = args.case_string.split(',')
-    train_dir = pathlib.Path(Path.train_dir_debug[args.env] if args.debug else Path.train_dir[args.env])
-    num_train_examples = len(list(train_dir.glob('*.knp')))
+    bert_model = Path.bert_model.get(args.env, large=args.use_bert_large)
 
     models: List[str] = args.model if type(args.model) == list else [args.model]
+    corpus_list: List[str] = args.corpus if type(args.corpus) == list else [args.corpus]
+    # corpus2path = {'kwdlc': Path.kwdlc.get('train', args.env, debug=args.debug),
+    #                'kc': Path.kc.get('train', args.env, debug=args.debug),
+    #                'all': Path.merged_train[args.env]}
     n_gpu: int = args.gpus
-    bert_model: dict = Path.bert_large_model if args.use_bert_large else Path.bert_model
 
-    for model in models:
+    for model, corpus in itertools.product(models, corpus_list):
         name = model + ('' if args.additional_name is None else args.additional_name)
+        train_kwdlc_dir = Path.kwdlc.get('train', args.env, debug=args.debug)
+        train_kc_dir = Path.kc.get('train', args.env, debug=args.debug)
+        num_train_examples = 0
+        if corpus in ['kwdlc', 'all']:
+            num_train_examples += len(list(train_kwdlc_dir.glob('*.knp')))
+        if corpus in ['kc', 'all']:
+            num_train_examples += len(list(train_kc_dir.glob('*.knp')))
 
         arch = {
             'type': model,
             'args': {
-                'bert_model': bert_model[args.env],
+                'bert_model': bert_model,
                 'parsing_algorithm': 'zhang',
                 'num_case': len(cases) if not args.coreference else len(cases) + 1,
                 'arc_representation_dim': 400,
             },
         }
-        train_dataset = {
+        dataset = {
             'type': 'PASDataset',
             'args': {
-                'path': Path.train_dir_debug[args.env] if args.debug else Path.train_dir[args.env],
+                'path': None,
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
                 'coreference': args.coreference,
                 'exophors': args.exophors.split(','),
-                'training': True,
-                'bert_model': bert_model[args.env],
+                'training': None,
+                'bert_model': bert_model,
+                'kc': None
             },
         }
-        valid_dataset = {
-            'type': 'PASDataset',
-            'args': {
-                'path': Path.valid_dir_debug[args.env] if args.debug else Path.valid_dir[args.env],
-                'max_seq_length': args.max_seq_length,
-                'cases': cases,
-                'coreference': args.coreference,
-                'exophors': args.exophors.split(','),
-                'training': False,
-                'bert_model': bert_model[args.env],
-            },
-        }
-        test_dataset = {
-            'type': 'PASDataset',
-            'args': {
-                'path': Path.test_dir_debug[args.env] if args.debug else Path.test_dir[args.env],
-                'max_seq_length': args.max_seq_length,
-                'cases': cases,
-                'coreference': args.coreference,
-                'exophors': args.exophors.split(','),
-                'training': False,
-                'bert_model': bert_model[args.env],
-            },
-        }
-        train_data_loader = {
+
+        train_kwdlc_dataset = dataset.copy()
+        train_kwdlc_dataset['args']['path'] = train_kwdlc_dir if corpus in ['kwdlc', 'all'] else None
+        train_kwdlc_dataset['args']['training'] = True
+        train_kwdlc_dataset['args']['kc'] = False
+
+        valid_kwdlc_dataset = dataset.copy()
+        valid_kwdlc_dataset['args']['path'] = Path.kwdlc.get('valid', args.env, args.debug)
+        valid_kwdlc_dataset['args']['training'] = False
+        valid_kwdlc_dataset['args']['kc'] = False
+
+        test_kwdlc_dataset = dataset.copy()
+        test_kwdlc_dataset['args']['path'] = Path.kwdlc.get('test', args.env, args.debug)
+        test_kwdlc_dataset['args']['training'] = False
+        test_kwdlc_dataset['args']['kc'] = False
+
+        train_kc_dataset = train_kwdlc_dataset.copy()
+        train_kc_dataset['args']['path'] = train_kc_dir if corpus in ['kc', 'all'] else None
+        train_kc_dataset['args']['kc'] = True
+
+        valid_kc_dataset = valid_kwdlc_dataset.copy()
+        valid_kc_dataset['args']['path'] = Path.kc.get('valid', args.env, args.debug)
+        valid_kc_dataset['args']['kc'] = True
+
+        test_kc_dataset = test_kwdlc_dataset.copy()
+        test_kc_dataset['args']['path'] = Path.kc.get('test', args.env, args.debug)
+        test_kc_dataset['args']['kc'] = True
+
+        data_loader = {
             'type': 'ConllDataLoader',
             'args': {
                 'batch_size': args.batch_size,
-                'shuffle': True,
+                'shuffle': None,
                 'validation_split': 0.0,
                 'num_workers': 2,
             },
         }
-        valid_data_loader = {
-            'type': 'ConllDataLoader',
-            'args': {
-                'batch_size': args.batch_size,
-                'shuffle': False,
-                'validation_split': 0.0,
-                'num_workers': 2,
-            },
-        }
-        test_data_loader = {
-            'type': 'ConllDataLoader',
-            'args': {
-                'batch_size': args.batch_size,
-                'shuffle': False,
-                'validation_split': 0.0,
-                'num_workers': 2,
-            },
-        }
+
+        train_data_loader = data_loader.copy()
+        train_data_loader['args']['shuffle'] = True
+
+        valid_data_loader = data_loader.copy()
+        valid_data_loader['args']['shuffle'] = False
+
+        test_data_loader = data_loader.copy()
+        test_data_loader['args']['shuffle'] = False
+
         optimizer = {
             'type': 'AdamW',
             'args': {
@@ -232,13 +356,15 @@ def main() -> None:
             name=name,
             n_gpu=n_gpu,
             arch=arch,
-            train_dataset=train_dataset,
+            train_kwdlc_dataset=train_kwdlc_dataset,
+            train_kc_dataset=train_kc_dataset,
+            valid_kwdlc_dataset=valid_kwdlc_dataset,
+            valid_kc_dataset=valid_kc_dataset,
+            test_kwdlc_dataset=test_kwdlc_dataset,
+            test_kc_dataset=test_kc_dataset,
             train_data_loader=train_data_loader,
-            valid_dataset=valid_dataset,
             valid_data_loader=valid_data_loader,
-            test_dataset=test_dataset,
             test_data_loader=test_data_loader,
-            # drawer=drawer,
             optimizer=optimizer,
             loss=loss,
             metrics=metrics,
