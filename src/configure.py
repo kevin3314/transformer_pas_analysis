@@ -1,7 +1,7 @@
 import os
 import json
 import math
-# import pathlib
+import pathlib
 import argparse
 from typing import List
 import itertools
@@ -53,17 +53,6 @@ class Path:
 
         def get(self, env: str, large: bool = False):
             return self.path[env]['large' if large else 'base']
-
-    # def __init__(self, type_ = None, **paths):
-    #     self.name = 'set'
-    #     for key, path in paths.items():
-    #         setattr(self, key, path)
-    #
-    # def get(self, *args, **kwargs):
-    #     v = kwargs[self.name]
-    #     # remove self.name from dict
-    #     # k, v = list(kwargs.items())[0]
-    #     return getattr(self, v).get(kwargs)
 
     kwdlc = CorpusPath(
         train={
@@ -134,45 +123,6 @@ class Path:
     bert_model = BertPath()
 
 
-# path = Path(
-#     kwdlc=Path(
-#         train=Path(
-#             local=Path(
-#                 debug='/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train',
-#                 release='/Users/NobuhiroUeda/Data/kwdlc/old/train'),
-#             server=Path(
-#                 debug='/mnt/hinoki/ueda/kwdlc/old/sample/train',
-#                 release='/mnt/hinoki/ueda/kwdlc/new/train')
-#         ),
-#         valid=Path(
-#             local=Path(
-#                 debug='/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid',
-#                 release='/Users/NobuhiroUeda/Data/kwdlc/old/valid'),
-#             server=Path(
-#                 debug='/mnt/hinoki/ueda/kwdlc/old/sample/valid',
-#                 release='/mnt/hinoki/ueda/kwdlc/new/valid')
-#         ),
-#         test=Path(
-#             local=Path(
-#                 debug='',
-#                 release=''),
-#             server=Path(
-#                 debug='',
-#                 release=''
-#             )
-#         )
-#     ),
-#     kc=Path(
-#         train=Path(local=Path(),
-#                    server=Path()),
-#         valid=Path(local=Path(),
-#                    server=Path()),
-#         test=Path(local=Path(),
-#                   server=Path())
-#     )
-# )
-
-
 def main() -> None:
     all_models = ['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel']
     parser = argparse.ArgumentParser()
@@ -214,7 +164,7 @@ def main() -> None:
                         help='whether to save trained model')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='use small corpus file')
-    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], ngargs='*',
+    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
                         help='corpus to use in training')
     args = parser.parse_args()
 
@@ -224,20 +174,17 @@ def main() -> None:
 
     models: List[str] = args.model if type(args.model) == list else [args.model]
     corpus_list: List[str] = args.corpus if type(args.corpus) == list else [args.corpus]
-    # corpus2path = {'kwdlc': Path.kwdlc.get('train', args.env, debug=args.debug),
-    #                'kc': Path.kc.get('train', args.env, debug=args.debug),
-    #                'all': Path.merged_train[args.env]}
     n_gpu: int = args.gpus
 
     for model, corpus in itertools.product(models, corpus_list):
-        name = model + ('' if args.additional_name is None else args.additional_name)
+        name = f'{model}-{corpus}' + ('' if args.additional_name is None else args.additional_name)
         train_kwdlc_dir = Path.kwdlc.get('train', args.env, debug=args.debug)
         train_kc_dir = Path.kc.get('train', args.env, debug=args.debug)
         num_train_examples = 0
         if corpus in ['kwdlc', 'all']:
-            num_train_examples += len(list(train_kwdlc_dir.glob('*.knp')))
+            num_train_examples += len(list(pathlib.Path(train_kwdlc_dir).glob('*.knp')))
         if corpus in ['kc', 'all']:
-            num_train_examples += len(list(train_kc_dir.glob('*.knp')))
+            num_train_examples += len(list(pathlib.Path(train_kc_dir).glob('*.knp')))
 
         arch = {
             'type': model,
