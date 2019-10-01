@@ -1,5 +1,5 @@
 from base import BaseDataLoader
-from data_loader.dataset import PASDataset
+from data_loader.dataset.dataset import PASDataset
 
 
 class ConllDataLoader(BaseDataLoader):
