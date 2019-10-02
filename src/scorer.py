@@ -41,7 +41,7 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
-            last_sid = document_gold.sentences[-1].sid
+            last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
             for pas in document_pred.pas_list():
                 if process_all or (pas.sid == last_sid):
                     self.sid2predicates_pred[pas.sid].append(pas.predicate)
@@ -64,19 +64,15 @@ class Scorer:
             #         assert predicate in document_gold.tag2dtid
 
             process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
-            last_sid = document_pred.sentences[-1].sid
-            # make dtid2pred_pred
+            last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+            # make dtid2pred_pred and dtid2pred_pred
             dtid2pred_pred: Dict[int, Tag] = {}
-            for sid in document_pred.sid2sentence.keys():
+            dtid2pred_gold: Dict[int, Tag] = {}
+            for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
                 if not (process_all or (sid == last_sid)):
                     continue
                 for tag in self.sid2predicates_pred[sid]:
                     dtid2pred_pred.update({document_pred.tag2dtid[tag]: tag})
-            # make dtid2pred_gold
-            dtid2pred_gold: Dict[int, Tag] = {}
-            for sid in document_gold.sid2sentence.keys():
-                if not (process_all or (sid == last_sid)):
-                    continue
                 for tag in self.sid2predicates_gold[sid]:
                     dtid2pred_gold.update({document_gold.tag2dtid[tag]: tag})
 

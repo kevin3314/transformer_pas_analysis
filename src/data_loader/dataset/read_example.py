@@ -40,7 +40,7 @@ def read_example(document: Document,
                  kc: bool
                  ) -> PasExample:
     process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
-    last_sent = document.sentences[-1]
+    last_sent = document.sentences[-1] if len(document) > 0 else None
     cases = document.target_cases
     words, dtids, ddeps, arguments_set, arg_candidates_set = [], [], [], [], []
     dmid = 0
