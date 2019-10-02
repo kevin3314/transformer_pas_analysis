@@ -25,11 +25,11 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
 
-    def _eval_metrics(self, result: dict):
+    def _eval_metrics(self, result: dict, label: str):
         f1_metrics = np.zeros(len(self.metrics))
         for i, metric in enumerate(self.metrics):
             f1_metrics[i] += metric(result)
-            self.writer.add_scalar('{}'.format(metric.__name__), f1_metrics[i])
+            self.writer.add_scalar('{}_{}'.format(label, metric.__name__), f1_metrics[i])
         return f1_metrics
 
     def _train_epoch(self, epoch):
@@ -86,11 +86,11 @@ class Trainer(BaseTrainer):
 
         if self.valid_kwdlc_data_loader is not None:
             val_log = self._valid_epoch(epoch, self.valid_kwdlc_data_loader, 'kwdlc')
-            log.update(val_log)
+            log.update(**{'val_kwdlc_'+k: v for k, v in val_log.items()})
 
         if self.valid_kc_data_loader is not None:
             val_log = self._valid_epoch(epoch, self.valid_kc_data_loader, 'kc')
-            log.update(val_log)
+            log.update(**{'val_kc_'+k: v for k, v in val_log.items()})
 
         return log
 
@@ -134,13 +134,13 @@ class Trainer(BaseTrainer):
         scorer.write_html(self.config.save_dir / f'result_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
 
-        val_metrics = self._eval_metrics(scorer.result_dict())
+        val_metrics = self._eval_metrics(scorer.result_dict(), label)
 
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')
 
-        return {
-            'val_loss': total_val_loss / valid_data_loader.n_samples,
-            'val_metrics': val_metrics
-        }
+        log = {'loss': total_val_loss / valid_data_loader.n_samples}
+        log.update(dict(zip([met.__name__ for met in self.metrics], val_metrics)))
+
+        return log

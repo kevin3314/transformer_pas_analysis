@@ -298,7 +298,7 @@ def main() -> None:
             'save_period': 1,
             'save_model': not args.no_save_model,
             'verbosity': 2,
-            'monitor': 'max val_zero_anaphora_f1',
+            'monitor': 'max val_kwdlc_zero_anaphora_f1',
             'early_stop': 10,
             'tensorboard': True,
         }

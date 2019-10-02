@@ -53,6 +53,7 @@ class BaseTrainer:
     def _train_epoch(self, epoch):
         """
         Training logic for an epoch
+
         :param epoch: Current epoch number
         """
         raise NotImplementedError
@@ -67,13 +68,7 @@ class BaseTrainer:
 
             # save logged informations into log dict
             log = {'epoch': epoch}
-            for key, value in result.items():
-                if key == 'metrics':
-                    log.update({mtr.__name__: value[i] for i, mtr in enumerate(self.metrics)})
-                elif key == 'val_metrics':
-                    log.update({'val_' + mtr.__name__: value[i] for i, mtr in enumerate(self.metrics)})
-                else:
-                    log[key] = value
+            log.update(result)
 
             # print logged information to the screen
             for key, value in log.items():
@@ -127,6 +122,7 @@ class BaseTrainer:
     def _save_checkpoint(self, epoch, save_best=False):
         """
         Saving checkpoints
+
         :param epoch: current epoch number
         :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
         """
@@ -150,6 +146,7 @@ class BaseTrainer:
     def _resume_checkpoint(self, resume_path):
         """
         Resume from saved checkpoints
+
         :param resume_path: Checkpoint path to be resumed
         """
         resume_path = str(resume_path)
