@@ -131,7 +131,7 @@ def main() -> None:
                         help='path to output directory')
     parser.add_argument('--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
-    parser.add_argument('--epoch', '-e', type=int, default=3,
+    parser.add_argument('--epoch', '-e', type=int, default=3, nargs='*',
                         help='number of training epochs')
     parser.add_argument('--batch-size', '-b', type=int, default=32,
                         help='number of batch size')
@@ -175,10 +175,11 @@ def main() -> None:
 
     models: List[str] = args.model if type(args.model) == list else [args.model]
     corpus_list: List[str] = args.corpus if type(args.corpus) == list else [args.corpus]
+    epochs: List[int] = args.epoch if type(args.epoch) == list else [args.epoch]
     n_gpu: int = args.gpus
 
-    for model, corpus in itertools.product(models, corpus_list):
-        name = f'{model}-{corpus}' + ('' if args.additional_name is None else args.additional_name)
+    for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
+        name = f'{model}-{corpus}-{n_epoch}e' + ('' if args.additional_name is None else args.additional_name)
         train_kwdlc_dir = Path.kwdlc.get('train', args.env, debug=args.debug)
         train_kc_dir = Path.kc.get('train', args.env, debug=args.debug)
         num_train_examples = 0
@@ -283,7 +284,7 @@ def main() -> None:
             'zero_anaphora_f1_exophora',
             'zero_anaphora_f1',
         ]
-        t_total = math.ceil(num_train_examples / args.batch_size) * args.epoch
+        t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
         lr_scheduler = {
             'type': 'WarmupLinearSchedule',
             'args': {
@@ -292,7 +293,7 @@ def main() -> None:
             }
         }
         trainer = {
-            'epochs': args.epoch,
+            'epochs': n_epoch,
             'save_dir': 'result/',
             'save_period': 1,
             'save_model': not args.no_save_model,
