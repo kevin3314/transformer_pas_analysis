@@ -25,10 +25,15 @@ def main(config):
     logger = config.get_logger('train')
 
     # setup data_loader instances
-    train_kwdlc_dataset = config.initialize('train_kwdlc_dataset', module_dataset)
-    train_kc_dataset = config.initialize('train_kc_dataset', module_dataset)
-    train_data_loader = config.initialize('train_data_loader', module_loader, train_kwdlc_dataset)
-    train_data_loader.add(train_kc_dataset)
+    if config['train_kwdlc_dataset']['args']['path'] is not None:
+        train_kwdlc_dataset = config.initialize('train_kwdlc_dataset', module_dataset)
+        train_data_loader = config.initialize('train_data_loader', module_loader, train_kwdlc_dataset)
+        if config['train_kc_dataset']['args']['path'] is not None:
+            train_kc_dataset = config.initialize('train_kc_dataset', module_dataset)
+            train_data_loader.add(train_kc_dataset)
+    else:
+        train_kc_dataset = config.initialize('train_kc_dataset', module_dataset)
+        train_data_loader = config.initialize('train_data_loader', module_loader, train_kc_dataset)
     valid_kwdlc_dataset = config.initialize('valid_kwdlc_dataset', module_dataset)
     valid_kc_dataset = config.initialize('valid_kc_dataset', module_dataset)
     valid_kwdlc_data_loader = config.initialize('valid_data_loader', module_loader, valid_kwdlc_dataset)
@@ -36,7 +41,7 @@ def main(config):
 
     # build model architecture, then print to console
     model = config.initialize('arch', module_arch)
-    model.expand_vocab(train_kwdlc_dataset.num_special_tokens)  # same as that in dataset.py. TODO: consider resume case
+    model.expand_vocab(valid_kwdlc_dataset.num_special_tokens)  # same as that in dataset.py. TODO: consider resume case
     logger.info(model)
 
     # get function handles of loss and metrics
