@@ -14,13 +14,14 @@ class Trainer(BaseTrainer):
     Note:
         Inherited from BaseTrainer.
     """
-    def __init__(self, model, loss, metrics, optimizer, config, data_loader, valid_data_loader,
-                 lr_scheduler=None):
+    def __init__(self, model, loss, metrics, optimizer, config,
+                 data_loader, valid_kwdlc_data_loader, valid_kc_data_loader, lr_scheduler=None):
         super().__init__(model, loss, metrics, optimizer, config)
         self.config = config
         self.data_loader = data_loader
-        self.valid_data_loader = valid_data_loader
-        self.do_validation = self.valid_data_loader is not None
+        self.valid_kwdlc_data_loader = valid_kwdlc_data_loader
+        self.valid_kc_data_loader = valid_kc_data_loader
+        # self.do_validation = (self.valid_kwdlc_data_loader is not None) or (self.valid_kc_data_loader is not None)
         self.lr_scheduler = lr_scheduler
         self.log_step = int(np.sqrt(data_loader.batch_size))
 
@@ -83,13 +84,17 @@ class Trainer(BaseTrainer):
             # 'metrics': (total_metrics / len(self.data_loader)).tolist()
         }
 
-        if self.do_validation:
-            val_log = self._valid_epoch(epoch)
-            log = {**log, **val_log}
+        if self.valid_kwdlc_data_loader is not None:
+            val_log = self._valid_epoch(epoch, self.valid_kwdlc_data_loader, 'kwdlc')
+            log.update(val_log)
+
+        if self.valid_kc_data_loader is not None:
+            val_log = self._valid_epoch(epoch, self.valid_kc_data_loader, 'kc')
+            log.update(val_log)
 
         return log
 
-    def _valid_epoch(self, epoch):
+    def _valid_epoch(self, epoch, valid_data_loader, label):
         """
         Validate after training an epoch
         :return: A log that contains information about validation
@@ -101,8 +106,7 @@ class Trainer(BaseTrainer):
         # total_val_metrics = np.zeros(len(self.metrics))
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps)\
-                    in enumerate(self.valid_data_loader):
+            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(valid_data_loader):
                 input_ids = input_ids.to(self.device)          # (b, seq)
                 input_mask = input_mask.to(self.device)        # (b, seq)
                 arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
@@ -118,17 +122,17 @@ class Trainer(BaseTrainer):
                 loss = self.loss(output, arguments_ids, deps)
                 total_val_loss += loss.item() * input_ids.size(0)
 
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                self.writer.add_scalar('loss', loss.item())
+                self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')
+                self.writer.add_scalar('loss_' + label, loss.item())
                 # total_val_metrics += self._eval_metrics(output, target)
 
-        prediction_output_dir = self.config.save_dir / 'valid_out_knp'
-        prediction_writer = PredictionKNPWriter(self.valid_data_loader.dataset, self.logger)
-        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
+        # prediction_output_dir = self.config.save_dir / 'valid_out_knp'
+        prediction_writer = PredictionKNPWriter(valid_data_loader.dataset, self.logger)
+        documents_pred = prediction_writer.write(arguments_sets, None)
 
-        scorer = Scorer(documents_pred, self.valid_data_loader.dataset.reader)
-        scorer.write_html(self.config.save_dir / 'result.html')
-        scorer.export_txt(self.config.save_dir / 'result.txt')
+        scorer = Scorer(documents_pred, valid_data_loader.dataset.reader, valid_data_loader.dataset.kc)
+        scorer.write_html(self.config.save_dir / f'result_{label}.html')
+        scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
 
         val_metrics = self._eval_metrics(scorer.result_dict())
 
@@ -137,6 +141,6 @@ class Trainer(BaseTrainer):
             self.writer.add_histogram(name, p, bins='auto')
 
         return {
-            'val_loss': total_val_loss / self.valid_data_loader.n_samples,
+            'val_loss': total_val_loss / valid_data_loader.n_samples,
             'val_metrics': val_metrics
         }

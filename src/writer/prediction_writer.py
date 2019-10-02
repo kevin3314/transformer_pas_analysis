@@ -12,7 +12,7 @@ from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document, Pas, Argument
 
 class PredictionKNPWriter:
     rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
-    tag_pat = re.compile(r'^\+ (-?\d)+\w ?')
+    tag_pat = re.compile(r'^\+ -?\d+\w ?')
     case_analysis_pat = re.compile(r'<格解析結果:(.+?)>')
 
     def __init__(self,
@@ -20,12 +20,13 @@ class PredictionKNPWriter:
                  logger: Logger,
                  ) -> None:
         self.gold_arguments_sets: List[List[Dict[str, Optional[str]]]] = \
-            [example.arguments_set for example in dataset.pas_examples]
+            [example.arguments_set for example in dataset.examples]
         self.all_features: List[InputFeatures] = dataset.features
         self.reader: KWDLCReader = dataset.reader
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
-        self.input_files: List[Path] = list(dataset.reader.did2path.values())
+        self.dids = [example.doc_id for example in dataset.examples]
+        self.did2path: Dict[str, Path] = dataset.reader.did2path
         self.dtid2cfid: Dict[int, str] = {}
         self.logger = logger
 
@@ -42,8 +43,9 @@ class PredictionKNPWriter:
             self.logger.warning('invalid output destination')
 
         documents_pred: List[Document] = []
-        for input_file, features, arguments_set, gold_arguments_set in \
-                zip(self.input_files, self.all_features, arguments_sets, self.gold_arguments_sets):
+        for did, features, arguments_set, gold_arguments_set in \
+                zip(self.dids, self.all_features, arguments_sets, self.gold_arguments_sets):
+            input_file = self.did2path[did]
             if input_file is not None:
                 document = self.reader.process_document(input_file.stem)
                 with input_file.open() as fin:

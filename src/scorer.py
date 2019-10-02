@@ -17,24 +17,13 @@ logger.setLevel(logging.WARNING)
 
 
 class Scorer:
-    def __init__(self, documents_pred: List[Document], reader_gold: KWDLCDirectoryReader):
+    def __init__(self, documents_pred: List[Document], reader_gold: KWDLCDirectoryReader, kc: bool = False):
 
-        assert sorted(doc.doc_id for doc in documents_pred) == sorted(reader_gold.did2path.keys())
+        assert set(doc.doc_id for doc in documents_pred) <= set(reader_gold.did2path.keys())  # too long doc is ignored
         self.cases = reader_gold.target_cases
-        self.doc_ids: List[str] = list(reader_gold.did2path.keys())
+        self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in reader_gold.process_all_documents()}
-        self.sid2predicates_pred: Dict[str, List[Tag]] = OrderedDefaultDict(list)
-        self.sid2predicates_gold: Dict[str, List[Tag]] = OrderedDefaultDict(list)
-        for pas in [pas for doc in self.did2document_pred.values() for pas in doc.pas_list()]:
-            self.sid2predicates_pred[pas.sid].append(pas.predicate)
-        for pas in [pas for doc in self.did2document_gold.values() for pas in doc.pas_list()]:
-            tag = pas.predicate
-            if '<用言:' in tag.fstring \
-                    and '<省略解析なし>' not in tag.fstring \
-                    and any('<内容語>' in mrph.fstring for mrph in tag.mrph_list()):
-                self.sid2predicates_gold[pas.sid].append(tag)
-
         self.measures: Dict[str, Dict[str, Measure]] = \
             OrderedDict((case, OrderedDefaultDict(lambda: Measure())) for case in self.cases)
         self.comp_result = {}
@@ -43,15 +32,60 @@ class Scorer:
                                  'inter': 'zero_inter_sentential',
                                  'exo': 'zero_exophora'}
 
+        # for pas in [pas for doc in self.did2document_pred.values() for pas in doc.pas_list()]:
+        #     self.sid2predicates_pred[pas.sid].append(pas.predicate)
+        # make sid2predicates_pred and sid2predicates_gold
+        self.sid2predicates_pred: Dict[str, List[Tag]] = OrderedDefaultDict(list)
+        self.sid2predicates_gold: Dict[str, List[Tag]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
-            dtid2pred_pred: Dict[int, Tag] = {document_pred.tag2dtid[tag]: tag
-                                              for sid in document_pred.sid2sentence.keys()
-                                              for tag in self.sid2predicates_pred[sid]}
-            dtid2pred_gold: Dict[int, Tag] = {document_gold.tag2dtid[tag]: tag
-                                              for sid in document_gold.sid2sentence.keys()
-                                              for tag in self.sid2predicates_gold[sid]}
+            process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
+            last_sid = document_gold.sentences[-1].sid
+            for pas in document_pred.pas_list():
+                if process_all or (pas.sid == last_sid):
+                    self.sid2predicates_pred[pas.sid].append(pas.predicate)
+
+            for pas in document_gold.pas_list():
+                process: bool = process_all or (pas.sid == last_sid)
+                tag = pas.predicate
+                if '<用言:' in tag.fstring \
+                        and '<省略解析なし>' not in tag.fstring \
+                        and any('<内容語>' in mrph.fstring for mrph in tag.mrph_list())\
+                        and process is True:
+                    self.sid2predicates_gold[pas.sid].append(tag)
+
+        for doc_id in self.doc_ids:
+            document_pred = self.did2document_pred[doc_id]
+            document_gold = self.did2document_gold[doc_id]
+            # for sid, sentnece in document_gold.sid2sentence.items():
+            #     predicates = self.sid2predicates_gold[sid]
+            #     for predicate in predicates:
+            #         assert predicate in document_gold.tag2dtid
+
+            process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
+            last_sid = document_pred.sentences[-1].sid
+            # make dtid2pred_pred
+            dtid2pred_pred: Dict[int, Tag] = {}
+            for sid in document_pred.sid2sentence.keys():
+                if not (process_all or (sid == last_sid)):
+                    continue
+                for tag in self.sid2predicates_pred[sid]:
+                    dtid2pred_pred.update({document_pred.tag2dtid[tag]: tag})
+            # make dtid2pred_gold
+            dtid2pred_gold: Dict[int, Tag] = {}
+            for sid in document_gold.sid2sentence.keys():
+                if not (process_all or (sid == last_sid)):
+                    continue
+                for tag in self.sid2predicates_gold[sid]:
+                    dtid2pred_gold.update({document_gold.tag2dtid[tag]: tag})
+
+            # dtid2pred_pred: Dict[int, Tag] = {document_pred.tag2dtid[tag]: tag
+            #                                   for sid in document_pred.sid2sentence.keys()
+            #                                   for tag in self.sid2predicates_pred[sid]}
+            # dtid2pred_gold: Dict[int, Tag] = {document_gold.tag2dtid[tag]: tag
+            #                                   for sid in document_gold.sid2sentence.keys()
+            #                                   for tag in self.sid2predicates_gold[sid]}
 
             # calculate precision
             for dtid, predicate_pred in dtid2pred_pred.items():

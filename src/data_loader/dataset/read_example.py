@@ -15,12 +15,14 @@ class PasExample:
                  arg_candidates_set: List[List[int]],
                  dtids: List[int],
                  ddeps: List[int],
+                 doc_id: str,
                  ) -> None:
         self.words = words
         self.arguments_set = arguments_set
         self.arg_candidates_set = arg_candidates_set
-        self.dtids = dtids
-        self.ddeps = ddeps
+        self.dtids = dtids  # dmid -> dtid
+        self.ddeps = ddeps  # dmid -> dmid which has dep
+        self.doc_id = doc_id
 
     def __str__(self):
         return self.__repr__()
@@ -31,7 +33,6 @@ class PasExample:
             pad = ' ' * (5 - len(word)) * 2
             string += f'{i:02} {word}{pad}({" ".join(f"{case}:{arg}" for case, arg in args.items())})\n'
         return string
-        # return f'word: {" ".join(self.words)}, arguments: {" ".join(args.__repr__() for args in self.arguments_set)}'
 
 
 def read_example(document: Document,
@@ -97,7 +98,7 @@ def read_example(document: Document,
                 arg_candidates_set.append(arg_candidates)
                 dmid += 1
 
-    return PasExample(words, arguments_set, arg_candidates_set, dtids, ddeps)
+    return PasExample(words, arguments_set, arg_candidates_set, dtids, ddeps, document.doc_id)
 
 
 def get_head_dmids(sentence: BList, mrph2dmid: dict) -> List[int]:

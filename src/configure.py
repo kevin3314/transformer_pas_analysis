@@ -1,6 +1,7 @@
 import os
 import json
 import math
+import copy
 import pathlib
 import argparse
 from typing import List
@@ -209,30 +210,31 @@ def main() -> None:
             },
         }
 
-        train_kwdlc_dataset = dataset.copy()
+        train_kwdlc_dataset = copy.deepcopy(dataset)
+
         train_kwdlc_dataset['args']['path'] = train_kwdlc_dir if corpus in ['kwdlc', 'all'] else None
         train_kwdlc_dataset['args']['training'] = True
         train_kwdlc_dataset['args']['kc'] = False
 
-        valid_kwdlc_dataset = dataset.copy()
+        valid_kwdlc_dataset = copy.deepcopy(dataset)
         valid_kwdlc_dataset['args']['path'] = Path.kwdlc.get('valid', args.env, args.debug)
         valid_kwdlc_dataset['args']['training'] = False
         valid_kwdlc_dataset['args']['kc'] = False
 
-        test_kwdlc_dataset = dataset.copy()
+        test_kwdlc_dataset = copy.deepcopy(dataset)
         test_kwdlc_dataset['args']['path'] = Path.kwdlc.get('test', args.env, args.debug)
         test_kwdlc_dataset['args']['training'] = False
         test_kwdlc_dataset['args']['kc'] = False
 
-        train_kc_dataset = train_kwdlc_dataset.copy()
+        train_kc_dataset = copy.deepcopy(train_kwdlc_dataset)
         train_kc_dataset['args']['path'] = train_kc_dir if corpus in ['kc', 'all'] else None
         train_kc_dataset['args']['kc'] = True
 
-        valid_kc_dataset = valid_kwdlc_dataset.copy()
+        valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
         valid_kc_dataset['args']['path'] = Path.kc.get('valid', args.env, args.debug)
         valid_kc_dataset['args']['kc'] = True
 
-        test_kc_dataset = test_kwdlc_dataset.copy()
+        test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
         test_kc_dataset['args']['path'] = Path.kc.get('test', args.env, args.debug)
         test_kc_dataset['args']['kc'] = True
 
@@ -246,13 +248,13 @@ def main() -> None:
             },
         }
 
-        train_data_loader = data_loader.copy()
+        train_data_loader = copy.deepcopy(data_loader)
         train_data_loader['args']['shuffle'] = True
 
-        valid_data_loader = data_loader.copy()
+        valid_data_loader = copy.deepcopy(data_loader)
         valid_data_loader['args']['shuffle'] = False
 
-        test_data_loader = data_loader.copy()
+        test_data_loader = copy.deepcopy(data_loader)
         test_data_loader['args']['shuffle'] = False
 
         optimizer = {
