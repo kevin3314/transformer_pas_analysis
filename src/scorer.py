@@ -27,10 +27,10 @@ class Scorer:
         self.measures: Dict[str, Dict[str, Measure]] = \
             OrderedDict((case, OrderedDefaultDict(lambda: Measure())) for case in self.cases)
         self.comp_result = {}
-        self.deptype2analysis = {'dep': 'case_analysis',
-                                 'intra': 'zero_intra_sentential',
-                                 'inter': 'zero_inter_sentential',
-                                 'exo': 'zero_exophora'}
+        self.deptype2analysis = OrderedDict([('dep', 'case_analysis'),
+                                             ('intra', 'zero_intra_sentential'),
+                                             ('inter', 'zero_inter_sentential'),
+                                             ('exo', 'zero_exophora')])
 
         # for pas in [pas for doc in self.did2document_pred.values() for pas in doc.pas_list()]:
         #     self.sid2predicates_pred[pas.sid].append(pas.predicate)
@@ -51,7 +51,6 @@ class Scorer:
                 tag = pas.predicate
                 if '<用言:' in tag.fstring \
                         and '<省略解析なし>' not in tag.fstring \
-                        and any('<内容語>' in mrph.fstring for mrph in tag.mrph_list())\
                         and process is True:
                     self.sid2predicates_gold[pas.sid].append(tag)
 
