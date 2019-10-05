@@ -22,7 +22,7 @@ def test_pas(fixture_kwdlc_reader: KWDLCReader):
 
     arguments = document.get_arguments(predicates[1])
     assert predicates[1].midasi == '行う。'
-    assert len([_ for args in arguments.values() for _ in args]) == 2
+    assert len([_ for args in arguments.values() for _ in args]) == 4
     assert tuple(arguments['ガ'][0]) == (None, None, '不特定:人', None, 'exo', '')
     # assert tuple(arguments['ヲ'][0]) == (sid1, 1, 'トス', 1, 'overt', '')  # 最新版はこっち
     assert tuple(arguments['ヲ'][0]) == (sid1, 1, 'コイントス', 1, 'overt', '')
@@ -89,7 +89,7 @@ def test_pas(fixture_kwdlc_reader: KWDLCReader):
 
     arguments = document.get_arguments(predicates[10])
     assert predicates[10].midasi == '使用する事ができる。'
-    assert len([_ for args in arguments.values() for _ in args]) == 3
+    assert len([_ for args in arguments.values() for _ in args]) == 5
     assert tuple(arguments['ガ'][0]) == (None, None, '不特定:人', None, 'exo', '')
     assert tuple(arguments['ヲ'][0]) == (sid3, 1, '効果', 11, 'dep', '')
     assert tuple(arguments['ニ'][0]) == (sid3, 6, 'メインフェイズ', 16, 'overt', '')

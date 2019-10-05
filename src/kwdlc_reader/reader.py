@@ -268,12 +268,12 @@ class Document:
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
             dtid = self.tag2dtid[tag]
-            if tag.features.rels is None:
+            rels = self._extract_rel_tags(tag)
+            if not rels:
                 logger.debug(f'Tag: "{tag.midasi}" has no relation tags.')
                 continue
             pas = Pas(tag, dtid, tag2sid[tag], self.mrph2dmid)
-            for rel in tag.features.rels:
-                assert rel.ignore is False
+            for rel in rels:
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'sentence: {rel.sid} not found in {self.doc_id}')
                     continue
@@ -305,6 +305,24 @@ class Document:
 
             if pas.arguments:
                 self._pas[dtid] = pas
+
+    # to extract rels with mode: '?', rewrite initializer of pyknp Futures class
+    @staticmethod
+    def _extract_rel_tags(tag: Tag) -> List[Rel]:
+        splitter = "><"
+        rels = []
+        spec = tag.fstring
+
+        tag_start = 1
+        tag_end = None
+        while tag_end != -1:
+            tag_end = spec.find(splitter, tag_start)
+            if spec[tag_start:].startswith('rel '):
+                rel = Rel(spec[tag_start:tag_end])
+                rels.append(rel)
+
+            tag_start = tag_end + len(splitter)
+        return rels
 
     def _add_corefs(self,
                     source_sid: str,
