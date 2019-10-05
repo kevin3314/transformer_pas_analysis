@@ -95,7 +95,7 @@ class Scorer:
                     args_gold: List[Argument] = arguments_gold[case] if arguments_gold is not None else []
                     if not args_pred:
                         continue
-                    assert len(args_pred) == 1
+                    assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                     arg = args_pred[0]
                     if arg.dep_type == 'overt':  # ignore overt case
                         self.comp_result[(doc_id, dtid, case)] = 'overt'
