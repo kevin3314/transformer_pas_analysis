@@ -50,7 +50,6 @@ class Scorer:
                 process: bool = process_all or (pas.sid == last_sid)
                 tag = pas.predicate
                 if '<用言:' in tag.fstring \
-                        and '<省略解析なし>' not in tag.fstring \
                         and process is True:
                     self.sid2predicates_gold[pas.sid].append(tag)
 
