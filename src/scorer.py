@@ -85,62 +85,53 @@ class Scorer:
 
             # calculate precision
             for dtid, predicate_pred in dtid2pred_pred.items():
+                arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
+                arguments_gold = None
                 if dtid in dtid2pred_gold:
                     predicate_gold = dtid2pred_gold[dtid]
-                    arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
                     arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
-                    for case in self.cases:
-                        argument_pred: List[Argument] = arguments_pred[case]
-                        argument_gold: List[Argument] = arguments_gold[case]
-                        if not argument_pred:
-                            continue
-                        assert len(argument_pred) == 1
-                        arg = argument_pred[0]
-                        if arg.dep_type == 'overt':  # ignore overt case
-                            self.comp_result[(doc_id, dtid, case)] = 'overt'
-                            continue
-                        analysis = self.deptype2analysis[arg.dep_type]
-                        if arg in argument_gold:
-                            self.measures[case][analysis].correct += 1
-                            self.comp_result[(doc_id, dtid, case)] = analysis
-                        else:
-                            self.comp_result[(doc_id, dtid, case)] = 'wrong'
-                        self.measures[case][analysis].denom_pred += 1
-                        # if arg in argument_gold:
-                        #     if arg.dep_type == 'dep':
-                        #         self.comp_result[(doc_id, dtid, case)] = 'case_analysis'
-                        #     elif arg.dep_type == 'intra':
-                        #         self.comp_result[(doc_id, dtid, case)] = 'zero_intra'
-                        #     elif arg.dep_type == 'inter':
-                        #         self.comp_result[(doc_id, dtid, case)] = 'zero_inter'
-                        #     elif arg.dep_type == 'exo':
-                        #         self.comp_result[(doc_id, dtid, case)] = 'exophora'
-                        #     else:
-                        #         logger.warning(f'unknown dep_type: {arg.dep_type}')
-                        #         continue
-                        #     self.measures[case].correct += 1
-                        # else:
-                        #     self.comp_result[(doc_id, dtid, case)] = 'wrong'
-                        # self.measures[case].denom_pred += 1
+                for case in self.cases:
+                    args_pred: List[Argument] = arguments_pred[case]
+                    args_gold: List[Argument] = arguments_gold[case] if arguments_gold is not None else []
+                    if not args_pred:
+                        continue
+                    assert len(args_pred) == 1
+                    arg = args_pred[0]
+                    if arg.dep_type == 'overt':  # ignore overt case
+                        self.comp_result[(doc_id, dtid, case)] = 'overt'
+                        continue
+                    analysis = self.deptype2analysis[arg.dep_type]
+                    if arg in args_gold:
+                        self.measures[case][analysis].correct += 1
+                        self.comp_result[(doc_id, dtid, case)] = analysis
+                    else:
+                        self.comp_result[(doc_id, dtid, case)] = 'wrong'
+                    self.measures[case][analysis].denom_pred += 1
 
             # calculate recall
             tag2sid_gold = {tag: sentence.sid for sentence in document_gold for tag in sentence.tag_list()}
-            for predicate_dtid, predicate_gold in dtid2pred_gold.items():
+            for dtid, predicate_gold in dtid2pred_gold.items():
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
+                arguments_pred = None
+                if dtid in dtid2pred_pred:
+                    predicate_pred = dtid2pred_pred[dtid]
+                    arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
                 predicate_sid_gold: str = tag2sid_gold[predicate_gold]
                 for case in self.cases:
-                    # filter out cataphoras
-                    argument_gold: List[Argument] = list(filter(
-                        lambda arg_: not (arg_.dtid is not None and
-                                          arg_.dtid > predicate_dtid and
-                                          arg_.sid != predicate_sid_gold),
-                        arguments_gold[case]))
-                    if argument_gold:
-                        arg = argument_gold[0]  # dataset.pyとの一貫性を保つため[0]を用いる
-                        if arg.dep_type == 'overt':  # ignore overt case
+                    args_pred: List[Argument] = arguments_pred[case] if arguments_pred is not None else []
+                    arg = None
+                    for arg_ in arguments_gold[case]:
+                        # filter out cataphoras
+                        if arg_.dtid is not None and dtid < arg_.dtid and arg_.sid != predicate_sid_gold:
                             continue
-                        analysis = self.deptype2analysis[arg.dep_type]
-                        self.measures[case][analysis].denom_gold += 1
+                        elif arg is None:
+                            arg = arg_
+                        if arg_ in args_pred:
+                            arg = arg_
+                    if arg is None or arg.dep_type == 'overt':  # ignore overt case
+                        continue
+                    analysis = self.deptype2analysis[arg.dep_type]
+                    self.measures[case][analysis].denom_gold += 1
 
     def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
         result = OrderedDict()
@@ -170,8 +161,8 @@ class Scorer:
                 lines.append(f'{case}')
             for analysis, measure in measures.items():
                 lines.append(f'  {analysis}')
-                lines.append(f'    precision: {measure.precision:.3} ({measure.denom_pred})')
-                lines.append(f'    recall   : {measure.recall:.3} ({measure.denom_gold})')
+                lines.append(f'    precision: {measure.precision:.3} ({measure.correct}/{measure.denom_pred})')
+                lines.append(f'    recall   : {measure.recall:.3} ({measure.correct}/{measure.denom_gold})')
                 lines.append(f'    F        : {measure.f1:.3}')
         text = '\n'.join(lines) + '\n'
 
@@ -220,12 +211,13 @@ class Scorer:
                 writer.write('<th>prediction</th>\n</tr>')
 
                 writer.write('<tr>')
+                # gold
                 writer.write('<td><pre>\n')
                 for sid in document_gold.sid2sentence.keys():
                     self._draw_tree(sid, self.sid2predicates_gold[sid], document_gold, fh=writer)
                     writer.write('\n')
                 writer.write('</pre>')
-
+                # prediction
                 writer.write('<td><pre>\n')
                 for sid in document_pred.sid2sentence.keys():
                     self._draw_tree(sid, self.sid2predicates_pred[sid], document_pred, fh=writer)
