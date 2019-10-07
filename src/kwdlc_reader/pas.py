@@ -111,9 +111,9 @@ class Pas:
                     arg = self.arguments[case][-1]
                     arg.optional = True
                     logger.info(f'marked {arg.midasi} as optional\t{self.sid}')
-                    return
                 else:
                     logger.info(f'no preceding argument found. regard target: なし as normal exophor')
+                return
             tid = None
             dmid = None
         else:
