@@ -39,6 +39,7 @@ class Argument:
         self.dmid = dmid
         self.dep_type = dep_type
         self.mode = mode
+        self.optional = False
 
     # for test
     def __iter__(self):
@@ -103,6 +104,16 @@ class Pas:
                      ) -> None:
         if tag is None:
             assert sid is None and dtid is None
+            if midasi == 'なし':
+                if mode not in ('？', '?', 'AND'):
+                    logger.warning(f'target: なし found with mode: "{mode}"')
+                if self.arguments[case]:
+                    arg = self.arguments[case][-1]
+                    arg.optional = True
+                    logger.info(f'marked {arg.midasi} as optional\t{self.sid}')
+                    return
+                else:
+                    logger.info(f'no preceding argument found. regard target: なし as normal exophor')
             tid = None
             dmid = None
         else:
@@ -116,7 +127,7 @@ class Pas:
     def _get_dep_type(pred: Tag, arg: Tag, sid_pred: str, sid_arg: str, atype: str) -> str:
         if arg is not None:
             if arg in pred.children:
-                if arg.features.get('係', None) == atype.rstrip('？') + '格':
+                if arg.features.get('係', None) == atype.rstrip('？') + '格' or atype in arg.features:
                     return 'overt'
                 else:
                     return 'dep'

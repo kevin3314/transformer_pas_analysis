@@ -1,4 +1,5 @@
 import io
+import re
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Iterator
@@ -24,8 +25,9 @@ logger.setLevel(logging.WARNING)
 - 用言かつ体言の基本句もある
 - 述語から項への係り受けもdep?
 - BasePhraseクラス作っちゃう？
-- 不特定:１などは他の不特定:１と同一の対象
-- 不特定:1などの"1"で全角と半角の表記ゆれ
+- 不特定:人１などは他の不特定:人１と同一の対象
+- 不特定:人1などの"1"で全角と半角の表記ゆれ
+- mode=?, target=なし の修飾的表現の対応(mode=ANDの場合も確認(w201106-0000104324-1))
 """
 
 
@@ -61,10 +63,16 @@ class KWDLCReader:
             return default
         target = []
         for item in input_:
-            if item in all_:
-                target.append(item)
-            else:
+            if item not in all_:
                 logger.warning(f'Unknown target {type_}: {item}')
+                continue
+            if type_ == 'exophor':
+                for exo in all_:
+                    if exo.startswith(item) and exo not in target:
+                        target.append(exo)
+            else:
+                target.append(item)
+
         return target
 
     def get_doc_ids(self) -> List[str]:
@@ -278,6 +286,7 @@ class Document:
                     logger.warning(f'sentence: {rel.sid} not found in {self.doc_id}')
                     continue
                 rel.target = mojimoji.han_to_zen(rel.target, ascii=False)  # 不特定:人1 -> 不特定:人１
+                rel.target = re.sub(r'^(不特定:(人|物|状況))[１-９]$', r'\1', rel.target)  # 不特定:人１ -> 不特定:人
                 # extract PAS
                 if rel.atype in self.target_cases:
                     if rel.sid is not None:
@@ -288,10 +297,10 @@ class Document:
                         pas.add_argument(rel.atype, arg_tag, rel.sid, self.tag2dtid[arg_tag], rel.target, rel.mode)
                     # exophora
                     else:
-                        if rel.target not in ALL_EXOPHORS:
+                        if rel.target not in ALL_EXOPHORS + ['なし']:
                             logger.warning(f'Unknown exophor: {rel.target}\t{pas.sid}')
                             continue
-                        elif rel.target not in self.target_exophors:
+                        elif rel.target not in self.target_exophors + ['なし']:
                             logger.info(f'Argument: {rel.target} ({rel.atype}) of {tag.midasi} is ignored.')
                             continue
                         pas.add_argument(rel.atype, None, None, None, rel.target, rel.mode)
@@ -319,7 +328,8 @@ class Document:
             tag_end = spec.find(splitter, tag_start)
             if spec[tag_start:].startswith('rel '):
                 rel = Rel(spec[tag_start:tag_end])
-                rels.append(rel)
+                if rel.atype is not None:
+                    rels.append(rel)
 
             tag_start = tag_end + len(splitter)
         return rels
@@ -467,11 +477,15 @@ class Document:
     def get_arguments(self,
                       predicate: Tag,
                       relax: bool = False,
+                      include_optional: bool = False
                       ) -> Dict[str, List[Argument]]:
         predicate_dtid = self.tag2dtid[predicate]
         if predicate_dtid not in self._pas:
             return {}
         pas = self._pas[predicate_dtid].copy()
+        if include_optional is False:
+            for case in self.target_cases:
+                pas.arguments[case] = list(filter(lambda a: a.optional is False, pas.arguments[case]))
 
         if relax is True:
             for case, args in self._pas[predicate_dtid].arguments.items():
