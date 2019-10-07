@@ -50,24 +50,29 @@ def read_example(document: Document,
         head_dmids += get_head_dmids(sentence, document.mrph2dmid)
         dmid2pred: Dict[int, Tag] = {pas.dmid: pas.predicate for pas in document.pas_list()}
         for tag in sentence.tag_list():
-            pas_head_found = False
+            mrph_list: list = tag.mrph_list()
+            if not mrph_list:
+                continue
+            target_mrph = mrph_list[0]
+            for mrph in mrph_list:
+                if '<内容語>' in mrph.fstring:
+                    target_mrph = mrph
+                    break
             for mrph in tag.mrph_list():
                 words.append(mrph.midasi)
                 dtids.append(document.tag2dtid[tag])
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
                 if '<用言:' in tag.fstring \
-                        and '<省略解析なし>' not in tag.fstring \
-                        and '<内容語>' in mrph.fstring \
-                        and pas_head_found is False \
+                        and mrph is target_mrph \
                         and process is True:
                     arguments: Dict[str, str] = OrderedDict()
                     for case in cases:
                         if dmid in dmid2pred:
-                            case2args = document.get_arguments(dmid2pred[dmid], relax=True)
-                            if case not in case2args:
+                            args = document.get_arguments(dmid2pred[dmid], relax=True)
+                            if not args[case]:
                                 arguments[case] = 'NULL'
                                 continue
-                            arg = case2args[case][0]  # use first argument now
+                            arg = args[case][0]  # use first argument now
                             # exophor
                             if arg.dep_type == 'exo':
                                 arguments[case] = arg.midasi
@@ -80,7 +85,6 @@ def read_example(document: Document,
                         else:
                             arguments[case] = 'NULL'
                     arg_candidates = [x for x in head_dmids if x != dmid]
-                    pas_head_found = True
                 else:
                     arguments = OrderedDict((case, None) for case in cases)
                     arg_candidates = []
