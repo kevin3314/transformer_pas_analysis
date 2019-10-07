@@ -106,7 +106,7 @@ class Pas:
             assert sid is None and dtid is None
             if midasi == 'なし':
                 if mode not in ('？', '?', 'AND'):
-                    logger.warning(f'target: なし found with mode: "{mode}"')
+                    logger.warning(f'target: なし found with mode: "{mode}"\t{self.sid}')
                 if self.arguments[case]:
                     arg = self.arguments[case][-1]
                     arg.optional = True
