@@ -66,7 +66,7 @@ class PASDataset(Dataset):
                                             target_corefs=['=', '=構', '=≒'] if coreference else [],
                                             target_exophors=exophors,
                                             extract_nes=False)
-        special_tokens = self.reader.target_exophors + ['NULL'] + (['NA'] if coreference else [])
+        special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.num_special_tokens = len(special_tokens)
         self.special_to_index: Dict[str, int] = {token: i + max_seq_length - self.num_special_tokens for i, token
                                                  in enumerate(special_tokens)}
