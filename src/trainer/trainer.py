@@ -123,7 +123,7 @@ class Trainer(BaseTrainer):
                 total_val_loss += loss.item() * input_ids.size(0)
 
                 self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')
-                self.writer.add_scalar('loss_' + label, loss.item())
+                self.writer.add_scalar(f'loss_{label}', loss.item())
                 # total_val_metrics += self._eval_metrics(output, target)
 
         # prediction_output_dir = self.config.save_dir / 'valid_out_knp'
@@ -140,7 +140,7 @@ class Trainer(BaseTrainer):
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')
 
-        log = {'loss': total_val_loss / valid_data_loader.n_samples}
+        log = {f'loss_{label}': total_val_loss / valid_data_loader.n_samples}
         log.update(dict(zip([met.__name__ for met in self.metrics], val_metrics)))
 
         return log
