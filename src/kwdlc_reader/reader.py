@@ -477,7 +477,7 @@ class Document:
     def get_arguments(self,
                       predicate: Tag,
                       relax: bool = False,
-                      include_optional: bool = False
+                      include_optional: bool = False  # 「すぐに」などの修飾的な項も返すかどうか
                       ) -> Dict[str, List[Argument]]:
         predicate_dtid = self.tag2dtid[predicate]
         if predicate_dtid not in self._pas:

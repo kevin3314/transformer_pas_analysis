@@ -106,9 +106,12 @@ class Scorer:
                     self.measures[case][analysis].denom_pred += 1
 
             # calculate recall
+            # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
+            # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
             tag2sid_gold = {tag: sentence.sid for sentence in document_gold for tag in sentence.tag_list()}
             for dtid, predicate_gold in dtid2pred_gold.items():
-                arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
+                arguments_gold = document_gold.get_arguments(predicate_gold, relax=False)
+                arguments_gold_relaxed = document_gold.get_arguments(predicate_gold, relax=True)
                 arguments_pred = None
                 if dtid in dtid2pred_pred:
                     predicate_pred = dtid2pred_pred[dtid]
@@ -116,19 +119,29 @@ class Scorer:
                 predicate_sid_gold: str = tag2sid_gold[predicate_gold]
                 for case in self.cases:
                     args_pred: List[Argument] = arguments_pred[case] if arguments_pred is not None else []
+                    assert len(args_pred) in (0, 1)
+                    core_args_gold: List[Argument] = list(filter(
+                        lambda a: self._is_inter_sentential_cataphor(a, dtid, predicate_sid_gold),
+                        arguments_gold[case]))  # filter out cataphoras
+                    if not core_args_gold:
+                        continue
                     arg = None
-                    for arg_ in arguments_gold[case]:
+                    for arg_ in arguments_gold_relaxed[case]:
                         # filter out cataphoras
-                        if arg_.dtid is not None and dtid < arg_.dtid and arg_.sid != predicate_sid_gold:
+                        if self._is_inter_sentential_cataphor(arg_, dtid, predicate_sid_gold):
                             continue
                         elif arg is None:
-                            arg = arg_
+                            arg = core_args_gold[0]
                         if arg_ in args_pred:
                             arg = arg_
                     if arg is None or arg.dep_type == 'overt':  # ignore overt case
                         continue
                     analysis = self.deptype2analysis[arg.dep_type]
                     self.measures[case][analysis].denom_gold += 1
+
+    @staticmethod
+    def _is_inter_sentential_cataphor(arg: Argument, predicate_dtid: int, predicate_sid: str):
+        return arg.dtid is not None and predicate_dtid < arg.dtid and arg.sid != predicate_sid
 
     def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
         result = OrderedDict()
