@@ -121,7 +121,7 @@ class Scorer:
                     args_pred: List[Argument] = arguments_pred[case] if arguments_pred is not None else []
                     assert len(args_pred) in (0, 1)
                     core_args_gold: List[Argument] = list(filter(
-                        lambda a: self._is_inter_sentential_cataphor(a, dtid, predicate_sid_gold),
+                        lambda a: not self._is_inter_sentential_cataphor(a, dtid, predicate_sid_gold),
                         arguments_gold[case]))  # filter out cataphoras
                     if not core_args_gold:
                         continue
