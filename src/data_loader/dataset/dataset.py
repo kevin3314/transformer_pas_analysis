@@ -73,9 +73,11 @@ class PASDataset(Dataset):
         self.coreference = coreference
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
         bert_config = BertConfig.from_json_file(Path(bert_model) / 'bert_config.json')
+        documents = list(self.reader.process_all_documents())
+        self.documents = documents if not training else None
         self.examples = []
         self.features = []
-        for document in self.reader.process_all_documents():
+        for document in documents:
             example = read_example(document, coreference, kc)
             feature = self._convert_example_to_feature(
                 example,

@@ -17,13 +17,14 @@ logger.setLevel(logging.WARNING)
 
 
 class Scorer:
-    def __init__(self, documents_pred: List[Document], reader_gold: KWDLCDirectoryReader, kc: bool = False):
+    def __init__(self, documents_pred: List[Document], documents_gold: List[Document], kc: bool = False):
 
-        assert set(doc.doc_id for doc in documents_pred) <= set(reader_gold.did2path.keys())  # too long doc is ignored
-        self.cases = reader_gold.target_cases
+        # long document may have been ignored
+        assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
+        self.cases: List[str] = documents_gold[0].target_cases
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
-        self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in reader_gold.process_all_documents()}
+        self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
         self.measures: Dict[str, Dict[str, Measure]] = \
             OrderedDict((case, OrderedDefaultDict(lambda: Measure())) for case in self.cases)
         self.comp_result = {}
@@ -32,8 +33,6 @@ class Scorer:
                                              ('inter', 'zero_inter_sentential'),
                                              ('exo', 'zero_exophora')])
 
-        # for pas in [pas for doc in self.did2document_pred.values() for pas in doc.pas_list()]:
-        #     self.sid2predicates_pred[pas.sid].append(pas.predicate)
         # make sid2predicates_pred and sid2predicates_gold
         self.sid2predicates_pred: Dict[str, List[Tag]] = OrderedDefaultDict(list)
         self.sid2predicates_gold: Dict[str, List[Tag]] = OrderedDefaultDict(list)
@@ -354,8 +353,9 @@ def main():
         extract_nes=False
     )
     documents_pred = list(reader_pred.process_all_documents())
+    documents_gold = list(reader_gold.process_all_documents())
 
-    scorer = Scorer(documents_pred, reader_gold)
+    scorer = Scorer(documents_pred, documents_gold)
     if args.result_html:
         scorer.write_html(Path(args.result_html))
     if args.result_csv:

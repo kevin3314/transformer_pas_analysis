@@ -94,7 +94,7 @@ class Tester:
         prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
-        scorer = Scorer(documents_pred, data_loader.dataset.reader, data_loader.dataset.kc)
+        scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.kc)
         scorer.write_html(self.config.save_dir / f'result_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
         scorer.export_csv(self.config.save_dir / f'result_{label}.csv')
