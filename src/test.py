@@ -34,8 +34,10 @@ class Tester:
 
     def test(self):
         log = {}
-        log.update(self._test_epoch(self.kwdlc_data_loader, 'kwdlc'))
-        log.update(self._test_epoch(self.kc_data_loader, 'kc'))
+        test_log = self._test_epoch(self.kwdlc_data_loader, 'kwdlc')
+        log.update(**{'kwdlc_' + k: v for k, v in test_log.items()})
+        test_log = self._test_epoch(self.kc_data_loader, 'kc')
+        log.update(**{'kc_' + k: v for k, v in test_log.items()})
         return log
 
     def _load_model(self):
