@@ -1,8 +1,7 @@
 import argparse
-from typing import List, Callable
+from typing import List
 
 import torch
-import torch.nn as nn
 import numpy as np
 
 import data_loader.data_loaders as module_loader
@@ -16,13 +15,14 @@ from scorer import Scorer
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, logger):
+    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger):
         self.model = model
         self.loss = loss
         self.metrics = metrics
         self.config = config
         self.kwdlc_data_loader = kwdlc_data_loader
         self.kc_data_loader = kc_data_loader
+        self.target = target
         self.logger = logger
 
         self.device, device_ids = self._prepare_device(config['n_gpu'])
@@ -35,9 +35,9 @@ class Tester:
     def test(self):
         log = {}
         test_log = self._test_epoch(self.kwdlc_data_loader, 'kwdlc')
-        log.update(**{'kwdlc_' + k: v for k, v in test_log.items()})
+        log.update(**{f'{self.target}_kwdlc_{k}': v for k, v in test_log.items()})
         test_log = self._test_epoch(self.kc_data_loader, 'kc')
-        log.update(**{'kc_' + k: v for k, v in test_log.items()})
+        log.update(**{f'{self.target}_kc_{k}': v for k, v in test_log.items()})
         return log
 
     def _load_model(self):
@@ -90,14 +90,14 @@ class Tester:
                 loss = self.loss(output, arguments_ids, deps)
                 total_loss += loss.item() * input_ids.size(0)
 
-        prediction_output_dir = self.config.save_dir / 'test_out_knp'
+        prediction_output_dir = self.config.save_dir / f'{self.target}_out_knp'
         prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
         scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.kc)
-        scorer.write_html(self.config.save_dir / f'result_{label}.html')
-        scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
-        scorer.export_csv(self.config.save_dir / f'result_{label}.csv')
+        scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
+        scorer.export_txt(self.config.save_dir / f'result_{self.target}_{label}.txt')
+        scorer.export_csv(self.config.save_dir / f'result_{self.target}_{label}.csv')
 
         metrics = self._eval_metrics(scorer.result_dict())
         log = {'loss': total_loss / data_loader.n_samples}
@@ -108,14 +108,14 @@ class Tester:
         return log
 
 
-def main(config):
-    logger = config.get_logger('test')
+def main(config, args):
+    logger = config.get_logger(args.target)
 
     # setup data_loader instances
-    kwdlc_dataset = config.initialize('test_kwdlc_dataset', module_dataset)
-    kc_dataset = config.initialize('test_kc_dataset', module_dataset)
-    kwdlc_data_loader = config.initialize('test_data_loader', module_loader, kwdlc_dataset)
-    kc_data_loader = config.initialize('test_data_loader', module_loader, kc_dataset)
+    kwdlc_dataset = config.initialize(f'{args.target}_kwdlc_dataset', module_dataset)
+    kc_dataset = config.initialize(f'{args.target}_kc_dataset', module_dataset)
+    kwdlc_data_loader = config.initialize(f'{args.target}_data_loader', module_loader, kwdlc_dataset)
+    kc_data_loader = config.initialize(f'{args.target}_data_loader', module_loader, kc_dataset)
 
     # build model architecture
     model = config.initialize('arch', module_arch)
@@ -126,7 +126,7 @@ def main(config):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, logger)
+    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger)
 
     log = tester.test()
 
@@ -144,5 +144,7 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('-c', '--config', default=None, type=str,
                         help='config file path (default: None)')
+    parser.add_argument('--target', default='test', type=str, choices=['valid', 'test'],
+                        help='evaluation target')
 
-    main(ConfigParser(parser, timestamp=False))
+    main(ConfigParser(parser, timestamp=False), parser.parse_args())
