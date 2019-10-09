@@ -9,7 +9,24 @@ from utils.parse_config import ConfigParser
 from writer.prediction_writer import PredictionKNPWriter
 from kwdlc_reader import Document
 from data_loader.dataset import PASDataset
-from test import prepare_device
+
+
+def prepare_device(n_gpu_use, logger):
+    """
+    setup GPU device if available, move model into configured device
+    """
+    n_gpu = torch.cuda.device_count()
+    if n_gpu_use > 0 and n_gpu == 0:
+        logger.warning("Warning: There\'s no GPU available on this machine,"
+                       "training will be performed on CPU.")
+        n_gpu_use = 0
+    if n_gpu_use > n_gpu:
+        logger.warning("Warning: The number of GPU\'s configured to use is {}, but only {} are available "
+                       "on this machine.".format(n_gpu_use, n_gpu))
+        n_gpu_use = n_gpu
+    device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
+    list_ids = list(range(n_gpu_use))
+    return device, list_ids
 
 
 def main(config, args):
@@ -22,10 +39,10 @@ def main(config, args):
     input_string = ''.join(input_string.split())  # remove space character
 
     input_sentences = [s.strip() + '。' for s in input_string.rstrip('。').split('。')]
-    knp = KNP(option='-tab')
+    knp = KNP(option='-tab')  # TODO: use BERTKNP
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
-    dataset_config: dict = config['test_dataset']['args']
+    dataset_config: dict = config['test_kwdlc_dataset']['args']
     dataset_config['path'] = None
     dataset_config['knp_string'] = knp_string
     dataset = PASDataset(**dataset_config)
