@@ -31,7 +31,7 @@ def api():
     knp = KNP(option='-tab')
     knp_string = ''.join(knp.parse(input_sentence).all() for input_sentence in input_sentences)
 
-    dataset_config: dict = config['test_dataset']['args']
+    dataset_config: dict = config['test_kwdlc_dataset']['args']
     dataset_config['path'] = None
     dataset_config['knp_string'] = knp_string
     dataset = PASDataset(**dataset_config)
@@ -96,8 +96,8 @@ if __name__ == '__main__':
     # build model architecture
     model_args = dict(config['arch']['args'])
     model = getattr(module_arch, config['arch']['type'])(**model_args)
-    coreference = config['test_dataset']['args']['coreference']
-    model.expand_vocab(len(config['test_dataset']['args']['exophors']) + 1 + int(coreference))
+    coreference = config['test_kwdlc_dataset']['args']['coreference']
+    model.expand_vocab(len(config['test_kwdlc_dataset']['args']['exophors']) + 1 + int(coreference))  # NULL and (NA)
 
     # prepare model for testing
     logger.info(f'Loading checkpoint: {args.model} ...')
