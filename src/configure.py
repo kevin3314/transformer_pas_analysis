@@ -135,7 +135,7 @@ def main() -> None:
                         help='number of training epochs')
     parser.add_argument('--batch-size', '-b', type=int, default=32,
                         help='number of batch size')
-    parser.add_argument('--max-seq-length', type=int, default=512,
+    parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
     parser.add_argument('--coreference', action='store_true', default=False,
