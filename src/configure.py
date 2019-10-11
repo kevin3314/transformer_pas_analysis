@@ -179,7 +179,9 @@ def main() -> None:
     n_gpu: int = args.gpus
 
     for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
-        name = f'{model}-{corpus}-{n_epoch}e' + ('' if args.additional_name is None else args.additional_name)
+        name = f'{model}-{corpus}-{n_epoch}e'
+        name += '-large' if args.use_bert_large else ''
+        name += args.additional_name if args.additional_name is not None else ''
         train_kwdlc_dir = Path.kwdlc.get('train', args.env, debug=args.debug)
         train_kc_dir = Path.kc.get('train', args.env, debug=args.debug)
         num_train_examples = 0
