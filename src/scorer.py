@@ -349,6 +349,8 @@ def main():
                         help='Case strings. Separate by ","')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
+    parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
+                        help='use <述語項構造:> tag instead of <rel > tag in prediction files')
     args = parser.parse_args()
 
     reader_gold = KWDLCReader(
@@ -363,7 +365,8 @@ def main():
         target_cases=reader_gold.target_cases,
         target_corefs=reader_gold.target_corefs,
         target_exophors=reader_gold.target_exophors,
-        extract_nes=False
+        extract_nes=False,
+        use_pas_tag=args.read_prediction_from_pas_tag,
     )
     documents_pred = list(reader_pred.process_all_documents())
     documents_gold = list(reader_gold.process_all_documents())

@@ -40,6 +40,7 @@ class KWDLCReader:
         target_exophors (list): 抽出の対象とする外界照応詞
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         glob_pat (str): コーパスとして扱うファイルのパターン
+        use_pas_tag (bool): <rel >タグからではなく、<述語項構造:>タグから PAS を読むかどうか
     """
     def __init__(self,
                  source: Union[Path, str],
@@ -48,6 +49,7 @@ class KWDLCReader:
                  target_exophors: Optional[List[str]],
                  extract_nes: bool = True,
                  glob_pat: str = '*.knp',
+                 use_pas_tag: bool = False,
                  ) -> None:
         if not (isinstance(source, Path) or isinstance(source, str)):
             raise TypeError(f'source must be an instance of Path or str: got {type(source)}')
@@ -67,6 +69,7 @@ class KWDLCReader:
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
         self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
         self.extract_nes: bool = extract_nes
+        self.use_pas_tag: bool = use_pas_tag
 
     @staticmethod
     def _get_target(input_: Optional[list],
@@ -107,7 +110,8 @@ class KWDLCReader:
                         self.target_cases,
                         self.target_corefs,
                         self.target_exophors,
-                        self.extract_nes)
+                        self.extract_nes,
+                        self.use_pas_tag)
 
     def process_documents(self, doc_ids: List[str]) -> Iterator[Optional['Document']]:
         for doc_id in doc_ids:
@@ -149,6 +153,7 @@ class Document:
                  target_corefs: List[str],
                  target_exophors: List[str],
                  extract_nes: bool,
+                 use_pas_tag: bool,
                  ) -> None:
         self.doc_id = doc_id
         self.target_cases: List[str] = target_cases
@@ -174,7 +179,10 @@ class Document:
         self._pas: Dict[int, Pas] = OrderedDict()
         self._mentions: Dict[int, Mention] = OrderedDict()
         self._entities: List[Entity] = []
-        self._extract_relations()
+        if use_pas_tag:
+            self._extract_pas()
+        else:
+            self._extract_relations()
 
         if extract_nes:
             self.named_entities: List[NamedEntity] = []
@@ -192,6 +200,27 @@ class Document:
                     dtid += 1
                 self.bnst2dbid[bnst] = dbid
                 dbid += 1
+
+    def _extract_pas(self) -> None:
+        sid2idx = {sid: idx for idx, sid in enumerate(self.sid2sentence.keys())}
+        tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
+        for tag in self.tag_list():
+            dtid = self.tag2dtid[tag]
+            if tag.pas is not None:
+                pas = Pas(tag, dtid, tag.pas.sid, self.mrph2dmid)
+                for case, arguments in tag.pas.arguments.items():
+                    for arg in arguments:
+                        if arg.flag == 'E':
+                            pas.add_argument(case, None, None, None, arg.midasi, '')
+                        else:
+                            tag_list = self.sentences[sid2idx[arg.sid] - arg.sdist].tag_list()
+                            if not (0 <= arg.tid < len(tag_list)):
+                                logger.warning(f'tag out of range\t{arg.tid}\t({arg.sid})')
+                                continue
+                            arg_tag = tag_list[arg.tid]
+                            pas.add_argument(case, arg_tag, tag2sid[arg_tag], self.tag2dtid[arg_tag], arg.midasi, '')
+                if pas.arguments:
+                    self._pas[dtid] = pas
 
     def _extract_relations(self) -> None:
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
