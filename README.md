@@ -43,6 +43,12 @@ python src/test.py -r <path-to-trained-model> -d <gpu-ids>
 
 If you specify the config file, the setting is overwritten.
 
+## Scoring From System Output
+
+```zsh
+python src/scorer.py --prediction-dir <system-output-directory> --gold-dir <gold-directory> --read-prediction-from-pas-tag
+```
+
 ## Dataset
 
 - /mnt/hinoki/ueda/kwdlc/new
