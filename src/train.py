@@ -2,7 +2,7 @@ import argparse
 import collections
 import random
 
-import pytorch_transformers.optimization as module_optim
+import transformers.optimization as module_optim
 import torch
 import numpy
 
@@ -19,8 +19,8 @@ def main(config):
     torch.manual_seed(42)
     random.seed(42)
     numpy.random.seed(42)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
 
     logger = config.get_logger('train')
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 from torch.utils.data import Dataset
-from pytorch_transformers import BertConfig, BertTokenizer
+from transformers import BertConfig, BertTokenizer
 
 from kwdlc_reader import KWDLCDirectoryReader, KWDLCStringReader
 from data_loader.dataset.read_example import read_example, PasExample
