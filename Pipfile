@@ -11,14 +11,13 @@ pytest = "*"
 [packages]
 numpy = "*"
 tqdm = "*"
-torchvision = "*"
 pyknp = "*"
-torch = "*"
 mojimoji = "*"
 flask = "*"
 tensorboard = "*"
-pytorch-transformers = "*"
 future = "*"
+torch = "==1.2.0"
+transformers = "*"
 
 [requires]
 python_version = "3.6"
