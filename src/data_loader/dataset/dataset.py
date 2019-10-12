@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertConfig, BertTokenizer
 
-from kwdlc_reader import KWDLCDirectoryReader, KWDLCStringReader
+from kwdlc_reader import KWDLCReader
 from data_loader.dataset.read_example import read_example, PasExample
 
 
@@ -54,18 +54,18 @@ class PASDataset(Dataset):
                  knp_string: Optional[str] = None,
                  ) -> None:
         if path is not None:
-            self.reader = KWDLCDirectoryReader(Path(path),
-                                               target_cases=cases,
-                                               target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                               target_exophors=exophors,
-                                               extract_nes=False)
+            self.reader = KWDLCReader(Path(path),
+                                      target_cases=cases,
+                                      target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
+                                      target_exophors=exophors,
+                                      extract_nes=False)
         else:
             assert knp_string is not None
-            self.reader = KWDLCStringReader(knp_string,
-                                            target_cases=cases,
-                                            target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                            target_exophors=exophors,
-                                            extract_nes=False)
+            self.reader = KWDLCReader(knp_string,
+                                      target_cases=cases,
+                                      target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
+                                      target_exophors=exophors,
+                                      extract_nes=False)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.num_special_tokens = len(special_tokens)
         self.special_to_index: Dict[str, int] = {token: i + max_seq_length - self.num_special_tokens for i, token

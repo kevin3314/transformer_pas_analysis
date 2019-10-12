@@ -2,7 +2,7 @@ import io
 import re
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Iterator
+from typing import List, Dict, Optional, Iterator, Union
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
@@ -23,7 +23,6 @@ logger.setLevel(logging.WARNING)
 # MEMO
 - corefタグは用言に対しても振られる
 - 用言かつ体言の基本句もある
-- 述語から項への係り受けもdep?
 - BasePhraseクラス作っちゃう？
 - 不特定:人１などは他の不特定:人１と同一の対象
 - 不特定:人1などの"1"で全角と半角の表記ゆれ
@@ -32,26 +31,42 @@ logger.setLevel(logging.WARNING)
 
 
 class KWDLCReader:
-    """ KWDLC(または Kyoto Corpus)の文書集合を扱う基底クラス
+    """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
 
     Args:
+        source (Path or str): 入力ソース．Path オブジェクトを指定するとその場所のファイルを読む
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
         target_exophors (list): 抽出の対象とする外界照応詞
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+        glob_pat (str): コーパスとして扱うファイルのパターン
     """
     def __init__(self,
+                 source: Union[Path, str],
                  target_cases: Optional[List[str]],
                  target_corefs: Optional[List[str]],
                  target_exophors: Optional[List[str]],
-                 extract_nes: bool,
+                 extract_nes: bool = True,
+                 glob_pat: str = '*.knp',
                  ) -> None:
+        if not (isinstance(source, Path) or isinstance(source, str)):
+            raise TypeError(f'source must be an instance of Path or str: got {type(source)}')
+        if isinstance(source, Path):
+            if source.is_dir():
+                logger.info(f'got directory path, use files in the directory as source files')
+                file_paths: List[Path] = sorted(source.glob(glob_pat))
+                self.did2source: Dict[str, Union[Path, str]] = OrderedDict((path.stem, path) for path in file_paths)
+            else:
+                logger.info(f'got file path, use this file as source file')
+                self.did2source: Dict[str, Union[Path, str]] = {source.stem: source}
+        else:
+            logger.info(f'got string, use this string as source content')
+            self.did2source: Dict[str, Union[Path, str]] = {'doc': source}
+
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
         self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
         self.extract_nes: bool = extract_nes
-
-        self.did2path = {}  # should be overwritten in derived class
 
     @staticmethod
     def _get_target(input_: Optional[list],
@@ -76,15 +91,18 @@ class KWDLCReader:
         return target
 
     def get_doc_ids(self) -> List[str]:
-        return list(self.did2path.keys())
+        return list(self.did2source.keys())
 
     def process_document(self, doc_id: str) -> Optional['Document']:
-        if doc_id not in self.did2path:
+        if doc_id not in self.did2source:
             logger.error(f'Unknown document id: {doc_id}')
             return None
-        with self.did2path[doc_id].open() as f:
-            knp_string = f.read()
-        return Document(knp_string,
+        if isinstance(self.did2source[doc_id], Path):
+            with self.did2source[doc_id].open() as f:
+                input_string = f.read()
+        else:
+            input_string = self.did2source[doc_id]
+        return Document(input_string,
                         doc_id,
                         self.target_cases,
                         self.target_corefs,
@@ -96,105 +114,8 @@ class KWDLCReader:
             yield self.process_document(doc_id)
 
     def process_all_documents(self) -> Iterator['Document']:
-        for doc_id, path in self.did2path.items():
-            with path.open() as f:
-                knp_string = f.read()
-            yield Document(knp_string,
-                           doc_id,
-                           self.target_cases,
-                           self.target_corefs,
-                           self.target_exophors,
-                           self.extract_nes)
-
-
-class KWDLCDirectoryReader(KWDLCReader):
-    """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
-
-    Args:
-        corpus_dir (Path): コーパスの存在するディレクトリ
-        glob_pat (str): コーパスとして扱うファイルのパターン
-        target_cases (list): 抽出の対象とする格
-        target_corefs (list): 抽出の対象とする共参照関係(=など)
-        target_exophors (list): 抽出の対象とする外界照応詞
-        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-    """
-    def __init__(self,
-                 corpus_dir: Path,
-                 glob_pat: str = '*.knp',
-                 target_cases: Optional[List[str]] = None,
-                 target_corefs: Optional[List[str]] = None,
-                 target_exophors: Optional[List[str]] = None,
-                 extract_nes: bool = True,
-                 ) -> None:
-        super().__init__(target_cases, target_corefs, target_exophors, extract_nes)
-        file_paths: List[Path] = sorted(corpus_dir.glob(glob_pat))
-        self.did2path: Dict[str, Path] = OrderedDict((path.stem, path) for path in file_paths)
-
-
-class KWDLCFileReader(KWDLCReader):
-    """ KWDLC(または Kyoto Corpus)の1文書をファイル入力から扱うクラス
-
-    Args:
-        file_path (Path): 1文書が入ったKWDLCファイル
-        target_cases (list): 抽出の対象とする格
-        target_corefs (list): 抽出の対象とする共参照関係(=など)
-        target_exophors (list): 抽出の対象とする外界照応詞
-        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-    """
-    def __init__(self,
-                 file_path: Path,
-                 target_cases: Optional[List[str]] = None,
-                 target_corefs: Optional[List[str]] = None,
-                 target_exophors: Optional[List[str]] = None,
-                 extract_nes: bool = True,
-                 ) -> None:
-        super().__init__(target_cases, target_corefs, target_exophors, extract_nes)
-        self.did2path: Dict[str, Path] = {'doc1': file_path}
-
-
-class KWDLCStringReader(KWDLCReader):
-    """ KWDLC(または Kyoto Corpus)の1文書をファイル入力から扱うクラス
-
-    Args:
-        knp_string (str): 1文書分のKWDLCデータの文字列
-        target_cases (list): 抽出の対象とする格
-        target_corefs (list): 抽出の対象とする共参照関係(=など)
-        target_exophors (list): 抽出の対象とする外界照応詞
-        extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-    """
-    def __init__(self,
-                 knp_string: str,
-                 target_cases: Optional[List[str]] = None,
-                 target_corefs: Optional[List[str]] = None,
-                 target_exophors: Optional[List[str]] = None,
-                 extract_nes: bool = True,
-                 ) -> None:
-        super().__init__(target_cases, target_corefs, target_exophors, extract_nes)
-        self.did2path = {'doc1': None}
-        self.knp_string = knp_string
-
-    def process_document(self, doc_id: str = 'doc1') -> Optional['Document']:
-        if doc_id != 'doc1':
-            logger.error(f'Unknown document id: {doc_id}')
-            return None
-        return Document(self.knp_string,
-                        doc_id,
-                        self.target_cases,
-                        self.target_corefs,
-                        self.target_exophors,
-                        self.extract_nes)
-
-    def process_documents(self, doc_ids: List[str]) -> Iterator[Optional['Document']]:
-        for doc_id in doc_ids:
+        for doc_id in self.did2source.keys():
             yield self.process_document(doc_id)
-
-    def process_all_documents(self) -> Iterator['Document']:
-        yield Document(self.knp_string,
-                       'doc1',
-                       self.target_cases,
-                       self.target_corefs,
-                       self.target_exophors,
-                       self.extract_nes)
 
 
 class Document:

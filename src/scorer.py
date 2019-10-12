@@ -9,7 +9,7 @@ from collections import OrderedDict
 
 from pyknp import BList, Tag
 
-from kwdlc_reader import KWDLCDirectoryReader, Document, Argument
+from kwdlc_reader import KWDLCReader, Document, Argument
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -351,14 +351,14 @@ def main():
                         help='Special tokens. Separate by ",".')
     args = parser.parse_args()
 
-    reader_gold = KWDLCDirectoryReader(
+    reader_gold = KWDLCReader(
         Path(args.gold_dir),
         target_cases=args.case_string.split(','),
         target_corefs=['=', '=構', '=≒'],
         target_exophors=args.exophors.split(','),
         extract_nes=False
     )
-    reader_pred = KWDLCDirectoryReader(
+    reader_pred = KWDLCReader(
         Path(args.prediction_dir),
         target_cases=reader_gold.target_cases,
         target_corefs=reader_gold.target_corefs,

@@ -7,7 +7,7 @@ from pathlib import Path
 from pyknp import Tag
 
 from data_loader.dataset import InputFeatures, PASDataset
-from kwdlc_reader import KWDLCReader, KWDLCStringReader, Document, Pas, Argument
+from kwdlc_reader import KWDLCReader, Document, Pas, Argument
 
 
 class PredictionKNPWriter:
@@ -26,7 +26,7 @@ class PredictionKNPWriter:
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
         self.dids = [example.doc_id for example in dataset.examples]
-        self.did2path: Dict[str, Path] = dataset.reader.did2path
+        self.did2source: Dict[str, Union[Path, str]] = dataset.reader.did2source
         self.dtid2cfid: Dict[int, str] = {}
         self.logger = logger
 
@@ -45,15 +45,14 @@ class PredictionKNPWriter:
         documents_pred: List[Document] = []
         for did, features, arguments_set, gold_arguments_set in \
                 zip(self.dids, self.all_features, arguments_sets, self.gold_arguments_sets):
-            input_file = self.did2path[did]
-            if input_file is not None:
-                document = self.reader.process_document(input_file.stem)
-                with input_file.open() as fin:
+            input_source = self.did2source[did]
+            document = self.reader.process_document(did)
+            if isinstance(input_source, Path):
+                with input_source.open() as fin:
                     knp_string = ''.join(fin.readlines())
             else:
-                assert isinstance(self.reader, KWDLCStringReader)
-                document = self.reader.process_document()
-                knp_string = self.reader.knp_string
+                assert isinstance(input_source, str)
+                knp_string = input_source
             if document is None:
                 self.logger.warning(f'document: {document.doc_id} is skipped.')
                 continue
