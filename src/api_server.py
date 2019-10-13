@@ -9,7 +9,6 @@ from writer.prediction_writer import PredictionKNPWriter
 from kwdlc_reader import Document
 from analyzer import Analyzer
 
-
 app = Flask(__name__)
 
 logger = logging.getLogger(__name__)
@@ -17,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 @app.route('/api')
 def api():
-    input_string = analyzer.sanitize_string(request.args['input'])
-    logger.info(f'input: {input_string}')
+    input_string = request.args['input']
 
     arguments_set, dataset = analyzer.analyze(input_string)
 
@@ -46,7 +44,7 @@ def api():
     html_string += '</pre>\n'
 
     return make_response(jsonify({
-        "input": input_string,
+        "input": analyzer.sanitize_string(input_string),
         "output": html_string
     }))
 

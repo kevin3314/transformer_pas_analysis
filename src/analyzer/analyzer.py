@@ -75,8 +75,10 @@ class Analyzer:
 
     def analyze(self, doc: str) -> Tuple[list, PASDataset]:
         doc = self.sanitize_string(doc)
+        sents = self.split_document(doc)
+        self.logger.info('input: ' + ''.join(sents))
         knp_out = ''
-        for i, sent in enumerate(self.split_document(doc)):
+        for i, sent in enumerate(sents):
             knp_out_ = self._apply_knp(sent)
             knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
             knp_out += knp_out_
@@ -113,14 +115,16 @@ class Analyzer:
         return jumanpp_out, jumanpp_conll_out
 
     def _apply_knp(self, sent: str) -> str:
+        self.logger.info(f'parse sentence: {sent}')
         knp = KNP(command=self.knp, jumancommand=self.juman, option=self.knp_dpnd_option)
         knp_result = knp.parse(sent)
 
         if self.bertknp is True:
-            jumanpp_out, jumanpp_conll_out = self._apply_jumanpp(sent)
+            _, jumanpp_conll_out = self._apply_jumanpp(sent)
             clientsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.logger.info(f'connect to {self.knp_host}:{self.knp_port}')
             clientsock.connect((self.knp_host, self.knp_port))
-            clientsock.sendall(jumanpp_out.encode('utf-8'))
+            clientsock.sendall(jumanpp_conll_out.encode('utf-8'))
 
             buf = []
             while True:
@@ -131,6 +135,7 @@ class Analyzer:
                     break
             clientsock.close()
             conllu_out = ''.join(buf)
+            self.logger.info(f'received {len(conllu_out)} chars from BERTKNP')
 
             # modify KNP result by conllu result of BERTKNP
             head_ids, dpnd_types = self._read_conllu_from_buf(conllu_out)
