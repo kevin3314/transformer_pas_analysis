@@ -45,7 +45,9 @@ def api():
 
     return make_response(jsonify({
         "input": analyzer.sanitize_string(input_string),
-        "output": html_string
+        "output": {
+            'result 1': html_string
+        }
     }))
 
 
