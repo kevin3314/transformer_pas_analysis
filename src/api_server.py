@@ -21,7 +21,9 @@ def api():
     arguments_set, dataset = analyzer.analyze(input_string)
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
-    document_pred: Document = prediction_writer.write(arguments_set, None)[0]
+    with io.StringIO() as string:
+        document: Document = prediction_writer.write(arguments_set, string)[0]
+        knp_result = string.getvalue()
 
     html_string = textwrap.dedent('''
         <style type="text/css">
@@ -35,9 +37,9 @@ def api():
         </style>
         ''')
     html_string += '<pre>\n'
-    for sid in document_pred.sid2sentence.keys():
+    for sid in document.sid2sentence.keys():
         with io.StringIO() as string:
-            document_pred.draw_tree(sid, string)
+            document.draw_tree(sid, string)
             tree_string = string.getvalue()
         logger.info('output:\n' + tree_string)
         html_string += tree_string
@@ -45,9 +47,10 @@ def api():
 
     return make_response(jsonify({
         "input": analyzer.sanitize_string(input_string),
-        "output": {
-            'result 1': html_string
-        }
+        "output": [
+            {'result': html_string},
+            {'results in a KNP format': knp_result}
+        ]
     }))
 
 
