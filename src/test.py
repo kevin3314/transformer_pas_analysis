@@ -10,6 +10,7 @@ import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from utils.parse_config import ConfigParser
+from utils import prepare_device
 from writer.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
 
@@ -25,7 +26,7 @@ class Tester:
         self.target = target
         self.logger = logger
 
-        self.device, device_ids = self._prepare_device(config['n_gpu'])
+        self.device, device_ids = prepare_device(config['n_gpu'], self.logger)
         self._load_model()
         self.model = model.to(self.device)
         self.model.eval()
@@ -45,23 +46,6 @@ class Tester:
         self.logger.info(f'Loading checkpoint: {self.config.resume} ...')
         state_dict = torch.load(self.config.resume, map_location=self.device)['state_dict']
         self.model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
-
-    def _prepare_device(self, n_gpu_use):
-        """
-        setup GPU device if available, move model into configured device
-        """
-        n_gpu = torch.cuda.device_count()
-        if n_gpu_use > 0 and n_gpu == 0:
-            self.logger.warning("Warning: There\'s no GPU available on this machine,"
-                                "training will be performed on CPU.")
-            n_gpu_use = 0
-        if n_gpu_use > n_gpu:
-            self.logger.warning("Warning: The number of GPU\'s configured to use is {}, but only {} are available "
-                                "on this machine.".format(n_gpu_use, n_gpu))
-            n_gpu_use = n_gpu
-        device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
-        list_ids = list(range(n_gpu_use))
-        return device, list_ids
 
     def _eval_metrics(self, result: dict):
         f1_metrics = np.zeros(len(self.metrics))
