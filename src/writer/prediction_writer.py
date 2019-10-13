@@ -66,7 +66,8 @@ class PredictionKNPWriter:
                                      document.target_cases,
                                      document.target_corefs,
                                      document.target_exophors,
-                                     document.extract_nes)
+                                     document.extract_nes,
+                                     use_pas_tag=False)  # TODO: True と False で結果が同じか確認
             documents_pred.append(document_pred)
 
             output_knp_lines = self._add_pas_analysis(output_knp_lines, document_pred)

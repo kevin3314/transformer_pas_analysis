@@ -125,3 +125,6 @@ dmypy.json
 config
 data
 result
+
+*.ini
+!*.example.ini

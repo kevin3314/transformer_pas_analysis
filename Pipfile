@@ -11,13 +11,13 @@ pytest = "*"
 [packages]
 numpy = "*"
 tqdm = "*"
-pyknp = "*"
 mojimoji = "*"
 flask = "*"
 tensorboard = "*"
 future = "*"
 torch = "==1.2.0"
 transformers = "*"
+pyknp = {editable = true,git = "https://github.com/ku-nlp/pyknp.git"}
 
 [requires]
 python_version = "3.6"

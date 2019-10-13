@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "3b2dd12ca50e0a1769b7b150ce4e04f8e4407561e9858f1146bcd7222182b4c7"
+            "sha256": "8fcc1ba03a9596ccb2fcc3408056875773f49fd7e6e3cd7b76ecd3360018b193"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -243,12 +243,9 @@
             "version": "==3.10.0"
         },
         "pyknp": {
-            "hashes": [
-                "sha256:5d165a0387f493bf72e917f56ca55047d162d5f5771a06d713012c428efdd480",
-                "sha256:98922d13395512fa4def77c15cf9fe4c81c65c072ba432db68a4fde1309f1193"
-            ],
-            "index": "pypi",
-            "version": "==0.4.1"
+            "editable": true,
+            "git": "https://github.com/ku-nlp/pyknp.git",
+            "ref": "ab2dfbec820575d82cbf98115c7706f2e3e290f4"
         },
         "python-dateutil": {
             "hashes": [
