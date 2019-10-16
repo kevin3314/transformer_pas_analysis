@@ -1,45 +1,67 @@
-import logging
 import copy
-from typing import List, Dict, Optional
+import logging
+from typing import List, Dict
 from collections import defaultdict
+from abc import abstractmethod
 
-from pyknp import Tag, Morpheme
+from pyknp import Tag
 
+from kwdlc_reader.base_phrase import BasePhrase
+from kwdlc_reader.coreference import Mention
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
+Predicate = BasePhrase
 
-class Argument:
-    """ 項に関する情報を保持するオブジェクト
 
-    Attributes:
-        sid (str): 文ID
-        tid (int): 基本句ID
+class BaseArgument:
+    """全ての項の基底クラス"""
+    def __init__(self, eid: int, dep_type: str, mode: str):
+        self.eid: int = eid
+        self.dep_type: str = dep_type
+        self.mode: str = mode
+        self.optional = False
+
+    @property
+    def is_special(self) -> bool:
+        return self.dep_type == 'exo'
+
+    @property
+    @abstractmethod
+    def midasi(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __eq__(self, other) -> bool:
+        raise NotImplementedError
+
+
+class Argument(BasePhrase, BaseArgument):
+    """ 文中に出現する(外界ではない)項を表すオブジェクト
+
+    Args:
+        mention (Mention): メンション
         midasi (str): 表記
-        dtid (int): 文書レベル基本句ID
-        dmid (int): 文書レベルの形態素ID
         dep_type (str): 係り受けタイプ ("overt", "dep", "intra", "inter", "exo")
         mode (str): モード
     """
 
     def __init__(self,
-                 sid: Optional[str],
-                 tid: Optional[int],
+                 mention: Mention,
                  midasi: str,
-                 dtid: Optional[int],
-                 dmid: Optional[int],
                  dep_type: str,
                  mode: str
                  ) -> None:
-        self.sid = sid
-        self.tid = tid
-        self.midasi = midasi
-        self.dtid = dtid
-        self.dmid = dmid
-        self.dep_type = dep_type
-        self.mode = mode
-        self.optional = False
+        super(Argument, self).__init__(mention, mention.dtid, mention.sid)  # initialize BasePhrase
+        super(BasePhrase, self).__init__(mention.eid, dep_type, mode)  # initialize BaseArgument
+        self.mention = mention
+        self._midasi = midasi
+
+    @property
+    def midasi(self) -> str:
+        """表記"""
+        return self._midasi
 
     # for test
     def __iter__(self):
@@ -54,94 +76,100 @@ class Argument:
     def __str__(self):
         return f'{self.midasi} (sid: {self.sid}, tid: {self.tid}, dtid: {self.dtid})'
 
-    def __eq__(self, other: 'Argument'):
-        if self.dtid is None and other.dtid is None:
-            return self.midasi == other.midasi
-        else:
-            return self.dtid == other.dtid
+    def __eq__(self, other: BaseArgument):
+        return isinstance(other, Argument) and self.dtid == other.dtid
+
+
+class SpecialArgument(BaseArgument):
+    """外界を指す項を表すオブジェクト
+
+    Args:
+        exophor (str): 外界照応詞 (不特定:人など)
+        eid (int): 外界照応詞のエンティティID
+        mode (str): モード
+    """
+    def __init__(self, exophor: str, eid: int, mode: str):
+        dep_type = 'exo'
+        super().__init__(eid, dep_type, mode)
+        self.exophor: str = exophor
+
+    @property
+    def midasi(self) -> str:
+        return self.exophor
+
+    def __eq__(self, other: BaseArgument):
+        return isinstance(other, SpecialArgument) and self.exophor == other.exophor
+
+
+# class Predicate(BasePhrase):
+#     def __init__(self, tag, dtid, sid, mrph2dmid):
+#         super().__init__(tag, dtid, sid, mrph2dmid)
 
 
 class Pas:
     """ 述語項構造を保持するオブジェクト
 
     Args:
-        tag (Tag): 述語の基本句
-        dtid (int): 述語の文書レベル基本句ID
-        sid (str): 述語の文ID
-        mrph2dmid (dict): 形態素とその文書レベルIDを紐付ける辞書
+        pred_bp (BasePhrase): 述語となる基本句
 
     Attributes:
-        predicate (Tag): 述語
+        predicate (Predicate): 述語
         arguments (dict): 格と項
-        dtid (int): 文書レベル基本句ID
-        sid (str): 文ID
-        dmid (int): 述語の中の内容語形態素の文書レベル形態素ID
     """
 
-    def __init__(self, tag: Tag, dtid: int, sid: str, mrph2dmid: Dict[Morpheme, int]):
-        self.predicate = tag
-        self.arguments: Dict[str, List[Argument]] = defaultdict(list)
-        self.dtid = dtid
-        self.sid = sid
-        self.mrph2dmid = mrph2dmid
-        self.dmid = self._get_content_word(tag, sid)
+    def __init__(self, pred_bp: BasePhrase):
+        # self.predicate = Predicate(pred_bp.tag, pred_bp.dtid, pred_bp.sid)
+        self.predicate: Predicate = pred_bp
+        self.arguments: Dict[str, List[BaseArgument]] = defaultdict(list)
 
-    def _get_content_word(self, tag: Tag, sid: str) -> int:
-        for mrph in tag.mrph_list():
-            if '<内容語>' in mrph.fstring:
-                return self.mrph2dmid[mrph]
-        else:
-            logger.warning(f'cannot find content word in: {tag.midasi}\t{sid}')
-            return self.mrph2dmid[tag.mrph_list()[0]]
-
-    def add_argument(self,
-                     case: str,
-                     tag: Optional[Tag],
-                     sid: Optional[str],
-                     dtid: Optional[int],
-                     midasi: str,
-                     mode: str,
-                     ) -> None:
-        if tag is None:
-            assert sid is None and dtid is None
-            if midasi == 'なし':
-                if mode not in ('？', '?', 'AND'):
-                    logger.warning(f'target: なし found with mode: "{mode}"\t{self.sid}')
-                if self.arguments[case]:
-                    arg = self.arguments[case][-1]
-                    arg.optional = True
-                    logger.info(f'marked {arg.midasi} as optional\t{self.sid}')
-                else:
-                    logger.info(f'no preceding argument found. regard target: なし as normal exophor')
-                return
-            tid = None
-            dmid = None
-        else:
-            tid = tag.tag_id
-            dmid = self._get_content_word(tag, sid)
-        dep_type = self._get_dep_type(self.predicate, tag, self.sid, sid, case)
-        argument = Argument(sid, tid, midasi, dtid, dmid, dep_type, mode)
+    def add_argument(self, case: str, mention: Mention, target: str, mode: str):
+        dep_type = self._get_dep_type(self.predicate.tag, mention.tag, self.predicate.sid, mention.sid, case)
+        argument = Argument(mention, target, dep_type, mode)
         self.arguments[case].append(argument)
 
     @staticmethod
-    def _get_dep_type(pred: Tag, arg: Tag, sid_pred: str, sid_arg: str, atype: str) -> str:
-        if arg is not None:
-            if arg in pred.children:
-                if arg.features.get('係', None) == atype.rstrip('？') + '格' or atype in arg.features:
-                    return 'overt'
-                else:
-                    return 'dep'
-            elif arg is pred.parent:
-                return 'dep'
-            elif sid_arg == sid_pred:
-                return 'intra'
+    def _get_dep_type(pred: Tag, arg: Tag, sid_pred: str, sid_arg: str, case: str) -> str:
+        if arg in pred.children:
+            if arg.features.get('係', None) == case.rstrip('？') + '格' or case in arg.features:
+                return 'overt'
             else:
-                return 'inter'
+                return 'dep'
+        elif arg is pred.parent:
+            return 'dep'
+        elif sid_arg == sid_pred:
+            return 'intra'
         else:
-            return 'exo'
+            return 'inter'
+
+    def add_special_argument(self, case: str, exophor: str, eid: int, mode: str):
+        special_argument = SpecialArgument(exophor, eid, mode)
+        self.arguments[case].append(special_argument)
+
+    def set_previous_argument_optional(self, case: str, mode: str):
+        if mode not in ('？', '?', 'AND'):
+            logger.warning(f'target: なし found with mode: "{mode}"\t{self.sid}')
+        if self.arguments[case]:
+            arg = self.arguments[case][-1]
+            arg.optional = True
+            logger.info(f'marked {arg.midasi} as optional\t{self.sid}')
+        else:
+            logger.info(f'no preceding argument found. なし is ignored.\t{self.sid}')
 
     def copy(self) -> 'Pas':
         # only for arguments, perform deepcopy
         new_obj = copy.copy(self)
         new_obj.arguments = copy.deepcopy(self.arguments)
         return new_obj
+
+    @property
+    def dtid(self) -> int:
+        return self.predicate.dtid
+
+    @property
+    def sid(self) -> str:
+        return self.predicate.sid
+
+    @property
+    def dmid(self) -> int:
+        """述語の中の内容語形態素の文書レベル形態素ID"""
+        return self.predicate.dmid
