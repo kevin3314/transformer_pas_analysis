@@ -4,7 +4,7 @@ from typing import List, Dict
 from collections import defaultdict
 from abc import abstractmethod
 
-from pyknp import Tag
+from pyknp import Tag, Morpheme
 
 from kwdlc_reader.base_phrase import BasePhrase
 from kwdlc_reader.coreference import Mention
@@ -51,9 +51,10 @@ class Argument(BasePhrase, BaseArgument):
                  mention: Mention,
                  midasi: str,
                  dep_type: str,
-                 mode: str
+                 mode: str,
+                 mrph2dmid: Dict[Morpheme, int]
                  ) -> None:
-        super(Argument, self).__init__(mention, mention.dtid, mention.sid)  # initialize BasePhrase
+        super(Argument, self).__init__(mention.tag, mention.dtid, mention.sid, mrph2dmid)  # initialize BasePhrase
         super(BasePhrase, self).__init__(mention.eid, dep_type, mode)  # initialize BaseArgument
         self.mention = mention
         self._midasi = midasi
@@ -122,9 +123,9 @@ class Pas:
         self.predicate: Predicate = pred_bp
         self.arguments: Dict[str, List[BaseArgument]] = defaultdict(list)
 
-    def add_argument(self, case: str, mention: Mention, target: str, mode: str):
+    def add_argument(self, case: str, mention: Mention, target: str, mode: str, mrph2dmid: Dict[Morpheme, int]):
         dep_type = self._get_dep_type(self.predicate.tag, mention.tag, self.predicate.sid, mention.sid, case)
-        argument = Argument(mention, target, dep_type, mode)
+        argument = Argument(mention, target, dep_type, mode, mrph2dmid)
         self.arguments[case].append(argument)
 
     @staticmethod

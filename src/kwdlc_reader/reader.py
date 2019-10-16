@@ -218,7 +218,7 @@ class Document:
                         sid = self.sentences[sid2idx[arg.sid] - arg.sdist].sid
                         arg_bp = self._get_bp(sid, arg.tid)
                         mention = self._create_mention(arg_bp)
-                        pas.add_argument(case, mention, arg.midasi, '')
+                        pas.add_argument(case, mention, arg.midasi, '', self.mrph2dmid)
             if pas.arguments:
                 self._pas[pas.dtid] = pas
 
@@ -245,7 +245,7 @@ class Document:
                         if arg_bp is None:
                             continue
                         mention = self._create_mention(arg_bp)  # 項を発見したら同時に mention と entity を作成
-                        pas.add_argument(rel.atype, mention, rel.target, rel.mode)
+                        pas.add_argument(rel.atype, mention, rel.target, rel.mode, self.mrph2dmid)
                     # exophora
                     else:
                         if rel.target == 'なし':
@@ -326,7 +326,7 @@ class Document:
             # exophor
             else:
                 if rel.target not in ('不特定:人', '不特定:物', '不特定:状況'):  # 共参照先が singleton entity だった時
-                    target_entities = [e for e in self._entities.values() if rel.target in e.exophors]
+                    target_entities = [e for e in self.get_all_entities() if rel.target in e.exophors]
                     if target_entities:
                         assert len(target_entities) == 1  # singleton entity が1つしかないことを保証
                         target_entity = target_entities[0]
@@ -386,7 +386,7 @@ class Document:
             eid = len(self._entities)
         if exophor:
             if exophor not in ('不特定:人', '不特定:物', '不特定:状況'):  # exophor が singleton entity だった時
-                entities = [e for e in self._entities.values() if exophor in e.exophors]
+                entities = [e for e in self.get_all_entities() if exophor in e.exophors]
                 # すでに singleton entity が存在した場合、新しい entity は作らずにその entity を返す
                 if entities:
                     assert len(entities) == 1  # singleton entity が1つしかないことを保証
@@ -502,7 +502,7 @@ class Document:
                     for mention in entity.mentions:
                         if isinstance(arg, Argument) and mention.dtid == arg.dtid:
                             continue
-                        pas.add_argument(case, mention, mention.midasi, '')
+                        pas.add_argument(case, mention, mention.midasi, '', self.mrph2dmid)
 
         return pas.arguments
 

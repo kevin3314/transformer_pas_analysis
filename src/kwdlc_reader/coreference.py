@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Set
 
 from pyknp import Morpheme
 
-from kwdlc_reader import BasePhrase
+from kwdlc_reader.base_phrase import BasePhrase
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
