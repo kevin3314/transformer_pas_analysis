@@ -249,7 +249,7 @@ class Document:
                     # exophora
                     else:
                         if rel.target == 'なし':
-                            pas.set_previous_argument_optional(rel.atype, rel.mode)
+                            pas.set_previous_argument_optional(rel.atype)
                             continue
                         if rel.target not in ALL_EXOPHORS:
                             logger.warning(f'Unknown exophor: {rel.target}\t{pas.sid}')
@@ -318,6 +318,7 @@ class Document:
                     target_entity = self._entities[self._mentions[target_bp.dtid].eid]
                     logger.info(f'Merge entity{entity.eid} and {target_entity.eid}.')
                     entity.merge(target_entity)
+                    self._entities.pop(target_entity.eid)
                 else:
                     target_mention = Mention(target_bp, self.mrph2dmid)
                     self._mentions[target_bp.dtid] = target_mention
@@ -332,6 +333,7 @@ class Document:
                         target_entity = target_entities[0]
                         logger.info(f'Merge entity{entity.eid} and {target_entity.eid}.')
                         target_entity.merge(entity)
+                        self._entities.pop(entity.eid)
                         return
                 if len(entity.exophors) == 0:
                     logger.info(f'Mark entity{entity.eid} as {rel.target}.')
@@ -382,8 +384,13 @@ class Document:
         Returns:
              Entity: エンティティ
         """
-        if eid is None:
-            eid = len(self._entities)
+        eids: List[int] = [e.eid for e in self._entities.values()]
+        if eid in eids:
+            eid_ = eid
+            eid: int = max(eids) + 1
+            logger.warning(f'eid: {eid_} is already used. use eid: {eid} instead.')
+        elif eid is None:
+            eid: int = max(eids) + 1 if eids else 0
         if exophor:
             if exophor not in ('不特定:人', '不特定:物', '不特定:状況'):  # exophor が singleton entity だった時
                 entities = [e for e in self.get_all_entities() if exophor in e.exophors]
@@ -463,7 +470,7 @@ class Document:
         return list(self._mentions.values())
 
     def get_all_entities(self) -> List[Entity]:
-        return [entity for entity in self._entities.values() if entity.mentions]
+        return list(self._entities.values())
 
     def get_entity(self, tag: Tag) -> Optional[Entity]:
         entities = [e for e in self._entities.values() for m in e.mentions if m.dtid == self.tag2dtid[tag]]

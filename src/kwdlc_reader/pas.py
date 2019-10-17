@@ -126,7 +126,8 @@ class Pas:
     def add_argument(self, case: str, mention: Mention, target: str, mode: str, mrph2dmid: Dict[Morpheme, int]):
         dep_type = self._get_dep_type(self.predicate.tag, mention.tag, self.predicate.sid, mention.sid, case)
         argument = Argument(mention, target, dep_type, mode, mrph2dmid)
-        self.arguments[case].append(argument)
+        if argument not in self.arguments[case]:
+            self.arguments[case].append(argument)
 
     @staticmethod
     def _get_dep_type(pred: Tag, arg: Tag, sid_pred: str, sid_arg: str, case: str) -> str:
@@ -142,19 +143,18 @@ class Pas:
         else:
             return 'inter'
 
-    def add_special_argument(self, case: str, exophor: str, eid: int, mode: str):
+    def add_special_argument(self, case: str, exophor: str, eid: int, mode: str) -> None:
         special_argument = SpecialArgument(exophor, eid, mode)
-        self.arguments[case].append(special_argument)
+        if special_argument not in self.arguments[case]:
+            self.arguments[case].append(special_argument)
 
-    def set_previous_argument_optional(self, case: str, mode: str):
-        if mode not in ('？', '?', 'AND'):
-            logger.warning(f'target: なし found with mode: "{mode}"\t{self.sid}')
-        if self.arguments[case]:
-            arg = self.arguments[case][-1]
+    def set_previous_argument_optional(self, case: str) -> None:
+        if not self.arguments[case]:
+            logger.info(f'no preceding argument found. なし is ignored.\t{self.sid}')
+            return
+        for arg in self.arguments[case]:
             arg.optional = True
             logger.info(f'marked {arg.midasi} as optional\t{self.sid}')
-        else:
-            logger.info(f'no preceding argument found. なし is ignored.\t{self.sid}')
 
     def copy(self) -> 'Pas':
         # only for arguments, perform deepcopy

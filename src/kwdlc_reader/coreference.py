@@ -66,6 +66,7 @@ class Entity:
         if '<体言>' not in mention.tag.fstring:
             self.taigen = False
 
+    # merge 実行時は document._entities から other を忘れずに削除する
     def merge(self, other: 'Entity') -> None:
         """entity 同士をマージする"""
         for mention in other.mentions:

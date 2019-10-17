@@ -150,15 +150,103 @@ def test_pas_relax(fixture_kwdlc_reader: KWDLCReader):
 def test_coref(fixture_kwdlc_reader: KWDLCReader):
     document = fixture_kwdlc_reader.process_document('w201106-0000060050')
     entities: List[Entity] = document.get_all_entities()
-    assert len(entities) == 12
+    assert len(entities) == 16
 
     entity = entities[0]
+    assert (entity.taigen, entity.yougen) == (True, True)  # TODO: should be (False, False)
+    assert entity.exophors == ['不特定:人']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 0
+
+    entity = entities[1]
     assert (entity.taigen, entity.yougen) == (True, False)
+    assert entity.exophors == []
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('コイン', 0)
+    assert entity.exophors == []
+    assert entity.mode == ''
+
+    entity = entities[2]
+    assert (entity.taigen, entity.yougen) == (True, True)  # TODO: should be (False, False)
+    assert entity.exophors == ['不特定:人']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 0
+
+    entity = entities[3]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[4]
+    assert (entity.taigen, entity.yougen) == (True, True)
     assert entity.exophors == ['不特定:人', '著者', '読者']
-    assert entity.mode == 'AND'
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[5]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[6]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[7]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[8]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[9]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[10]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
+
+    entity = entities[11]
+    assert (entity.taigen, entity.yougen) == (True, True)
+    assert entity.exophors == ['不特定:人', '著者', '読者']
+    assert entity.mode == ''
+    mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
+    assert len(mentions) == 1
+    assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
 
     document = fixture_kwdlc_reader.process_document('w201106-0000060560')
     entities: List[Entity] = document.get_all_entities()
