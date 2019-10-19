@@ -23,9 +23,6 @@ logger.setLevel(logging.WARNING)
 # MEMO
 - corefタグは用言に対しても振られる
 - 用言かつ体言の基本句もある
-- 不特定:人１などは他の不特定:人１と同一の対象
-- 不特定:人1などの"1"で全角と半角の表記ゆれ
-- mode=?, target=なし の修飾的表現の対応(mode=ANDの場合も確認(w201106-0000104324-1))
 """
 
 
@@ -74,7 +71,7 @@ class KWDLCReader:
     def _get_target(input_: Optional[list],
                     all_: list,
                     default: list,
-                    type_: str
+                    type_: str,
                     ) -> list:
         if input_ is None:
             return default
@@ -177,7 +174,7 @@ class Document:
 
         self._pas: Dict[int, Pas] = OrderedDict()
         self._mentions: Dict[int, Mention] = OrderedDict()
-        self._entities: Dict[int, Entity] = {}
+        self.entities: Dict[int, Entity] = OrderedDict()
         if use_pas_tag:
             self._extract_pas()
         else:
@@ -202,7 +199,6 @@ class Document:
 
     def _extract_pas(self) -> None:
         sid2idx = {sid: idx for idx, sid in enumerate(self.sid2sentence.keys())}
-        # tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
             if tag.pas is None:
                 continue
@@ -249,20 +245,18 @@ class Document:
                     # exophora
                     else:
                         if rel.target == 'なし':
-                            pas.set_previous_argument_optional(rel.atype)
+                            pas.set_arguments_optional(rel.atype)
                             continue
                         if rel.target not in ALL_EXOPHORS:
                             logger.warning(f'Unknown exophor: {rel.target}\t{pas.sid}')
                             continue
-                        # elif rel.target not in self.target_exophors:
-                        #     logger.info(f'Argument: {rel.target} ({rel.atype}) of {tag.midasi} is ignored.')
-                        #     continue
                         entity = self._create_entity(rel.target)
                         pas.add_special_argument(rel.atype, rel.target, entity.eid, rel.mode)
 
                 # extract coreference
                 elif rel.atype in self.target_corefs:
-                    self._add_corefs(src_bp, rel)
+                    if rel.mode in ('', 'AND'):  # ignore "OR" and "?"
+                        self._add_corefs(src_bp, rel)
 
                 else:
                     logger.info(f'Relation type: {rel.atype} is ignored.')
@@ -291,14 +285,13 @@ class Document:
 
     def _add_corefs(self,
                     source_bp: BasePhrase,
-                    rel: Rel
+                    rel: Rel,
                     ) -> None:
         source_dtid = source_bp.dtid
         if rel.sid is not None:
             target_bp = self._get_bp(rel.sid, rel.tid)
             if target_bp is None:
                 return
-            # target_dtid = self.tag2dtid[target_tag]
             if target_bp.dtid >= source_dtid:
                 logger.warning(f'Coreference with self or latter mention\t{source_bp.midasi}\t{source_bp.sid}.')
                 return
@@ -307,58 +300,112 @@ class Document:
             if rel.target not in ALL_EXOPHORS:
                 logger.warning(f'Unknown exophor: {rel.target}\t{source_bp.sid}')
                 return
-            # elif rel.target not in self.target_exophors:
-            #     logger.info(f'Coreference of {source_bp.midasi} with {rel.target} ignored.\t{source_bp.sid}')
-            #     return
 
-        if source_dtid in self._mentions:
-            entity = self._entities[self._mentions[source_dtid].eid]
-            if rel.sid is not None:
-                if target_bp.dtid in self._mentions:
-                    target_entity = self._entities[self._mentions[target_bp.dtid].eid]
-                    logger.info(f'Merge entity{entity.eid} and {target_entity.eid}.')
-                    entity.merge(target_entity)
-                    self._entities.pop(target_entity.eid)
-                else:
-                    target_mention = Mention(target_bp, self.mrph2dmid)
-                    self._mentions[target_bp.dtid] = target_mention
-                    entity.add_mention(target_mention)
-                return
-            # exophor
-            else:
-                if rel.target not in ('不特定:人', '不特定:物', '不特定:状況'):  # 共参照先が singleton entity だった時
-                    target_entities = [e for e in self.get_all_entities() if rel.target in e.exophors]
-                    if target_entities:
-                        assert len(target_entities) == 1  # singleton entity が1つしかないことを保証
-                        target_entity = target_entities[0]
-                        logger.info(f'Merge entity{entity.eid} and {target_entity.eid}.')
-                        target_entity.merge(entity)
-                        self._entities.pop(entity.eid)
-                        return
-                if len(entity.exophors) == 0:
-                    logger.info(f'Mark entity{entity.eid} as {rel.target}.')
-                    entity.exophors.append(rel.target)
-                elif rel.target not in entity.exophors:
-                    if rel.mode != '':
-                        entity.exophors.append(rel.target)
-                        entity.mode = rel.mode
-                    else:
-                        logger.warning(f'Overwrite entity {entity.exophors} to {rel.target}\t{source_bp.sid}.')
-                        entity.exophors = [rel.target]
-                return
-        else:
-            source_mention = Mention(source_bp, self.mrph2dmid)
-            self._mentions[source_dtid] = source_mention
+        # src と tgt の違いは tgt のみ exophor を許容する点 (tgt のみ mention が存在しない場合がある)
+        source_mention = self._create_mention(source_bp)
+        for eid in source_mention.eids:
+            source_entity = self.entities[eid]
             if rel.sid is not None:
                 target_mention = self._create_mention(target_bp)
-                entity = self._entities[target_mention.eid]
-            # exophor
+                for target_eid in target_mention.eids:
+                    target_entity = self.entities[target_eid]
+                    self._merge_entities(source_mention, target_mention, source_entity, target_entity)
             else:
-                entity = self._create_entity(exophor=rel.target)
-            entity.add_mention(source_mention)
+                target_entity = self._create_entity(exophor=rel.target)
+                # target_entity と source_entity をマージ
+                self._merge_entities(source_mention, None, source_entity, target_entity)
+
+        # if source_dtid in self._mentions:
+        #     source_mention = self._mentions[source_dtid]
+        #     for eid in source_mention.eids:
+        #         source_entity = self._entities[eid]
+        #         if rel.sid is not None:
+        #             # target_mention = self._create_mention(target_bp)
+        #             # for target_eid in target_mention.eids:
+        #             #     target_entity = self._entities[target_eid]
+        #             #     target_entity.add_mention(source_mention)
+        #             #     source_entity.add_mention(target_mention)
+        #             if target_bp.dtid in self._mentions:
+        #                 target_mention = self._mentions[target_bp.dtid]
+        #                 for target_eid in target_mention.eids:
+        #                     target_entity = self._entities[target_eid]
+        #                     target_entity.add_mention(source_mention)
+        #                     source_entity.add_mention(target_mention)
+        #             else:
+        #                 target_mention = Mention(target_bp, self.mrph2dmid)
+        #                 self._mentions[target_bp.dtid] = target_mention
+        #                 source_entity.add_mention(target_mention)
+        #             continue
+        #         # exophor
+        #         else:
+        #             if rel.target not in ('不特定:人', '不特定:物', '不特定:状況'):  # 共参照先が singleton entity だった時
+        #                 target_entities = [e for e in self.get_all_entities() if rel.target == e.exophor]
+        #                 if target_entities:
+        #                     assert len(target_entities) == 1  # singleton entity が1つしかないことを保証
+        #                     target_entity = target_entities[0]
+        #                     target_entity.add_mention(source_mention)
+        #                     continue
+        #             if source_entity.exophor is None:
+        #                 logger.info(f'Mark entity{source_entity.eid} as {rel.target}.')
+        #                 source_entity.exophor = rel.target
+        #                 continue
+        #             elif rel.target not in source_entity.exophors:
+        #                 target_entity = self._create_entity(rel.target)
+        #                 target_entity.add_mention(source_mention)
+        #                 if rel.mode != '':
+        #                     source_entity.exophors.append(rel.target)
+        #                     source_entity.mode = rel.mode
+        #                 else:
+        #                     logger.warning(f'Overwrite entity {source_entity.exophors} to {rel.target}\t{source_bp.sid}.')
+        #                     source_entity.exophors = [rel.target]
+        #             return
+        # else:
+        #     source_mention = Mention(source_bp, self.mrph2dmid)
+        #     self._mentions[source_dtid] = source_mention
+        #     if rel.sid is not None:
+        #         target_mention = self._create_mention(target_bp)
+        #         entity = self._entities[target_mention.eid]
+        #     # exophor
+        #     else:
+        #         entity = self._create_entity(exophor=rel.target)
+        #     entity.add_mention(source_mention)
+
+    def _merge_entities(self,
+                        source_mention: Mention,
+                        target_mention: Optional[Mention],
+                        se: Entity,
+                        te: Entity,
+                        ) -> None:
+        """2つのエンティティをマージする
+
+        片方だけが exophor だった場合、se を exophor になるようにして te を削除
+        両方が同じ exophor だった場合、te を削除
+        両方が違う exophor だった場合、互いに mention を張り、どちらも残す
+
+        Args:
+            source_mention (Mention): 参照元メンション
+            target_mention (Mention?): 参照先メンション
+            se: 参照元エンティティ
+            te: 参照先エンティティ
+        """
+        if se is te:
+            return
+        if se.exophor is not None and te.exophor is not None and se.exophor != te.exophor:
+            if target_mention is not None:
+                se.add_mention(target_mention)
+            te.add_mention(source_mention)
+            return
+        if se.exophor is None:
+            se.exophor = te.exophor
+        for tm in te.mentions:
+            se.add_mention(tm)
+        self.entities.pop(te.eid)
+        del te
 
     def _create_mention(self, bp: BasePhrase) -> Mention:
-        """
+        """メンションを作成
+        bp がまだ mention として登録されていなければ新しく entity と共に作成．
+        登録されていればその mention を返す．
 
         Args:
             bp (BasePhrase): 基本句
@@ -375,8 +422,16 @@ class Document:
             mention = self._mentions[bp.dtid]
         return mention
 
-    def _create_entity(self, exophor: Optional[str] = None, eid: Optional[int] = None) -> Entity:
-        """
+    def _create_entity(self,
+                       exophor: Optional[str] = None,
+                       eid: Optional[int] = None,
+                       ) -> Entity:
+        """エンティティを作成
+
+        exophor が singleton entity だった場合を除き、新しく Entity のインスタンスを作成して返す
+        singleton entity とは、「著者」や「不特定:人１」などの必ず一つしか存在しないような entity
+        一方で、「不特定:人」や「不特定:物」は複数存在しうるので singleton entity ではない
+        eid を指定しない場合、最後に作成した entity の次の eid を選択
 
         Args:
             exophor (Optional[str]): 外界照応詞(optional)
@@ -384,25 +439,28 @@ class Document:
         Returns:
              Entity: エンティティ
         """
-        eids: List[int] = [e.eid for e in self._entities.values()]
+        if exophor:
+            if exophor not in ('不特定:人', '不特定:物', '不特定:状況'):  # exophor が singleton entity だった時
+                entities = [e for e in self.get_all_entities() if exophor == e.exophor]
+                # すでに singleton entity が存在した場合、新しい entity は作らずにその entity を返す
+                if entities:
+                    assert len(entities) == 1  # singleton entity が1つしかないことを保証
+                    return entities[0]
+        eids: List[int] = [e.eid for e in self.entities.values()]
         if eid in eids:
             eid_ = eid
             eid: int = max(eids) + 1
             logger.warning(f'eid: {eid_} is already used. use eid: {eid} instead.')
         elif eid is None:
             eid: int = max(eids) + 1 if eids else 0
-        if exophor:
-            if exophor not in ('不特定:人', '不特定:物', '不特定:状況'):  # exophor が singleton entity だった時
-                entities = [e for e in self.get_all_entities() if exophor in e.exophors]
-                # すでに singleton entity が存在した場合、新しい entity は作らずにその entity を返す
-                if entities:
-                    assert len(entities) == 1  # singleton entity が1つしかないことを保証
-                    return entities[0]
         entity = Entity(eid, exophor=exophor)
-        self._entities[eid] = entity
+        self.entities[eid] = entity
         return entity
 
-    def _get_bp(self, sid: str, tid: int) -> Optional[BasePhrase]:
+    def _get_bp(self,
+                sid: str,
+                tid: int,
+                ) -> Optional[BasePhrase]:
         """文IDと基本句IDから基本句を得る
 
         Args:
@@ -470,15 +528,10 @@ class Document:
         return list(self._mentions.values())
 
     def get_all_entities(self) -> List[Entity]:
-        return list(self._entities.values())
+        return list(self.entities.values())
 
-    def get_entity(self, tag: Tag) -> Optional[Entity]:
-        entities = [e for e in self._entities.values() for m in e.mentions if m.dtid == self.tag2dtid[tag]]
-        if entities:
-            assert len(entities) == 1
-            return entities[0]
-        else:
-            return None
+    def get_entities(self, tag: Tag) -> List[Entity]:
+        return [e for e in self.entities.values() for m in e.mentions if m.dtid == self.tag2dtid[tag]]
 
     def pas_list(self) -> List[Pas]:
         return list(self._pas.values())
@@ -489,7 +542,7 @@ class Document:
     def get_arguments(self,
                       predicate: Predicate,
                       relax: bool = False,
-                      include_optional: bool = False  # 「すぐに」などの修飾的な項も返すかどうか
+                      include_optional: bool = False,  # 「すぐに」などの修飾的な項も返すかどうか
                       ) -> Dict[str, List[BaseArgument]]:
         if predicate.dtid not in self._pas:
             return {}
@@ -501,19 +554,21 @@ class Document:
         if relax is True:
             for case, args in self._pas[predicate.dtid].arguments.items():
                 for arg in args:
-                    entity = self._entities[arg.eid]
-                    for exophor in entity.exophors:
-                        if exophor == arg.midasi:
-                            continue
-                        pas.add_special_argument(case, exophor, entity.eid, entity.mode)
-                    for mention in entity.mentions:
-                        if isinstance(arg, Argument) and mention.dtid == arg.dtid:
-                            continue
-                        pas.add_argument(case, mention, mention.midasi, '', self.mrph2dmid)
+                    for eid in arg.eids:
+                        entity = self.entities[eid]
+                        if entity.is_special and entity.exophor != arg.midasi:
+                            pas.add_special_argument(case, entity.exophor, entity.eid, 'AND')
+                        for mention in entity.mentions:
+                            if isinstance(arg, Argument) and mention.dtid == arg.dtid:
+                                continue
+                            pas.add_argument(case, mention, mention.midasi, 'AND', self.mrph2dmid)
 
         return pas.arguments
 
-    def draw_tree(self, sid: str, fh) -> None:
+    def draw_tree(self,
+                  sid: str,
+                  fh,
+                  ) -> None:
         predicates: List[Predicate] = self.get_predicates()
         sentence: BList = self[sid]
         with io.StringIO() as string:

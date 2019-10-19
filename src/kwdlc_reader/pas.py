@@ -17,8 +17,8 @@ Predicate = BasePhrase
 
 class BaseArgument:
     """全ての項の基底クラス"""
-    def __init__(self, eid: int, dep_type: str, mode: str):
-        self.eid: int = eid
+    def __init__(self, eids: List[int], dep_type: str, mode: str):
+        self.eids: List[int] = eids
         self.dep_type: str = dep_type
         self.mode: str = mode
         self.optional = False
@@ -55,7 +55,7 @@ class Argument(BasePhrase, BaseArgument):
                  mrph2dmid: Dict[Morpheme, int]
                  ) -> None:
         super(Argument, self).__init__(mention.tag, mention.dtid, mention.sid, mrph2dmid)  # initialize BasePhrase
-        super(BasePhrase, self).__init__(mention.eid, dep_type, mode)  # initialize BaseArgument
+        super(BasePhrase, self).__init__(mention.eids, dep_type, mode)  # initialize BaseArgument
         self.mention = mention
         self._midasi = midasi
 
@@ -66,11 +66,11 @@ class Argument(BasePhrase, BaseArgument):
 
     # for test
     def __iter__(self):
-        yield self.sid
-        yield self.tid
         yield self.midasi
+        yield self.tid
         yield self.dtid
-        # yield self.dmid
+        yield self.sid
+        yield self.eids
         yield self.dep_type
         yield self.mode
 
@@ -91,12 +91,19 @@ class SpecialArgument(BaseArgument):
     """
     def __init__(self, exophor: str, eid: int, mode: str):
         dep_type = 'exo'
-        super().__init__(eid, dep_type, mode)
+        super().__init__([eid], dep_type, mode)
         self.exophor: str = exophor
 
     @property
     def midasi(self) -> str:
         return self.exophor
+
+    # for test
+    def __iter__(self):
+        yield self.midasi
+        yield self.eids
+        yield self.dep_type
+        yield self.mode
 
     def __eq__(self, other: BaseArgument):
         return isinstance(other, SpecialArgument) and self.exophor == other.exophor
@@ -148,7 +155,7 @@ class Pas:
         if special_argument not in self.arguments[case]:
             self.arguments[case].append(special_argument)
 
-    def set_previous_argument_optional(self, case: str) -> None:
+    def set_arguments_optional(self, case: str) -> None:
         if not self.arguments[case]:
             logger.info(f'no preceding argument found. なし is ignored.\t{self.sid}')
             return
