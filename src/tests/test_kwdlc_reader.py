@@ -108,7 +108,7 @@ def test_pas(fixture_kwdlc_reader: KWDLCReader):
     assert len([_ for args in arguments.values() for _ in args]) == 1
     arg = arguments['ノ？'][0]
     assert isinstance(arg, Argument)
-    assert tuple(arg) == ('自分', 5, 15, sid3, [14, 4, 3], 'overt', '')
+    assert tuple(arg) == ('自分', 5, 15, sid3, [3, 4, 14], 'overt', '')
 
     arguments = document.get_arguments(predicates[11])
     assert predicates[11].midasi == '使用する事ができる。'
@@ -137,18 +137,15 @@ def test_pas_relax1(fixture_kwdlc_reader: KWDLCReader):
     sid3 = 'w201106-0000060050-3'
     assert predicates[10].midasi == 'フェイズに'
     assert len([_ for args in arguments.values() for _ in args]) == 4
-    arg = arguments['ノ？'][0]
-    assert isinstance(arg, Argument)
-    assert tuple(arg) == ('自分', 5, 15, sid3, [14, 4, 3], 'overt', '')
-    arg = arguments['ノ？'][1]
-    assert isinstance(arg, SpecialArgument)
-    assert tuple(arg) == ('不特定:人', [14], 'exo', 'AND')
-    arg = arguments['ノ？'][2]
-    assert isinstance(arg, SpecialArgument)
-    assert tuple(arg) == ('著者', [4], 'exo', 'AND')
-    arg = arguments['ノ？'][3]
-    assert isinstance(arg, SpecialArgument)
-    assert tuple(arg) == ('読者', [3], 'exo', 'AND')
+    args = sorted(arguments['ノ？'], key=lambda a: a.midasi)
+    assert isinstance(args[0], SpecialArgument)
+    assert tuple(args[0]) == ('不特定:人', [14], 'exo', 'AND')
+    assert isinstance(args[1], Argument)
+    assert tuple(args[1]) == ('自分', 5, 15, sid3, [3, 4, 14], 'overt', '')
+    assert isinstance(args[2], SpecialArgument)
+    assert tuple(args[2]) == ('著者', [4], 'exo', 'AND')
+    assert isinstance(args[3], SpecialArgument)
+    assert tuple(args[3]) == ('読者', [3], 'exo', 'AND')
 
 
 def test_pas_relax2(fixture_kwdlc_reader: KWDLCReader):
@@ -197,7 +194,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('コイン', 0)
-    assert mentions[0].eids == [1]
+    assert mentions[0].eids == {1}
 
     entity = entities[2]
     assert (entity.taigen, entity.yougen) == (None, None)
@@ -211,7 +208,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
-    assert sorted(mentions[0].eids) == [3, 4, 14]
+    assert mentions[0].eids == {3, 4, 14}
 
     entity = entities[4]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -219,7 +216,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
-    assert sorted(mentions[0].eids) == [3, 4, 14]
+    assert mentions[0].eids == {3, 4, 14}
 
     entity = entities[5]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -227,7 +224,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('トスを', 1)
-    mentions[0].eids = [1]
+    assert mentions[0].eids == {5}
 
     entity = entities[6]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -235,7 +232,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('表が', 4)
-    mentions[0].eids = [6]
+    assert mentions[0].eids == {6}
 
     entity = entities[7]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -243,7 +240,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('数だけ、', 6)
-    mentions[0].eids = [7]
+    assert mentions[0].eids == {7}
 
     entity = entities[8]
     assert (entity.taigen, entity.yougen) == (False, True)
@@ -251,7 +248,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('出た', 5)
-    mentions[0].eids = [8]
+    assert mentions[0].eids == {8}
 
     entity = entities[9]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -259,7 +256,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('フィールド上の', 7)
-    mentions[0].eids = [9]
+    assert mentions[0].eids == {9}
 
     entity = entities[10]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -267,7 +264,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('モンスターを', 8)
-    mentions[0].eids = [10]
+    assert mentions[0].eids == {10}
 
     entity = entities[11]
     assert (entity.taigen, entity.yougen) == (None, None)
@@ -281,7 +278,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('破壊する。', 9)
-    mentions[0].eids = [12]
+    assert mentions[0].eids == {12}
 
     entity = entities[13]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -289,7 +286,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('ターンに', 13)
-    mentions[0].eids = [13]
+    assert mentions[0].eids == {13}
 
     entity = entities[14]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -297,7 +294,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('自分の', 15)
-    assert sorted(mentions[0].eids) == [3, 4, 14]
+    assert mentions[0].eids == {3, 4, 14}
 
     entity = entities[15]
     assert (entity.taigen, entity.yougen) == (True, False)
@@ -305,7 +302,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('フェイズに', 17)
-    mentions[0].eids = [15]
+    assert mentions[0].eids == {15}
 
     entity = entities[16]
     assert (entity.taigen, entity.yougen) == (None, None)
@@ -319,7 +316,7 @@ def test_coref1(fixture_kwdlc_reader: KWDLCReader):
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 1
     assert (mentions[0].midasi, mentions[0].dtid) == ('効果は', 11)
-    mentions[0].eids = [17]
+    assert mentions[0].eids == {17}
 
 
 def test_coref2(fixture_kwdlc_reader: KWDLCReader):
@@ -332,14 +329,10 @@ def test_coref2(fixture_kwdlc_reader: KWDLCReader):
     assert entity.exophor is None
     mentions: List[Mention] = sorted(entity.mentions, key=lambda x: x.dtid)
     assert len(mentions) == 4
-    assert (mentions[0].midasi, mentions[0].dtid) == ('ドクターを', 7)
-    assert mentions[0].eids == [14]
-    assert (mentions[1].midasi, mentions[1].dtid) == ('ドクターを', 11)
-    assert mentions[0].eids == [14]
-    assert (mentions[2].midasi, mentions[2].dtid) == ('ドクターの', 16)
-    assert mentions[0].eids == [14]
-    assert (mentions[3].midasi, mentions[3].dtid) == ('皆様', 17)
-    assert mentions[0].eids == [14]
+    assert (mentions[0].midasi, mentions[0].dtid, mentions[0].eids) == ('ドクターを', 7, {14})
+    assert (mentions[1].midasi, mentions[1].dtid, mentions[1].eids) == ('ドクターを', 11, {14})
+    assert (mentions[2].midasi, mentions[2].dtid, mentions[2].eids) == ('ドクターの', 16, {14})
+    assert (mentions[3].midasi, mentions[3].dtid, mentions[3].eids) == ('皆様', 17, {14})
 
 
 def test_ne(fixture_kwdlc_reader: KWDLCReader):

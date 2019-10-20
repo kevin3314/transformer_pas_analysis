@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 
 from pyknp import Morpheme
 
@@ -17,11 +17,11 @@ class Mention(BasePhrase):
         mrph2dmid (dict): 形態素とその文書レベルIDを紐付ける辞書
 
     Attributes:
-        eids (dict): key: mode (AND, OR, ?), value: 対象の entity id
+        eids (set): entity id
     """
     def __init__(self, bp: BasePhrase, mrph2dmid: Dict[Morpheme, int]):
         super().__init__(bp.tag, bp.dtid, bp.sid, mrph2dmid)
-        self.eids: List[int] = []
+        self.eids: Set[int] = set()
 
     def get_siblings(self):  # TODO
         pass
@@ -52,6 +52,15 @@ class Entity:
     def is_special(self) -> bool:
         return self.exophor is not None
 
+    @property
+    def midasi(self) -> Optional[str]:
+        if self.is_special:
+            return self.exophor
+        if self.mentions:
+            return self.mentions[0].midasi
+        else:
+            return None
+
     def add_mention(self, mention: Mention) -> None:
         """この entity を参照する mention を追加する
 
@@ -60,22 +69,8 @@ class Entity:
         """
         if mention in self.mentions:
             return
-        mention.eids.append(self.eid)
+        mention.eids.add(self.eid)
         self.mentions.append(mention)
         # 全てのmentionの品詞が一致した場合のみentityに品詞を設定
         self.yougen = (self.yougen is not False) and ('用言' in mention.tag.features)
         self.taigen = (self.taigen is not False) and ('体言' in mention.tag.features)
-
-    # merge 実行時は document._entities から other を忘れずに削除する
-    # def merge(self, other: 'Entity') -> None:
-    #     """entity 同士をマージする"""
-    #     for mention in other.mentions:
-    #         self.add_mention(mention)
-    #     other.mentions = set()
-        # self.exophors = list(set(self.exophors) | set(other.exophors))
-        # logger.info(f'merge entity {other.eid} ({", ".join(other.exophors)}) '
-        #             f'to entity {self.eid} ({", ".join(self.exophors)})')
-
-    def __del__(self):
-        for mention in self.mentions:
-            mention.eids.remove(self.eid)

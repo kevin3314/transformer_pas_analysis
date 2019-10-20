@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import List, Dict
+from typing import List, Dict, Set
 from collections import defaultdict
 from abc import abstractmethod
 
@@ -17,8 +17,8 @@ Predicate = BasePhrase
 
 class BaseArgument:
     """全ての項の基底クラス"""
-    def __init__(self, eids: List[int], dep_type: str, mode: str):
-        self.eids: List[int] = eids
+    def __init__(self, eids: Set[int], dep_type: str, mode: str):
+        self.eids: Set[int] = eids
         self.dep_type: str = dep_type
         self.mode: str = mode
         self.optional = False
@@ -34,6 +34,11 @@ class BaseArgument:
 
     @abstractmethod
     def __eq__(self, other) -> bool:
+        raise NotImplementedError
+
+    # for test
+    @abstractmethod
+    def __iter__(self):
         raise NotImplementedError
 
 
@@ -70,7 +75,7 @@ class Argument(BasePhrase, BaseArgument):
         yield self.tid
         yield self.dtid
         yield self.sid
-        yield self.eids
+        yield sorted(self.eids)
         yield self.dep_type
         yield self.mode
 
@@ -91,7 +96,7 @@ class SpecialArgument(BaseArgument):
     """
     def __init__(self, exophor: str, eid: int, mode: str):
         dep_type = 'exo'
-        super().__init__([eid], dep_type, mode)
+        super().__init__({eid}, dep_type, mode)
         self.exophor: str = exophor
 
     @property
@@ -101,7 +106,7 @@ class SpecialArgument(BaseArgument):
     # for test
     def __iter__(self):
         yield self.midasi
-        yield self.eids
+        yield sorted(self.eids)
         yield self.dep_type
         yield self.mode
 

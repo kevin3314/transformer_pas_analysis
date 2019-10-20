@@ -231,7 +231,6 @@ class Document:
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'sentence: {rel.sid} not found in {self.doc_id}')
                     continue
-                rel.target = mojimoji.han_to_zen(rel.target, ascii=False)  # 不特定:人1 -> 不特定:人１
                 # rel.target = re.sub(r'^(不特定:(人|物|状況))[１-９]$', r'\1', rel.target)  # 不特定:人１ -> 不特定:人
                 # extract PAS
                 if rel.atype in self.target_cases:
@@ -267,6 +266,7 @@ class Document:
     # to extract rels with mode: '?', rewrite initializer of pyknp Futures class
     @staticmethod
     def _extract_rel_tags(tag: Tag) -> List[Rel]:
+        """parse tag.fstring to extract <rel> tags"""
         splitter = "><"
         rels = []
         spec = tag.fstring
@@ -277,6 +277,8 @@ class Document:
             tag_end = spec.find(splitter, tag_start)
             if spec[tag_start:].startswith('rel '):
                 rel = Rel(spec[tag_start:tag_end])
+                if rel.target:
+                    rel.target = mojimoji.han_to_zen(rel.target, ascii=False)  # 不特定:人1 -> 不特定:人１
                 if rel.atype is not None:
                     rels.append(rel)
 
@@ -301,18 +303,16 @@ class Document:
                 logger.warning(f'Unknown exophor: {rel.target}\t{source_bp.sid}')
                 return
 
-        # src と tgt の違いは tgt のみ exophor を許容する点 (tgt のみ mention が存在しない場合がある)
         source_mention = self._create_mention(source_bp)
-        for eid in source_mention.eids:
+        for eid in list(source_mention.eids):
             source_entity = self.entities[eid]
             if rel.sid is not None:
                 target_mention = self._create_mention(target_bp)
-                for target_eid in target_mention.eids:
+                for target_eid in list(target_mention.eids):
                     target_entity = self.entities[target_eid]
                     self._merge_entities(source_mention, target_mention, source_entity, target_entity)
             else:
                 target_entity = self._create_entity(exophor=rel.target)
-                # target_entity と source_entity をマージ
                 self._merge_entities(source_mention, None, source_entity, target_entity)
 
         # if source_dtid in self._mentions:
@@ -370,38 +370,6 @@ class Document:
         #         entity = self._create_entity(exophor=rel.target)
         #     entity.add_mention(source_mention)
 
-    def _merge_entities(self,
-                        source_mention: Mention,
-                        target_mention: Optional[Mention],
-                        se: Entity,
-                        te: Entity,
-                        ) -> None:
-        """2つのエンティティをマージする
-
-        片方だけが exophor だった場合、se を exophor になるようにして te を削除
-        両方が同じ exophor だった場合、te を削除
-        両方が違う exophor だった場合、互いに mention を張り、どちらも残す
-
-        Args:
-            source_mention (Mention): 参照元メンション
-            target_mention (Mention?): 参照先メンション
-            se: 参照元エンティティ
-            te: 参照先エンティティ
-        """
-        if se is te:
-            return
-        if se.exophor is not None and te.exophor is not None and se.exophor != te.exophor:
-            if target_mention is not None:
-                se.add_mention(target_mention)
-            te.add_mention(source_mention)
-            return
-        if se.exophor is None:
-            se.exophor = te.exophor
-        for tm in te.mentions:
-            se.add_mention(tm)
-        self.entities.pop(te.eid)
-        del te
-
     def _create_mention(self, bp: BasePhrase) -> Mention:
         """メンションを作成
         bp がまだ mention として登録されていなければ新しく entity と共に作成．
@@ -451,11 +419,51 @@ class Document:
             eid_ = eid
             eid: int = max(eids) + 1
             logger.warning(f'eid: {eid_} is already used. use eid: {eid} instead.')
-        elif eid is None:
+        elif eid is None or eid < 0:
             eid: int = max(eids) + 1 if eids else 0
         entity = Entity(eid, exophor=exophor)
         self.entities[eid] = entity
         return entity
+
+    def _merge_entities(self,
+                        source_mention: Mention,
+                        target_mention: Optional[Mention],
+                        se: Entity,
+                        te: Entity,
+                        ) -> None:
+        """2つのエンティティをマージする
+
+        片方だけが exophor だった場合、se を exophor になるようにして te を削除
+        両方が同じ exophor だった場合、te を削除
+        両方が違う exophor だった場合、互いに mention を張り、どちらも残す
+
+        Args:
+            source_mention (Mention): 参照元メンション
+            target_mention (Mention?): 参照先メンション
+            se: 参照元エンティティ
+            te: 参照先エンティティ
+        """
+        if se is te:
+            return
+        if se.exophor is not None and te.exophor is not None and se.exophor != te.exophor:
+            if target_mention is not None:
+                se.add_mention(target_mention)
+            te.add_mention(source_mention)
+            return
+        if se.exophor is None:
+            se.exophor = te.exophor
+        for tm in te.mentions:
+            se.add_mention(tm)
+        self._delete_entity(te.eid)
+
+    def _delete_entity(self, eid: int) -> None:
+        if eid not in self.entities:
+            return
+        entity = self.entities[eid]
+        logger.info(f'delete entity: {eid} ({entity.midasi})\t{self.doc_id}')
+        for mention in entity.mentions:
+            mention.eids.remove(eid)
+        self.entities.pop(eid)
 
     def _get_bp(self,
                 sid: str,
@@ -502,6 +510,7 @@ class Document:
                         mrph_list: List[Morpheme],
                         tag: Tag
                         ) -> Optional[range]:
+        """midasiにマッチする形態素の範囲を返す"""
         for i in range(len(tag.mrph_list())):
             end_mid = len(mrph_list) - i
             mrph_span = ''
@@ -567,9 +576,9 @@ class Document:
 
     def draw_tree(self,
                   sid: str,
-                  fh,
+                  fh=None,
                   ) -> None:
-        predicates: List[Predicate] = self.get_predicates()
+        predicates: List[Predicate] = [p for p in self.get_predicates() if p.sid == sid]
         sentence: BList = self[sid]
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
