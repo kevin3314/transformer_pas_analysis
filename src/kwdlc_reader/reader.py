@@ -7,7 +7,7 @@ from collections import OrderedDict
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
 import mojimoji
 
-from kwdlc_reader.pas import Pas, Predicate, BaseArgument, Argument
+from kwdlc_reader.pas import Pas, Predicate, BaseArgument, Argument, SpecialArgument
 from kwdlc_reader.coreference import Mention, Entity
 from kwdlc_reader.ne import NamedEntity
 from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_COREFS, CORE_COREFS, NE_CATEGORIES
@@ -221,18 +221,20 @@ class Document:
     def _extract_relations(self) -> None:
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
-            rels = self._extract_rel_tags(tag)
-            if not rels:
-                logger.debug(f'Tag: "{tag.midasi}" has no relation tags.')
-                continue
-            src_bp = BasePhrase(tag, self.tag2dtid[tag], tag2sid[tag], self.mrph2dmid)
-            pas = Pas(src_bp)
-            for rel in rels:
+            rels = []
+            for rel in self._extract_rel_tags(tag):
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'sentence: {rel.sid} not found in {self.doc_id}')
                     continue
+                if rel.atype not in (self.target_cases + self.target_corefs):
+                    logger.info(f'Relation type: {rel.atype} is ignored.')
+                    continue
+                rels.append(rel)
+            src_bp = BasePhrase(tag, self.tag2dtid[tag], tag2sid[tag], self.mrph2dmid)
+            # extract PAS
+            pas = Pas(src_bp)
+            for rel in rels:
                 # rel.target = re.sub(r'^(不特定:(人|物|状況))[１-９]$', r'\1', rel.target)  # 不特定:人１ -> 不特定:人
-                # extract PAS
                 if rel.atype in self.target_cases:
                     if rel.sid is not None:
                         assert rel.tid is not None
@@ -251,17 +253,14 @@ class Document:
                             continue
                         entity = self._create_entity(rel.target)
                         pas.add_special_argument(rel.atype, rel.target, entity.eid, rel.mode)
-
-                # extract coreference
-                elif rel.atype in self.target_corefs:
-                    if rel.mode in ('', 'AND'):  # ignore "OR" and "?"
-                        self._add_corefs(src_bp, rel)
-
-                else:
-                    logger.info(f'Relation type: {rel.atype} is ignored.')
-
             if pas.arguments:
                 self._pas[pas.dtid] = pas
+
+            # extract coreference
+            for rel in rels:
+                if rel.atype in self.target_corefs:
+                    if rel.mode in ('', 'AND'):  # ignore "OR" and "?"
+                        self._add_corefs(src_bp, rel)
 
     # to extract rels with mode: '?', rewrite initializer of pyknp Futures class
     @staticmethod
@@ -454,6 +453,9 @@ class Document:
             se.exophor = te.exophor
         for tm in te.mentions:
             se.add_mention(tm)
+        for arg in [arg for pas in self._pas.values() for args in pas.arguments.values() for arg in args]:
+            if isinstance(arg, SpecialArgument) and arg.eid == te.eid:
+                arg.eid = se.eid
         self._delete_entity(te.eid)
 
     def _delete_entity(self, eid: int) -> None:

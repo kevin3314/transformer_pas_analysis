@@ -17,8 +17,7 @@ Predicate = BasePhrase
 
 class BaseArgument:
     """全ての項の基底クラス"""
-    def __init__(self, eids: Set[int], dep_type: str, mode: str):
-        self.eids: Set[int] = eids
+    def __init__(self, dep_type: str, mode: str):
         self.dep_type: str = dep_type
         self.mode: str = mode
         self.optional = False
@@ -26,6 +25,11 @@ class BaseArgument:
     @property
     def is_special(self) -> bool:
         return self.dep_type == 'exo'
+
+    @property
+    @abstractmethod
+    def eids(self) -> Set[int]:
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -60,9 +64,13 @@ class Argument(BasePhrase, BaseArgument):
                  mrph2dmid: Dict[Morpheme, int]
                  ) -> None:
         super(Argument, self).__init__(mention.tag, mention.dtid, mention.sid, mrph2dmid)  # initialize BasePhrase
-        super(BasePhrase, self).__init__(mention.eids, dep_type, mode)  # initialize BaseArgument
+        super(BasePhrase, self).__init__(dep_type, mode)  # initialize BaseArgument
         self.mention = mention
         self._midasi = midasi
+
+    @property
+    def eids(self) -> Set[int]:
+        return self.mention.eids
 
     @property
     def midasi(self) -> str:
@@ -95,9 +103,14 @@ class SpecialArgument(BaseArgument):
         mode (str): モード
     """
     def __init__(self, exophor: str, eid: int, mode: str):
+        self.eid = eid
         dep_type = 'exo'
-        super().__init__({eid}, dep_type, mode)
+        super().__init__(dep_type, mode)
         self.exophor: str = exophor
+
+    @property
+    def eids(self) -> Set[int]:
+        return {self.eid}
 
     @property
     def midasi(self) -> str:
