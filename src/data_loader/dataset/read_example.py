@@ -43,6 +43,10 @@ def read_example(document: Document,
     process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
     last_sent = document.sentences[-1] if len(document) > 0 else None
     cases = document.target_cases
+    # for exophor in target_exophors:
+    #     if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
+    #         for n in ['１', '２', '３', '４', '５', '６', '７', '８', '９']:
+    #             target_exophors.append(exophor + n)
     words, dtids, ddeps, arguments_set, arg_candidates_set = [], [], [], [], []
     dmid = 0
     head_dmids = []

@@ -38,10 +38,7 @@ CORE_COREFS = [
     "=構",
 ]
 
-ALL_EXOPHORS = [
-    "著者",
-    "読者",
-    "不特定:人",
+UNSPECIFIED_PERSON = [
     "不特定:人１",
     "不特定:人２",
     "不特定:人３",
@@ -51,7 +48,9 @@ ALL_EXOPHORS = [
     "不特定:人７",
     "不特定:人８",
     "不特定:人９",
-    "不特定:物",
+]
+
+UNSPECIFIED_OBJECT = [
     "不特定:物１",
     "不特定:物２",
     "不特定:物３",
@@ -61,7 +60,9 @@ ALL_EXOPHORS = [
     "不特定:物７",
     "不特定:物８",
     "不特定:物９",
-    "不特定:状況",
+]
+
+UNSPECIFIED_CIRCUMSTANCES = [
     "不特定:状況１",
     "不特定:状況２",
     "不特定:状況３",
@@ -71,9 +72,17 @@ ALL_EXOPHORS = [
     "不特定:状況７",
     "不特定:状況８",
     "不特定:状況９",
+]
+
+ALL_EXOPHORS = [
+    "著者",
+    "読者",
+    "不特定:人",
+    "不特定:物",
+    "不特定:状況",
     "前文",
     "後文",
-]
+] + UNSPECIFIED_PERSON + UNSPECIFIED_OBJECT + UNSPECIFIED_CIRCUMSTANCES
 
 DEP_TYPES = [
     "overt",

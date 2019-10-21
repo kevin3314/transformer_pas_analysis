@@ -9,7 +9,7 @@ from collections import OrderedDict
 
 from pyknp import BList
 
-from kwdlc_reader import KWDLCReader, Document, Argument, BaseArgument, Predicate
+from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,10 @@ class Scorer:
                                              ('intra', 'zero_intra_sentential'),
                                              ('inter', 'zero_inter_sentential'),
                                              ('exo', 'zero_exophora')])
-
+        relax_exophors = {}
+        for exophor in target_exophors:
+            if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
+                relax_exophors[exophor + '１'] = exophor
         # make sid2predicates_pred and sid2predicates_gold
         self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
@@ -89,6 +92,11 @@ class Scorer:
                 for case in self.cases:
                     args_pred: List[BaseArgument] = arguments_pred[case]
                     args_gold: List[BaseArgument] = arguments_gold[case] if arguments_gold is not None else []
+                    # 「不特定:人１」なども「不特定:人」として扱う
+                    for arg_gold in args_gold:
+                        if isinstance(arg_gold, SpecialArgument):
+                            if arg_gold.exophor in relax_exophors:
+                                arg_gold.exophor = relax_exophors[arg_gold.exophor]
                     if not args_pred:
                         continue
                     assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
@@ -118,19 +126,28 @@ class Scorer:
                 for case in self.cases:
                     args_pred: List[Argument] = arguments_pred[case] if arguments_pred is not None else []
                     assert len(args_pred) in (0, 1)
-                    core_args_gold: List[BaseArgument] = \
-                        [arg for arg in arguments_gold[case]
-                         if not self._is_inter_sentential_cataphor(arg, predicate_gold)]  # filter out cataphoras
-                    if not core_args_gold:
+                    args_gold: List[BaseArgument] = arguments_gold[case]
+                    # filter out cataphoras
+                    args_gold = [arg for arg in args_gold
+                                 if not self._is_inter_sentential_cataphor(arg, predicate_gold)]
+                    # filter out non-target exophors
+                    args_gold = [arg for arg in args_gold
+                                 if not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)]
+                    if not args_gold:
                         continue
+                    args_gold_relaxed = arguments_gold_relaxed[case]
+                    # filter out non-target exophors
+                    args_gold_relaxed = [arg for arg in args_gold_relaxed
+                                         if not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)]
                     arg = None
-                    for arg_ in arguments_gold_relaxed[case]:
+                    for arg_ in args_gold_relaxed:
                         # filter out cataphoras
                         if self._is_inter_sentential_cataphor(arg_, predicate_gold):
                             continue
+                        # filer out
                         elif arg is None:
-                            arg = core_args_gold[0]
-                        if arg_ in args_pred:
+                            arg = args_gold[0]
+                        if arg_ in args_pred:  # 予測されている項を優先して正解の項に採用
                             arg = arg_
                     if arg is None or arg.dep_type == 'overt':  # ignore overt case
                         continue
@@ -169,9 +186,9 @@ class Scorer:
                 lines.append(f'{case}')
             for analysis, measure in measures.items():
                 lines.append(f'  {analysis}')
-                lines.append(f'    precision: {measure.precision:.3} ({measure.correct}/{measure.denom_pred})')
-                lines.append(f'    recall   : {measure.recall:.3} ({measure.correct}/{measure.denom_gold})')
-                lines.append(f'    F        : {measure.f1:.3}')
+                lines.append(f'    precision: {measure.precision:.3f} ({measure.correct}/{measure.denom_pred})')
+                lines.append(f'    recall   : {measure.recall:.3f} ({measure.correct}/{measure.denom_gold})')
+                lines.append(f'    F        : {measure.f1:.3f}')
         text = '\n'.join(lines) + '\n'
 
         if isinstance(destination, str) or isinstance(destination, Path):
