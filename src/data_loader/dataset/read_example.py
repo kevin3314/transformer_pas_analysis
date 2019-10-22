@@ -43,10 +43,12 @@ def read_example(document: Document,
     process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
     last_sent = document.sentences[-1] if len(document) > 0 else None
     cases = document.target_cases
-    # for exophor in target_exophors:
-    #     if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
-    #         for n in ['１', '２', '３', '４', '５', '６', '７', '８', '９']:
-    #             target_exophors.append(exophor + n)
+    relax_exophors = {}
+    for exophor in target_exophors:
+        relax_exophors[exophor] = exophor
+        if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
+            for n in '１２３４５６７８９':
+                relax_exophors[exophor + n] = exophor
     words, dtids, ddeps, arguments_set, arg_candidates_set = [], [], [], [], []
     dmid = 0
     head_dmids = []
@@ -75,8 +77,14 @@ def read_example(document: Document,
                     for case in cases:
                         if dmid in dmid2arguments:
                             # filter out non-target exophors
-                            args = [arg for arg in dmid2arguments[dmid][case]
-                                    if not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)]
+                            args = []
+                            for arg in dmid2arguments[dmid][case]:
+                                if isinstance(arg, SpecialArgument):
+                                    if arg.exophor in relax_exophors:
+                                        arg.exophor = relax_exophors[arg.exophor]
+                                        args.append(arg)
+                                else:
+                                    args.append(arg)
                             if not args:
                                 arguments[case] = 'NULL'
                                 continue

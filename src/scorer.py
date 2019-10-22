@@ -37,8 +37,10 @@ class Scorer:
                                              ('exo', 'zero_exophora')])
         relax_exophors = {}
         for exophor in target_exophors:
+            relax_exophors[exophor] = exophor
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
-                relax_exophors[exophor + '１'] = exophor
+                for n in '１２３４５６７８９':
+                    relax_exophors[exophor + n] = exophor
         # make sid2predicates_pred and sid2predicates_gold
         self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
@@ -101,6 +103,7 @@ class Scorer:
                         continue
                     assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                     arg = args_pred[0]
+                    assert not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)
                     if arg.dep_type == 'overt':  # ignore overt case
                         self.comp_result[(doc_id, dtid, case)] = 'overt'
                         continue
@@ -124,28 +127,19 @@ class Scorer:
                 else:
                     arguments_pred = None
                 for case in self.cases:
-                    args_pred: List[Argument] = arguments_pred[case] if arguments_pred is not None else []
+                    args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
                     assert len(args_pred) in (0, 1)
-                    args_gold: List[BaseArgument] = arguments_gold[case]
-                    # filter out cataphoras
-                    args_gold = [arg for arg in args_gold
-                                 if not self._is_inter_sentential_cataphor(arg, predicate_gold)]
-                    # filter out non-target exophors
-                    args_gold = [arg for arg in args_gold
-                                 if not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)]
+                    args_gold = self._filter_args(arguments_gold[case], predicate_gold, relax_exophors)
                     if not args_gold:
                         continue
-                    args_gold_relaxed = arguments_gold_relaxed[case]
-                    # filter out non-target exophors
-                    args_gold_relaxed = [arg for arg in args_gold_relaxed
-                                         if not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)]
+                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold, relax_exophors)
                     arg = None
                     for arg_ in args_gold_relaxed:
                         # filter out cataphoras
-                        if self._is_inter_sentential_cataphor(arg_, predicate_gold):
-                            continue
+                        # if self._is_inter_sentential_cataphor(arg_, predicate_gold):
+                        #     continue
                         # filer out
-                        elif arg is None:
+                        if arg is None:
                             arg = args_gold[0]
                         if arg_ in args_pred:  # 予測されている項を優先して正解の項に採用
                             arg = arg_
@@ -153,6 +147,23 @@ class Scorer:
                         continue
                     analysis = self.deptype2analysis[arg.dep_type]
                     self.measures[case][analysis].denom_gold += 1
+
+    @staticmethod
+    def _filter_args(args: List[BaseArgument],
+                     predicate: Predicate,
+                     relax_exophors: Dict[str, str]
+                     ) -> List[BaseArgument]:
+        filtered_args = []
+        for arg in args:
+            if isinstance(arg, SpecialArgument):
+                if arg.exophor not in relax_exophors:  # filter out non-target exophors
+                    continue
+                arg.exophor = relax_exophors[arg.exophor]
+            else:
+                if Scorer._is_inter_sentential_cataphor(arg, predicate):  # filter out cataphoras
+                    continue
+            filtered_args.append(arg)
+        return filtered_args
 
     @staticmethod
     def _is_inter_sentential_cataphor(arg: BaseArgument, predicate: Predicate):
