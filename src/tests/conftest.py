@@ -12,6 +12,5 @@ data_dir = Path(__file__).parent / 'data'
 def fixture_kwdlc_reader():
     reader = KWDLCReader(data_dir,
                          target_cases=ALL_CASES,
-                         target_corefs=ALL_COREFS,
-                         target_exophors=ALL_EXOPHORS)
+                         target_corefs=ALL_COREFS)
     yield reader

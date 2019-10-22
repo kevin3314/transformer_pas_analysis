@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import List, Dict, Union
 from collections import OrderedDict
 
-from pyknp import BList, Tag
+from pyknp import BList
 
-from kwdlc_reader import KWDLCReader, Document, Argument
+from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -17,8 +17,11 @@ logger.setLevel(logging.WARNING)
 
 
 class Scorer:
-    def __init__(self, documents_pred: List[Document], documents_gold: List[Document], kc: bool = False):
-
+    def __init__(self,
+                 documents_pred: List[Document],
+                 documents_gold: List[Document],
+                 target_exophors: List[str],
+                 kc: bool = False):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
         self.cases: List[str] = documents_gold[0].target_cases
@@ -32,68 +35,68 @@ class Scorer:
                                              ('intra', 'zero_intra_sentential'),
                                              ('inter', 'zero_inter_sentential'),
                                              ('exo', 'zero_exophora')])
-
+        relax_exophors = {}
+        for exophor in target_exophors:
+            relax_exophors[exophor] = exophor
+            if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
+                for n in '１２３４５６７８９':
+                    relax_exophors[exophor + n] = exophor
         # make sid2predicates_pred and sid2predicates_gold
-        self.sid2predicates_pred: Dict[str, List[Tag]] = OrderedDefaultDict(list)
-        self.sid2predicates_gold: Dict[str, List[Tag]] = OrderedDefaultDict(list)
+        self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
             last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
-            for pas in document_pred.pas_list():
-                if process_all or (pas.sid == last_sid):
-                    self.sid2predicates_pred[pas.sid].append(pas.predicate)
+            for predicate_pred in document_pred.get_predicates():
+                if process_all or (predicate_pred.sid == last_sid):
+                    self.sid2predicates_pred[predicate_pred.sid].append(predicate_pred)
 
-            for pas in document_gold.pas_list():
-                process: bool = process_all or (pas.sid == last_sid)
-                tag = pas.predicate
-                if '<用言:' in tag.fstring \
+            for predicate_gold in document_gold.get_predicates():
+                process: bool = process_all or (predicate_gold.sid == last_sid)
+                tag = predicate_gold.tag
+                if '用言' in tag.features \
                         and process is True:
-                    self.sid2predicates_gold[pas.sid].append(tag)
+                    self.sid2predicates_gold[predicate_gold.sid].append(predicate_gold)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
-            # for sid, sentnece in document_gold.sid2sentence.items():
-            #     predicates = self.sid2predicates_gold[sid]
-            #     for predicate in predicates:
-            #         assert predicate in document_gold.tag2dtid
 
             process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
             last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
-            # make dtid2pred_pred and dtid2pred_pred
-            dtid2pred_pred: Dict[int, Tag] = {}
-            dtid2pred_gold: Dict[int, Tag] = {}
+            dtid2pred_pred: Dict[int, Predicate] = {}
+            dtid2pred_gold: Dict[int, Predicate] = {}
             for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
-                if not (process_all or (sid == last_sid)):
+                if not (process_all or (sid == last_sid)):  # いらないかも
                     continue
-                for tag in self.sid2predicates_pred[sid]:
-                    dtid2pred_pred.update({document_pred.tag2dtid[tag]: tag})
-                for tag in self.sid2predicates_gold[sid]:
-                    dtid2pred_gold.update({document_gold.tag2dtid[tag]: tag})
-
-            # dtid2pred_pred: Dict[int, Tag] = {document_pred.tag2dtid[tag]: tag
-            #                                   for sid in document_pred.sid2sentence.keys()
-            #                                   for tag in self.sid2predicates_pred[sid]}
-            # dtid2pred_gold: Dict[int, Tag] = {document_gold.tag2dtid[tag]: tag
-            #                                   for sid in document_gold.sid2sentence.keys()
-            #                                   for tag in self.sid2predicates_gold[sid]}
+                for predicate in self.sid2predicates_pred[sid]:
+                    dtid2pred_pred[predicate.dtid] = predicate
+                for predicate in self.sid2predicates_gold[sid]:
+                    dtid2pred_gold[predicate.dtid] = predicate
 
             # calculate precision
             for dtid, predicate_pred in dtid2pred_pred.items():
                 arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
-                arguments_gold = None
                 if dtid in dtid2pred_gold:
                     predicate_gold = dtid2pred_gold[dtid]
                     arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
+                else:
+                    arguments_gold = None
                 for case in self.cases:
-                    args_pred: List[Argument] = arguments_pred[case]
-                    args_gold: List[Argument] = arguments_gold[case] if arguments_gold is not None else []
+                    args_pred: List[BaseArgument] = arguments_pred[case]
+                    args_gold: List[BaseArgument] = arguments_gold[case] if arguments_gold is not None else []
+                    # 「不特定:人１」なども「不特定:人」として扱う
+                    for arg_gold in args_gold:
+                        if isinstance(arg_gold, SpecialArgument):
+                            if arg_gold.exophor in relax_exophors:
+                                arg_gold.exophor = relax_exophors[arg_gold.exophor]
                     if not args_pred:
                         continue
                     assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                     arg = args_pred[0]
+                    assert not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)
                     if arg.dep_type == 'overt':  # ignore overt case
                         self.comp_result[(doc_id, dtid, case)] = 'overt'
                         continue
@@ -108,31 +111,26 @@ class Scorer:
             # calculate recall
             # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
             # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
-            tag2sid_gold = {tag: sentence.sid for sentence in document_gold for tag in sentence.tag_list()}
             for dtid, predicate_gold in dtid2pred_gold.items():
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=False)
                 arguments_gold_relaxed = document_gold.get_arguments(predicate_gold, relax=True)
-                arguments_pred = None
                 if dtid in dtid2pred_pred:
                     predicate_pred = dtid2pred_pred[dtid]
                     arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
-                predicate_sid_gold: str = tag2sid_gold[predicate_gold]
+                else:
+                    arguments_pred = None
                 for case in self.cases:
-                    args_pred: List[Argument] = arguments_pred[case] if arguments_pred is not None else []
+                    args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
                     assert len(args_pred) in (0, 1)
-                    core_args_gold: List[Argument] = list(filter(
-                        lambda a: not self._is_inter_sentential_cataphor(a, dtid, predicate_sid_gold),
-                        arguments_gold[case]))  # filter out cataphoras
-                    if not core_args_gold:
+                    args_gold = self._filter_args(arguments_gold[case], predicate_gold, relax_exophors)
+                    if not args_gold:
                         continue
+                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold, relax_exophors)
                     arg = None
-                    for arg_ in arguments_gold_relaxed[case]:
-                        # filter out cataphoras
-                        if self._is_inter_sentential_cataphor(arg_, dtid, predicate_sid_gold):
-                            continue
-                        elif arg is None:
-                            arg = core_args_gold[0]
-                        if arg_ in args_pred:
+                    for arg_ in args_gold_relaxed:
+                        if arg is None:
+                            arg = args_gold[0]
+                        if arg_ in args_pred:  # 予測されている項を優先して正解の項に採用
                             arg = arg_
                     if arg is None or arg.dep_type == 'overt':  # ignore overt case
                         continue
@@ -140,8 +138,25 @@ class Scorer:
                     self.measures[case][analysis].denom_gold += 1
 
     @staticmethod
-    def _is_inter_sentential_cataphor(arg: Argument, predicate_dtid: int, predicate_sid: str):
-        return arg.dtid is not None and predicate_dtid < arg.dtid and arg.sid != predicate_sid
+    def _filter_args(args: List[BaseArgument],
+                     predicate: Predicate,
+                     relax_exophors: Dict[str, str]
+                     ) -> List[BaseArgument]:
+        filtered_args = []
+        for arg in args:
+            if isinstance(arg, SpecialArgument):
+                if arg.exophor not in relax_exophors:  # filter out non-target exophors
+                    continue
+                arg.exophor = relax_exophors[arg.exophor]
+            else:
+                if Scorer._is_inter_sentential_cataphor(arg, predicate):  # filter out cataphoras
+                    continue
+            filtered_args.append(arg)
+        return filtered_args
+
+    @staticmethod
+    def _is_inter_sentential_cataphor(arg: BaseArgument, predicate: Predicate):
+        return isinstance(arg, Argument) and predicate.dtid < arg.dtid and arg.sid != predicate.sid
 
     def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
         result = OrderedDict()
@@ -171,9 +186,9 @@ class Scorer:
                 lines.append(f'{case}')
             for analysis, measure in measures.items():
                 lines.append(f'  {analysis}')
-                lines.append(f'    precision: {measure.precision:.3} ({measure.correct}/{measure.denom_pred})')
-                lines.append(f'    recall   : {measure.recall:.3} ({measure.correct}/{measure.denom_gold})')
-                lines.append(f'    F        : {measure.f1:.3}')
+                lines.append(f'    precision: {measure.precision:.3f} ({measure.correct}/{measure.denom_pred})')
+                lines.append(f'    recall   : {measure.recall:.3f} ({measure.correct}/{measure.denom_gold})')
+                lines.append(f'    F        : {measure.f1:.3f}')
         text = '\n'.join(lines) + '\n'
 
         if isinstance(destination, str) or isinstance(destination, Path):
@@ -262,7 +277,7 @@ class Scorer:
 
     def _draw_tree(self,
                    sid: str,
-                   predicates: List[Tag],
+                   predicates: List[Predicate],
                    document: Document,
                    fh=None,
                    html: bool = True
@@ -273,28 +288,28 @@ class Scorer:
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         tag_list = sentence.tag_list()
         assert len(tree_strings) == len(tag_list)
-        for i, (line, tag) in enumerate(zip(tree_strings, tag_list)):
-            if tag in predicates:
-                arguments = document.get_arguments(tag)
-                tree_strings[i] += '  '
-                for case in self.cases:
-                    argument = arguments[case]
-                    if argument:
-                        arg = argument[0].midasi
-                        if self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) == 'overt':
-                            color = 'green'
-                        elif self.comp_result.get((document.doc_id, document.tag2dtid[tag], case), None) \
-                                in self.deptype2analysis.values():
-                            color = 'blue'
-                        else:
-                            color = 'red'
+        for predicate in predicates:
+            idx = predicate.tid
+            arguments = document.get_arguments(predicate)
+            tree_strings[idx] += '  '
+            for case in self.cases:
+                args = arguments[case]
+                if args:
+                    arg = args[0].midasi
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
+                    if result == 'overt':
+                        color = 'green'
+                    elif result in self.deptype2analysis.values():
+                        color = 'blue'
                     else:
-                        arg = 'NULL'
-                        color = 'gray'
-                    if html:
-                        tree_strings[i] += f'<font color="{color}">{arg}:{case}</font> '
-                    else:
-                        tree_strings[i] += f'{arg}:{case} '
+                        color = 'red'
+                else:
+                    arg = 'NULL'
+                    color = 'gray'
+                if html:
+                    tree_strings[idx] += f'<font color="{color}">{arg}:{case}</font> '
+                else:
+                    tree_strings[idx] += f'{arg}:{case} '
 
         print('\n'.join(tree_strings), file=fh)
 
@@ -357,21 +372,19 @@ def main():
         Path(args.gold_dir),
         target_cases=args.case_string.split(','),
         target_corefs=['=', '=構', '=≒'],
-        target_exophors=args.exophors.split(','),
         extract_nes=False
     )
     reader_pred = KWDLCReader(
         Path(args.prediction_dir),
         target_cases=reader_gold.target_cases,
         target_corefs=reader_gold.target_corefs,
-        target_exophors=reader_gold.target_exophors,
         extract_nes=False,
         use_pas_tag=args.read_prediction_from_pas_tag,
     )
     documents_pred = list(reader_pred.process_all_documents())
     documents_gold = list(reader_gold.process_all_documents())
 
-    scorer = Scorer(documents_pred, documents_gold)
+    scorer = Scorer(documents_pred, documents_gold, target_exophors=args.exophors.split(','))
     if args.result_html:
         scorer.write_html(Path(args.result_html))
     if args.result_csv:

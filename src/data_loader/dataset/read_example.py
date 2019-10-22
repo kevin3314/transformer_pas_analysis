@@ -1,9 +1,9 @@
 from typing import List, Dict, Optional
 from collections import OrderedDict
 
-from pyknp import BList, Tag
+from pyknp import BList, Morpheme
 
-from kwdlc_reader import Document
+from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, Entity
 
 
 class PasExample:
@@ -36,21 +36,29 @@ class PasExample:
 
 
 def read_example(document: Document,
+                 target_exophors: List[str],
                  coreference: bool,
-                 kc: bool
+                 kc: bool,
                  ) -> PasExample:
     process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
     last_sent = document.sentences[-1] if len(document) > 0 else None
     cases = document.target_cases
+    relax_exophors = {}
+    for exophor in target_exophors:
+        relax_exophors[exophor] = exophor
+        if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
+            for n in '１２３４５６７８９':
+                relax_exophors[exophor + n] = exophor
     words, dtids, ddeps, arguments_set, arg_candidates_set = [], [], [], [], []
     dmid = 0
     head_dmids = []
     for sentence in document:
         process: bool = process_all or (sentence is last_sent)
         head_dmids += get_head_dmids(sentence, document.mrph2dmid)
-        dmid2pred: Dict[int, Tag] = {pas.dmid: pas.predicate for pas in document.pas_list()}
+        dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
+                                                                    for pred in document.get_predicates()}
         for tag in sentence.tag_list():
-            mrph_list: list = tag.mrph_list()
+            mrph_list: List[Morpheme] = tag.mrph_list()
             if not mrph_list:
                 continue
             target_mrph = mrph_list[0]
@@ -62,26 +70,32 @@ def read_example(document: Document,
                 words.append(mrph.midasi)
                 dtids.append(document.tag2dtid[tag])
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
-                if '<用言:' in tag.fstring \
+                if '用言' in tag.features \
                         and mrph is target_mrph \
                         and process is True:
                     arguments: Dict[str, str] = OrderedDict()
                     for case in cases:
-                        if dmid in dmid2pred:
-                            args = document.get_arguments(dmid2pred[dmid], relax=True)
-                            if not args[case]:
+                        if dmid in dmid2arguments:
+                            # filter out non-target exophors
+                            args = []
+                            for arg in dmid2arguments[dmid][case]:
+                                if isinstance(arg, SpecialArgument):
+                                    if arg.exophor in relax_exophors:
+                                        arg.exophor = relax_exophors[arg.exophor]
+                                        args.append(arg)
+                                else:
+                                    args.append(arg)
+                            if not args:
                                 arguments[case] = 'NULL'
                                 continue
-                            arg = args[case][0]  # use first argument now
-                            # exophor
-                            if arg.dep_type == 'exo':
-                                arguments[case] = arg.midasi
-                            # overt
-                            elif arg.dep_type == 'overt':
-                                arguments[case] = str(arg.dmid) + '%C'
-                            # normal
-                            else:
+                            arg: BaseArgument = args[0]  # use first argument now
+                            if isinstance(arg, Argument):
                                 arguments[case] = str(arg.dmid)
+                                if arg.dep_type == 'overt':
+                                    arguments[case] += '%C'
+                            # exophor
+                            else:
+                                arguments[case] = arg.midasi
                         else:
                             arguments[case] = 'NULL'
                     arg_candidates = [x for x in head_dmids if x != dmid]
@@ -92,11 +106,12 @@ def read_example(document: Document,
                 # TODO: coreference
                 if coreference:
                     if '<体言>' in tag.fstring and '<内容語>' in mrph.fstring:
-                        entity = document.get_entity(tag)
-                        if entity is None:
+                        entities: List[Entity] = document.get_entities(tag)
+                        if entities:
                             arguments['='] = 'NA'
                         else:
-                            document.get_all_mentions()
+                            entity = entities[0]
+                            arguments['='] = str(entity.mentions[0].dmid)
 
                 arguments_set.append(arguments)
                 arg_candidates_set.append(arg_candidates)

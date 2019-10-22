@@ -57,15 +57,14 @@ class PASDataset(Dataset):
             self.reader = KWDLCReader(Path(path),
                                       target_cases=cases,
                                       target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                      target_exophors=exophors,
                                       extract_nes=False)
         else:
             assert knp_string is not None
             self.reader = KWDLCReader(knp_string,
                                       target_cases=cases,
                                       target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                      target_exophors=exophors,
                                       extract_nes=False)
+        self.target_exophors = exophors
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.num_special_tokens = len(special_tokens)
         self.special_to_index: Dict[str, int] = {token: i + max_seq_length - self.num_special_tokens for i, token
@@ -78,7 +77,7 @@ class PASDataset(Dataset):
         self.examples = []
         self.features = []
         for document in documents:
-            example = read_example(document, coreference, kc)
+            example = read_example(document, exophors, coreference, kc)
             feature = self._convert_example_to_feature(
                 example,
                 max_seq_length=max_seq_length,
