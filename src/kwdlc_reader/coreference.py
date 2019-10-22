@@ -23,9 +23,6 @@ class Mention(BasePhrase):
         super().__init__(bp.tag, bp.dtid, bp.sid, mrph2dmid)
         self.eids: Set[int] = set()
 
-    def get_siblings(self):  # TODO
-        pass
-
 
 class Entity:
     """ 共参照における entity を扱うクラス

@@ -76,13 +76,6 @@ class Scorer:
                 for predicate in self.sid2predicates_gold[sid]:
                     dtid2pred_gold[predicate.dtid] = predicate
 
-            # dtid2pred_pred: Dict[int, Tag] = {document_pred.tag2dtid[tag]: tag
-            #                                   for sid in document_pred.sid2sentence.keys()
-            #                                   for tag in self.sid2predicates_pred[sid]}
-            # dtid2pred_gold: Dict[int, Tag] = {document_gold.tag2dtid[tag]: tag
-            #                                   for sid in document_gold.sid2sentence.keys()
-            #                                   for tag in self.sid2predicates_gold[sid]}
-
             # calculate precision
             for dtid, predicate_pred in dtid2pred_pred.items():
                 arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
@@ -135,10 +128,6 @@ class Scorer:
                     args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold, relax_exophors)
                     arg = None
                     for arg_ in args_gold_relaxed:
-                        # filter out cataphoras
-                        # if self._is_inter_sentential_cataphor(arg_, predicate_gold):
-                        #     continue
-                        # filer out
                         if arg is None:
                             arg = args_gold[0]
                         if arg_ in args_pred:  # 予測されている項を優先して正解の項に採用
@@ -383,14 +372,12 @@ def main():
         Path(args.gold_dir),
         target_cases=args.case_string.split(','),
         target_corefs=['=', '=構', '=≒'],
-        # target_exophors=args.exophors.split(','),
         extract_nes=False
     )
     reader_pred = KWDLCReader(
         Path(args.prediction_dir),
         target_cases=reader_gold.target_cases,
         target_corefs=reader_gold.target_corefs,
-        # target_exophors=reader_gold.target_exophors,
         extract_nes=False,
         use_pas_tag=args.read_prediction_from_pas_tag,
     )

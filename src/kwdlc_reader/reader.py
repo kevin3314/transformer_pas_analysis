@@ -147,14 +147,12 @@ class Document:
                  doc_id: str,
                  target_cases: List[str],
                  target_corefs: List[str],
-                 # target_exophors: List[str],
                  extract_nes: bool,
                  use_pas_tag: bool,
                  ) -> None:
         self.doc_id = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
-        # self.target_exophors: List[str] = target_exophors
         self.extract_nes: bool = extract_nes
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
@@ -170,7 +168,6 @@ class Document:
         self.tag2dtid = {}
         self.mrph2dmid = {}
         self._assign_document_wide_id()
-        # self.dtid2tag = {dtid: tag for tag, dtid in self.tag2dtid.items()}
 
         self._pas: Dict[int, Pas] = OrderedDict()
         self._mentions: Dict[int, Mention] = OrderedDict()
@@ -234,7 +231,6 @@ class Document:
             # extract PAS
             pas = Pas(src_bp)
             for rel in rels:
-                # rel.target = re.sub(r'^(不特定:(人|物|状況))[１-９]$', r'\1', rel.target)  # 不特定:人１ -> 不特定:人
                 if rel.atype in self.target_cases:
                     if rel.sid is not None:
                         assert rel.tid is not None
@@ -313,61 +309,6 @@ class Document:
             else:
                 target_entity = self._create_entity(exophor=rel.target)
                 self._merge_entities(source_mention, None, source_entity, target_entity)
-
-        # if source_dtid in self._mentions:
-        #     source_mention = self._mentions[source_dtid]
-        #     for eid in source_mention.eids:
-        #         source_entity = self._entities[eid]
-        #         if rel.sid is not None:
-        #             # target_mention = self._create_mention(target_bp)
-        #             # for target_eid in target_mention.eids:
-        #             #     target_entity = self._entities[target_eid]
-        #             #     target_entity.add_mention(source_mention)
-        #             #     source_entity.add_mention(target_mention)
-        #             if target_bp.dtid in self._mentions:
-        #                 target_mention = self._mentions[target_bp.dtid]
-        #                 for target_eid in target_mention.eids:
-        #                     target_entity = self._entities[target_eid]
-        #                     target_entity.add_mention(source_mention)
-        #                     source_entity.add_mention(target_mention)
-        #             else:
-        #                 target_mention = Mention(target_bp, self.mrph2dmid)
-        #                 self._mentions[target_bp.dtid] = target_mention
-        #                 source_entity.add_mention(target_mention)
-        #             continue
-        #         # exophor
-        #         else:
-        #             if rel.target not in ('不特定:人', '不特定:物', '不特定:状況'):  # 共参照先が singleton entity だった時
-        #                 target_entities = [e for e in self.get_all_entities() if rel.target == e.exophor]
-        #                 if target_entities:
-        #                     assert len(target_entities) == 1  # singleton entity が1つしかないことを保証
-        #                     target_entity = target_entities[0]
-        #                     target_entity.add_mention(source_mention)
-        #                     continue
-        #             if source_entity.exophor is None:
-        #                 logger.info(f'Mark entity{source_entity.eid} as {rel.target}.')
-        #                 source_entity.exophor = rel.target
-        #                 continue
-        #             elif rel.target not in source_entity.exophors:
-        #                 target_entity = self._create_entity(rel.target)
-        #                 target_entity.add_mention(source_mention)
-        #                 if rel.mode != '':
-        #                     source_entity.exophors.append(rel.target)
-        #                     source_entity.mode = rel.mode
-        #                 else:
-        #                     logger.warning(f'Overwrite entity {source_entity.exophors} to {rel.target}\t{source_bp.sid}.')
-        #                     source_entity.exophors = [rel.target]
-        #             return
-        # else:
-        #     source_mention = Mention(source_bp, self.mrph2dmid)
-        #     self._mentions[source_dtid] = source_mention
-        #     if rel.sid is not None:
-        #         target_mention = self._create_mention(target_bp)
-        #         entity = self._entities[target_mention.eid]
-        #     # exophor
-        #     else:
-        #         entity = self._create_entity(exophor=rel.target)
-        #     entity.add_mention(source_mention)
 
     def _create_mention(self, bp: BasePhrase) -> Mention:
         """メンションを作成

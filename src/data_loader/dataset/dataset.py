@@ -57,14 +57,12 @@ class PASDataset(Dataset):
             self.reader = KWDLCReader(Path(path),
                                       target_cases=cases,
                                       target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                      # target_exophors=exophors,
                                       extract_nes=False)
         else:
             assert knp_string is not None
             self.reader = KWDLCReader(knp_string,
                                       target_cases=cases,
                                       target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                      # target_exophors=exophors,
                                       extract_nes=False)
         self.target_exophors = exophors
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
