@@ -35,12 +35,12 @@ class Scorer:
                                              ('intra', 'zero_intra_sentential'),
                                              ('inter', 'zero_inter_sentential'),
                                              ('exo', 'zero_exophora')])
-        relax_exophors = {}
+        self.relax_exophors: Dict[str, str] = {}
         for exophor in target_exophors:
-            relax_exophors[exophor] = exophor
+            self.relax_exophors[exophor] = exophor
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
                 for n in '１２３４５６７８９':
-                    relax_exophors[exophor + n] = exophor
+                    self.relax_exophors[exophor + n] = exophor
         # make sid2predicates_pred and sid2predicates_gold
         self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
@@ -83,29 +83,31 @@ class Scorer:
                     predicate_gold = dtid2pred_gold[dtid]
                     arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
                 else:
-                    arguments_gold = None
+                    predicate_gold = arguments_gold = None
                 for case in self.cases:
                     args_pred: List[BaseArgument] = arguments_pred[case]
-                    args_gold: List[BaseArgument] = arguments_gold[case] if arguments_gold is not None else []
-                    # 「不特定:人１」なども「不特定:人」として扱う
-                    for arg_gold in args_gold:
-                        if isinstance(arg_gold, SpecialArgument):
-                            if arg_gold.exophor in relax_exophors:
-                                arg_gold.exophor = relax_exophors[arg_gold.exophor]
+                    if predicate_gold is not None:
+                        args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
+                    else:
+                        args_gold = []
                     if not args_pred:
                         continue
                     assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                     arg = args_pred[0]
                     assert not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)
-                    if arg.dep_type == 'overt':  # ignore overt case
-                        self.comp_result[(doc_id, dtid, case)] = 'overt'
-                        continue
-                    analysis = self.deptype2analysis[arg.dep_type]
-                    if arg in args_gold:
-                        self.measures[case][analysis].correct += 1
-                        self.comp_result[(doc_id, dtid, case)] = analysis
+                    key = (doc_id, dtid, case)
+                    if arg.dep_type == 'overt':
+                        if arg in args_gold:
+                            self.comp_result[key] = 'overt'
+                            continue
+                        analysis = 'case_analysis'
                     else:
-                        self.comp_result[(doc_id, dtid, case)] = 'wrong'
+                        analysis = self.deptype2analysis[arg.dep_type]
+                    if arg in args_gold:
+                        self.comp_result[key] = analysis
+                        self.measures[case][analysis].correct += 1
+                    else:
+                        self.comp_result[key] = 'wrong'
                     self.measures[case][analysis].denom_pred += 1
 
             # calculate recall
@@ -122,19 +124,28 @@ class Scorer:
                 for case in self.cases:
                     args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
                     assert len(args_pred) in (0, 1)
-                    args_gold = self._filter_args(arguments_gold[case], predicate_gold, relax_exophors)
+                    args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
+                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold,
+                                                          self.relax_exophors)
                     if not args_gold:
                         continue
-                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold, relax_exophors)
-                    arg = None
+                    correct = False
+                    arg = args_gold[0]
                     for arg_ in args_gold_relaxed:
-                        if arg is None:
-                            arg = args_gold[0]
-                        if arg_ in args_pred:  # 予測されている項を優先して正解の項に採用
-                            arg = arg_
-                    if arg is None or arg.dep_type == 'overt':  # ignore overt case
+                        if arg_ in args_pred:
+                            arg = arg_  # 予測されている項を優先して正解の項に採用
+                            correct = True
+                    key = (doc_id, dtid, case)
+                    if arg.dep_type == 'overt':  # ignore overt case
+                        assert self.comp_result[key] == 'overt'
                         continue
                     analysis = self.deptype2analysis[arg.dep_type]
+                    if correct is True:
+                        assert self.comp_result[key] == analysis
+                    elif args_pred:
+                        assert self.comp_result[key] == 'wrong'
+                    else:
+                        self.comp_result[key] = 'wrong'
                     self.measures[case][analysis].denom_gold += 1
 
     @staticmethod
@@ -147,7 +158,7 @@ class Scorer:
             if isinstance(arg, SpecialArgument):
                 if arg.exophor not in relax_exophors:  # filter out non-target exophors
                     continue
-                arg.exophor = relax_exophors[arg.exophor]
+                arg.exophor = relax_exophors[arg.exophor]  # 「不特定:人１」なども「不特定:人」として扱う
             else:
                 if Scorer._is_inter_sentential_cataphor(arg, predicate):  # filter out cataphoras
                     continue
@@ -303,8 +314,16 @@ class Scorer:
                         color = 'green'
                     elif result in self.deptype2analysis.values():
                         color = 'blue'
+                    elif result == 'wrong':
+                        if isinstance(args[0], SpecialArgument) and arg not in self.relax_exophors:
+                            color = 'gray'
+                        else:
+                            color = 'red'
+                    elif result is None:
+                        color = 'gray'
                     else:
-                        color = 'red'
+                        logger.warning(f'unknown result: {result}')
+                        color = 'gray'
                 else:
                     arg = 'NULL'
                     color = 'gray'
