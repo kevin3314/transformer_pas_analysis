@@ -286,9 +286,11 @@ class Scorer:
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
-        tag_list = sentence.tag_list()
-        assert len(tree_strings) == len(tag_list)
+        assert len(tree_strings) == len(sentence.tag_list())
+        current_document_predicates = document.get_predicates()
         for predicate in predicates:
+            if predicate not in current_document_predicates:
+                continue
             idx = predicate.tid
             arguments = document.get_arguments(predicate)
             tree_strings[idx] += '  '
