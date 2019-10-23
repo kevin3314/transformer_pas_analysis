@@ -23,6 +23,7 @@ class PredictionKNPWriter:
             [example.arguments_set for example in dataset.examples]
         self.all_features: List[InputFeatures] = dataset.features
         self.cases: List[str] = dataset.reader.target_cases
+        self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
         self.dids = [example.doc_id for example in dataset.examples]
@@ -180,31 +181,33 @@ class PredictionKNPWriter:
             assert len(cases) == len(gold_arguments)
             for (case, gold_argument), argument in zip(gold_arguments.items(), arguments):
                 # 助詞などの非解析対象形態素については gold_argument が None になっている
-                if gold_argument is not None:
-                    # overt(train/test)
-                    if gold_argument.endswith('%C'):
-                        prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データをそのまま出力
-                    # overt(inference)
-                    elif case in overt_dict:
-                        prediction_dmid = int(overt_dict[case])
-                    else:
-                        # special
-                        if argument in self.index_to_special:
-                            special_anaphor = self.index_to_special[argument]
+                if gold_argument is None:
+                    continue
+                # overt(train/test)
+                if gold_argument.endswith('%C'):
+                    prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データをそのまま出力
+                # overt(inference)
+                elif case in overt_dict:
+                    prediction_dmid = int(overt_dict[case])
+                else:
+                    # special
+                    if argument in self.index_to_special:
+                        special_anaphor = self.index_to_special[argument]
+                        if special_anaphor in self.exophors:  # exclude NULL
                             rels.append(RelTag(case, special_anaphor, None, None))
-                            continue
-                        # [SEP] or [CLS]
-                        elif features.tok_to_orig_index[argument] is None:
-                            self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
-                            continue
-                        # normal
-                        else:
-                            prediction_dmid = features.tok_to_orig_index[argument]
-                    prediction_tag: Tag = dmid2tag[prediction_dmid]
-                    target = ''.join(mrph.midasi for mrph in prediction_tag.mrph_list() if '<内容語>' in mrph.fstring)
-                    if not target:
-                        target = prediction_tag.midasi
-                    rels.append(RelTag(case, target, tag2sid[prediction_tag], prediction_tag.tag_id))
+                        continue
+                    # [SEP] or [CLS]
+                    elif features.tok_to_orig_index[argument] is None:
+                        self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
+                        continue
+                    # normal
+                    else:
+                        prediction_dmid = features.tok_to_orig_index[argument]
+                prediction_tag: Tag = dmid2tag[prediction_dmid]
+                target = ''.join(mrph.midasi for mrph in prediction_tag.mrph_list() if '<内容語>' in mrph.fstring)
+                if not target:
+                    target = prediction_tag.midasi
+                rels.append(RelTag(case, target, tag2sid[prediction_tag], prediction_tag.tag_id))
 
         return ''.join(rel.to_string() for rel in rels)
 
