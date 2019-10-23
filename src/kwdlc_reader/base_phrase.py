@@ -36,7 +36,7 @@ class BasePhrase:
             if '<内容語>' in mrph.fstring:
                 return mrph2dmid[mrph]
         else:
-            logger.warning(f'cannot find content word in: {self.tag.midasi}\t{self.sid}')
+            logger.warning(f'{self.sid:21}cannot find content word in: {self.tag.midasi}')
             return mrph2dmid[self.tag.mrph_list()[0]]
     
     @property

@@ -175,11 +175,11 @@ class Pas:
 
     def set_arguments_optional(self, case: str) -> None:
         if not self.arguments[case]:
-            logger.info(f'no preceding argument found. なし is ignored.\t{self.sid}')
+            logger.info(f'{self.sid:21}no preceding argument found. なし is ignored')
             return
         for arg in self.arguments[case]:
             arg.optional = True
-            logger.info(f'marked {arg.midasi} as optional\t{self.sid}')
+            logger.info(f'{self.sid:21}marked {arg.midasi} as optional')
 
     def copy(self) -> 'Pas':
         # only for arguments, perform deepcopy

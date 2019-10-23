@@ -33,37 +33,34 @@ class KWDLCReader:
         source (Path or str): 入力ソース．Path オブジェクトを指定するとその場所のファイルを読む
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
-        # target_exophors (list): 抽出の対象とする外界照応詞
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         glob_pat (str): コーパスとして扱うファイルのパターン
-        use_pas_tag (bool): <rel >タグからではなく、<述語項構造:>タグから PAS を読むかどうか
+        use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
     """
     def __init__(self,
                  source: Union[Path, str],
                  target_cases: Optional[List[str]],
                  target_corefs: Optional[List[str]],
-                 # target_exophors: Optional[List[str]],
                  extract_nes: bool = True,
                  glob_pat: str = '*.knp',
                  use_pas_tag: bool = False,
                  ) -> None:
         if not (isinstance(source, Path) or isinstance(source, str)):
-            raise TypeError(f'source must be an instance of Path or str: got {type(source)}')
+            raise TypeError(f'source must be Path or str type, but got {type(source)}')
         if isinstance(source, Path):
             if source.is_dir():
-                logger.info(f'got directory path, use files in the directory as source files')
+                logger.info(f'got directory path, files in the directory is treated as source knp files')
                 file_paths: List[Path] = sorted(source.glob(glob_pat))
                 self.did2source: Dict[str, Union[Path, str]] = OrderedDict((path.stem, path) for path in file_paths)
             else:
-                logger.info(f'got file path, use this file as source file')
+                logger.info(f'got file path, this file is treated as a source knp file')
                 self.did2source: Dict[str, Union[Path, str]] = {source.stem: source}
         else:
-            logger.info(f'got string, use this string as source content')
+            logger.info(f'got string, this string is treated as a source knp string')
             self.did2source: Dict[str, Union[Path, str]] = {'doc': source}
 
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
-        # self.target_exophors: List[str] = self._get_target(target_exophors, ALL_EXOPHORS, ALL_EXOPHORS, 'exophor')
         self.extract_nes: bool = extract_nes
         self.use_pas_tag: bool = use_pas_tag
 
@@ -78,14 +75,9 @@ class KWDLCReader:
         target = []
         for item in input_:
             if item not in all_:
-                logger.warning(f'Unknown target {type_}: {item}')
+                logger.warning(f'unknown target {type_}: {item}')
                 continue
-            # if type_ == 'exophor':
-            #     for exo in all_:
-            #         if exo.startswith(item) and exo not in target:
-            #             target.append(exo)
-            else:
-                target.append(item)
+            target.append(item)
 
         return target
 
@@ -94,7 +86,7 @@ class KWDLCReader:
 
     def process_document(self, doc_id: str) -> Optional['Document']:
         if doc_id not in self.did2source:
-            logger.error(f'Unknown document id: {doc_id}')
+            logger.error(f'unknown document id: {doc_id}')
             return None
         if isinstance(self.did2source[doc_id], Path):
             with self.did2source[doc_id].open() as f:
@@ -105,7 +97,6 @@ class KWDLCReader:
                         doc_id,
                         self.target_cases,
                         self.target_corefs,
-                        # self.target_exophors,
                         self.extract_nes,
                         self.use_pas_tag)
 
@@ -126,20 +117,19 @@ class Document:
         doc_id (str): 文書ID
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
-        # target_exophors (list): 抽出の対象とする外界照応詞
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
+        use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
 
     Attributes:
         doc_id (str): 文書ID(ファイル名から拡張子を除いたもの)
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
-        # target_exophors (list): 抽出の対象とする外界照応詞
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         sid2sentence (dict): 文IDと文を紐付ける辞書
         bnst2dbid (dict): 文節IDと文書レベルの文節IDを紐付ける辞書
         tag2dtid (dict): 基本句IDと文書レベルの基本句IDを紐付ける辞書
         mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
-        # dtid2tag (dict): 文書レベルの基本句IDと基本句を紐付ける辞書
+        entities (dict): entity id を key として entity オブジェクトが格納されている
         named_entities (list): 抽出した固有表現
     """
     def __init__(self,
@@ -182,6 +172,7 @@ class Document:
             self._extract_nes()
 
     def _assign_document_wide_id(self) -> None:
+        """文節・基本句・形態素に文書全体に渡る通し番号を振る"""
         dbid, dtid, dmid = 0, 0, 0
         for sentence in self.sentences:
             for bnst in sentence.bnst_list():
@@ -195,6 +186,7 @@ class Document:
                 dbid += 1
 
     def _extract_pas(self) -> None:
+        """extract predicate argument structure from <述語項構造:> tag in knp string"""
         sid2idx = {sid: idx for idx, sid in enumerate(self.sid2sentence.keys())}
         for tag in self.tag_list():
             if tag.pas is None:
@@ -216,15 +208,16 @@ class Document:
                 self._pas[pas.dtid] = pas
 
     def _extract_relations(self) -> None:
+        """extract predicate argument structure and coreference relation from <rel> tag in knp string"""
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
             rels = []
             for rel in self._extract_rel_tags(tag):
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
-                    logger.warning(f'sentence: {rel.sid} not found in {self.doc_id}')
+                    logger.warning(f'{tag2sid[tag]:21}sentence: {rel.sid} not found in {self.doc_id}')
                     continue
                 if rel.atype not in (self.target_cases + self.target_corefs):
-                    logger.info(f'Relation type: {rel.atype} is ignored.')
+                    logger.info(f'{tag2sid[tag]:21}relation type: {rel.atype} is ignored')
                     continue
                 rels.append(rel)
             src_bp = BasePhrase(tag, self.tag2dtid[tag], tag2sid[tag], self.mrph2dmid)
@@ -245,7 +238,7 @@ class Document:
                             pas.set_arguments_optional(rel.atype)
                             continue
                         if rel.target not in ALL_EXOPHORS:
-                            logger.warning(f'Unknown exophor: {rel.target}\t{pas.sid}')
+                            logger.warning(f'{pas.sid:21}unknown exophor: {rel.target}')
                             continue
                         entity = self._create_entity(rel.target)
                         pas.add_special_argument(rel.atype, rel.target, entity.eid, rel.mode)
@@ -290,12 +283,12 @@ class Document:
             if target_bp is None:
                 return
             if target_bp.dtid >= source_dtid:
-                logger.warning(f'Coreference with self or latter mention\t{source_bp.midasi}\t{source_bp.sid}.')
+                logger.warning(f'{source_bp.sid:21}coreference with self or latter mention\t{source_bp.midasi}')
                 return
         else:
             target_bp = None
             if rel.target not in ALL_EXOPHORS:
-                logger.warning(f'Unknown exophor: {rel.target}\t{source_bp.sid}')
+                logger.warning(f'{source_bp.sid:21}unknown exophor: {rel.target}')
                 return
 
         source_mention = self._create_mention(source_bp)
@@ -358,7 +351,7 @@ class Document:
         if eid in eids:
             eid_ = eid
             eid: int = max(eids) + 1
-            logger.warning(f'eid: {eid_} is already used. use eid: {eid} instead.')
+            logger.warning(f'{self.doc_id:21}eid: {eid_} is already used. use eid: {eid} instead.')
         elif eid is None or eid < 0:
             eid: int = max(eids) + 1 if eids else 0
         entity = Entity(eid, exophor=exophor)
@@ -397,13 +390,13 @@ class Document:
         for arg in [arg for pas in self._pas.values() for args in pas.arguments.values() for arg in args]:
             if isinstance(arg, SpecialArgument) and arg.eid == te.eid:
                 arg.eid = se.eid
-        self._delete_entity(te.eid)
+        self._delete_entity(te.eid, source_mention.sid)
 
-    def _delete_entity(self, eid: int) -> None:
+    def _delete_entity(self, eid: int, sid: str) -> None:
         if eid not in self.entities:
             return
         entity = self.entities[eid]
-        logger.info(f'delete entity: {eid} ({entity.midasi})\t{self.doc_id}')
+        logger.info(f'{sid:21}delete entity: {eid} ({entity.midasi})')
         for mention in entity.mentions:
             mention.eids.remove(eid)
         self.entities.pop(eid)
@@ -423,7 +416,7 @@ class Document:
         """
         tag_list = self.sid2sentence[sid].tag_list()
         if not (0 <= tid < len(tag_list)):
-            logger.warning(f'tag out of range\t{tid}\t({sid})')
+            logger.warning(f'{sid:21}tag out of range (tag_id: {tid})')
             return None
         tag = tag_list[tid]
         return BasePhrase(tag, self.tag2dtid[tag], sid, self.mrph2dmid)
@@ -438,12 +431,12 @@ class Document:
                     continue
                 category, midasi = tag.features['NE'].split(':', maxsplit=1)
                 if category not in NE_CATEGORIES:
-                    logger.warning(f'unknown NE category: {category}')
+                    logger.warning(f'{sentence.sid:21}unknown NE category: {category}')
                     continue
                 mrph_list = [m for t in tag_list[:tag.tag_id + 1] for m in t.mrph_list()]
                 mrph_span = self._find_mrph_span(midasi, mrph_list, tag)
                 if mrph_span is None:
-                    logger.warning(f'mrph span of "{midasi}" was not found in {sentence.sid}')
+                    logger.warning(f'{sentence.sid:21}mrph span of "{midasi}" not found')
                     continue
                 ne = NamedEntity(category, midasi, sentence, mrph_span, self.mrph2dmid)
                 self.named_entities.append(ne)
