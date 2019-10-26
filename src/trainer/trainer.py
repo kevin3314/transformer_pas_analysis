@@ -1,6 +1,7 @@
-import numpy as np
+import datetime
 from typing import List
 
+import numpy as np
 import torch
 
 from base import BaseTrainer
@@ -69,11 +70,12 @@ class Trainer(BaseTrainer):
             # total_metrics += self._eval_metrics(output, target)
 
             if batch_idx % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Loss: {:.6f}'.format(
+                self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
                     epoch,
                     batch_idx * self.data_loader.batch_size,
                     self.data_loader.n_samples,
                     100.0 * batch_idx / len(self.data_loader),
+                    datetime.datetime.now().strftime('%H:%M:%S'),
                     loss.item()))
 
             if self.lr_scheduler is not None:
