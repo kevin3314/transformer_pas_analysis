@@ -48,6 +48,8 @@ UNSPECIFIED_PERSON = [
     "不特定:人７",
     "不特定:人８",
     "不特定:人９",
+    "不特定:人１０",
+    "不特定:人１１",
 ]
 
 UNSPECIFIED_OBJECT = [
