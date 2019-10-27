@@ -283,8 +283,8 @@ class Document:
             target_bp = self._get_bp(rel.sid, rel.tid)
             if target_bp is None:
                 return
-            if target_bp.dtid >= source_dtid:
-                logger.warning(f'{source_bp.sid:21}coreference with self or latter mention\t{source_bp.midasi}')
+            if target_bp.dtid == source_dtid:
+                logger.warning(f'{source_bp.sid:21}coreference with self found: {source_bp.midasi}')
                 return
         else:
             target_bp = None
