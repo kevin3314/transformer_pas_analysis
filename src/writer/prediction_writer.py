@@ -18,6 +18,7 @@ class PredictionKNPWriter:
     def __init__(self,
                  dataset: PASDataset,
                  logger: Logger,
+                 use_gold_overt: bool = True,
                  ) -> None:
         self.gold_arguments_sets: List[List[Dict[str, Optional[str]]]] = \
             [example.arguments_set for example in dataset.examples]
@@ -31,6 +32,7 @@ class PredictionKNPWriter:
         self.did2document: Dict[str, Document] = {doc.doc_id: doc for doc in dataset.documents}
         self.dtid2cfid: Dict[int, str] = {}
         self.logger = logger
+        self.use_gold_overt = use_gold_overt
 
     def write(self,
               arguments_sets: List[List[List[int]]],
@@ -184,10 +186,10 @@ class PredictionKNPWriter:
                 if gold_argument is None:
                     continue
                 # overt(train/test)
-                if gold_argument.endswith('%C'):
+                if self.use_gold_overt and gold_argument.endswith('%C'):
                     prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データをそのまま出力
                 # overt(inference)
-                elif case in overt_dict:
+                elif self.use_gold_overt and case in overt_dict:
                     prediction_dmid = int(overt_dict[case])
                 else:
                     # special

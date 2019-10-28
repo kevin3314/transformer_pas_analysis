@@ -16,7 +16,7 @@ from scorer import Scorer
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger):
+    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger, predict_overt):
         self.model = model
         self.loss = loss
         self.metrics = metrics
@@ -25,6 +25,7 @@ class Tester:
         self.kc_data_loader = kc_data_loader
         self.target = target
         self.logger = logger
+        self.predict_overt = predict_overt
 
         self.device, device_ids = prepare_device(config['n_gpu'], self.logger)
         self._load_model()
@@ -75,7 +76,9 @@ class Tester:
                 total_loss += loss.item() * input_ids.size(0)
 
         prediction_output_dir = self.config.save_dir / f'{self.target}_out_knp'
-        prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
+        prediction_writer = PredictionKNPWriter(data_loader.dataset,
+                                                self.logger,
+                                                use_gold_overt=(not self.predict_overt))
         documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
         scorer = Scorer(documents_pred,
@@ -113,7 +116,8 @@ def main(config, args):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger)
+    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger,
+                    args.predict_overt)
 
     log = tester.test()
 
@@ -133,5 +137,7 @@ if __name__ == '__main__':
                         help='config file path (default: None)')
     parser.add_argument('--target', default='test', type=str, choices=['valid', 'test'],
                         help='evaluation target')
+    parser.add_argument('--predict-overt', action='store_true', default=False,
+                        help='calculate scores for overt arguments instead of using gold')
 
     main(ConfigParser(parser, timestamp=False), parser.parse_args())

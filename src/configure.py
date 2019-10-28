@@ -167,6 +167,8 @@ def main() -> None:
                         help='use small corpus file')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
                         help='corpus to use in training')
+    parser.add_argument('--train-overt', action='store_true', default=False,
+                        help='include overt arguments in training data')
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
@@ -180,6 +182,7 @@ def main() -> None:
 
     for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
         name = f'{model}-{corpus}-{n_epoch}e'
+        name += '-overt' if args.train_overt else ''
         name += '-large' if args.use_bert_large else ''
         name += args.additional_name if args.additional_name is not None else ''
         train_kwdlc_dir = Path.kwdlc.get('train', args.env, debug=args.debug)
@@ -209,7 +212,8 @@ def main() -> None:
                 'exophors': args.exophors.split(','),
                 'training': None,
                 'bert_model': bert_model,
-                'kc': None
+                'kc': None,
+                'train_overt': args.train_overt,
             },
         }
 

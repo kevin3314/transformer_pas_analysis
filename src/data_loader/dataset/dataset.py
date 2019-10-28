@@ -52,6 +52,7 @@ class PASDataset(Dataset):
                  bert_model: str,
                  kc: bool = False,
                  knp_string: Optional[str] = None,
+                 train_overt: bool = False,
                  ) -> None:
         if path is not None:
             self.reader = KWDLCReader(Path(path),
@@ -70,6 +71,9 @@ class PASDataset(Dataset):
         self.special_to_index: Dict[str, int] = {token: i + max_seq_length - self.num_special_tokens for i, token
                                                  in enumerate(special_tokens)}
         self.coreference = coreference
+        self.training = training
+        self.kc = kc
+        self.train_overt = train_overt
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
         bert_config = BertConfig.from_json_file(Path(bert_model) / 'bert_config.json')
         documents = list(self.reader.process_all_documents())
@@ -87,8 +91,6 @@ class PASDataset(Dataset):
                 continue
             self.examples.append(example)
             self.features.append(feature)
-        self.training = training
-        self.kc = kc
 
     def __len__(self) -> int:
         return len(self.features)
@@ -135,23 +137,24 @@ class PASDataset(Dataset):
                 deps.append([0] * max_seq_length)
                 continue
 
-            arguments: List[int] = []
-            for case, argument in example.arguments_set[orig_index].items():
-                if argument is None or '%C' in argument:
-                    # none or overt
-                    argument_index = -1
-                elif argument.isdigit():
+            arguments: List[int] = [-1] * num_case_w_coreference
+            for i, (case, argument) in enumerate(example.arguments_set[orig_index].items()):
+                if argument is None:
+                    continue
+                if '%C' in argument:
+                    if self.train_overt is False:
+                        continue
+                    argument = argument[:-2]
+                if argument in self.special_to_index:
+                    # special token
+                    arguments[i] = self.special_to_index[argument]
+                else:
                     if case != '=' and int(argument) not in example.arg_candidates_set[orig_index]:
                         # ignore an argument which is not candidate (except for coreference resolution)
                         logger.debug(f'argument: {argument} of {token} is not in candidates and ignored')
-                        argument_index = -1
-                    else:
-                        # normal
-                        argument_index = orig_to_tok_index[int(argument)]
-                else:
-                    # special token
-                    argument_index = self.special_to_index[argument]
-                arguments.append(argument_index)
+                        continue
+                    # normal
+                    arguments[i] = orig_to_tok_index[int(argument)]
             arguments_set.append(arguments)
 
             ddep = example.ddeps[orig_index]
