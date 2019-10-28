@@ -28,13 +28,15 @@ class Scorer:
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
-        self.measures: Dict[str, Dict[str, Measure]] = \
-            OrderedDict((case, OrderedDefaultDict(lambda: Measure())) for case in self.cases)
-        self.comp_result = {}
-        self.deptype2analysis = OrderedDict([('dep', 'case_analysis'),
+        self.comp_result: Dict[tuple, str] = {}
+        self.deptype2analysis = OrderedDict([('overt', 'overt'),
+                                             ('dep', 'case_analysis'),
                                              ('intra', 'zero_intra_sentential'),
                                              ('inter', 'zero_inter_sentential'),
                                              ('exo', 'zero_exophora')])
+        self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
+            (case, OrderedDict((anal, Measure()) for anal in self.deptype2analysis.values()))
+            for case in self.cases)
         self.relax_exophors: Dict[str, str] = {}
         for exophor in target_exophors:
             self.relax_exophors[exophor] = exophor
@@ -85,24 +87,18 @@ class Scorer:
                 else:
                     predicate_gold = arguments_gold = None
                 for case in self.cases:
-                    args_pred: List[BaseArgument] = arguments_pred[case]
                     if predicate_gold is not None:
                         args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
                     else:
                         args_gold = []
+                    args_pred: List[BaseArgument] = arguments_pred[case]
                     if not args_pred:
                         continue
                     assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                     arg = args_pred[0]
                     assert not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)
                     key = (doc_id, dtid, case)
-                    if arg.dep_type == 'overt':
-                        if arg in args_gold:
-                            self.comp_result[key] = 'overt'
-                            continue
-                        analysis = 'case_analysis'
-                    else:
-                        analysis = self.deptype2analysis[arg.dep_type]
+                    analysis = self.deptype2analysis[arg.dep_type]
                     if arg in args_gold:
                         self.comp_result[key] = analysis
                         self.measures[case][analysis].correct += 1
@@ -136,9 +132,6 @@ class Scorer:
                             arg = arg_  # 予測されている項を優先して正解の項に採用
                             correct = True
                     key = (doc_id, dtid, case)
-                    if arg.dep_type == 'overt':  # ignore overt case
-                        assert self.comp_result[key] == 'overt'
-                        continue
                     analysis = self.deptype2analysis[arg.dep_type]
                     if correct is True:
                         assert self.comp_result[key] == analysis
@@ -173,7 +166,7 @@ class Scorer:
         result = OrderedDict()
         all_case_result = OrderedDefaultDict(lambda: Measure())
         for case, measures in self.measures.items():
-            case_result = {anal: Measure() for anal in self.deptype2analysis.values()}
+            case_result = OrderedDefaultDict(lambda: Measure())
             for analysis, measure in measures.items():
                 case_result[analysis] = measure
                 all_case_result[analysis] += measure
