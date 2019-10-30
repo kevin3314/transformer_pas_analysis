@@ -393,7 +393,20 @@ class Document:
                 arg.eid = se.eid
         self._delete_entity(te.eid, source_mention.sid)
 
-    def _delete_entity(self, eid: int, sid: str) -> None:
+    def _delete_entity(self,
+                       eid: int,
+                       sid: str
+                       ) -> None:
+        """entity を削除する
+
+        対象の entity を entities から削除すると共に、
+        その entity を参照する全ての mention からも削除
+        eid に欠番ができる
+
+        Args:
+            eid (int): 削除対象の entity の EID
+            sid (int): 削除された時解析されていた文の文ID
+        """
         if eid not in self.entities:
             return
         entity = self.entities[eid]
@@ -510,6 +523,17 @@ class Document:
                             pas.add_argument(case, mention, mention.midasi, 'AND', self.mrph2dmid)
 
         return pas.arguments
+
+    def get_siblings(self, mention: Mention) -> List[Mention]:
+        """mention と共参照関係にある他の全ての mention を返す"""
+        mentions = []
+        for eid in mention.eids:
+            entity = self.entities[eid]
+            for mention_ in entity.mentions:
+                if mention_ == mention:
+                    continue
+                mentions.append(mention_)
+        return mentions
 
     def draw_tree(self,
                   sid: str,
