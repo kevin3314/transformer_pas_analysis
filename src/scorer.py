@@ -9,7 +9,7 @@ from collections import OrderedDict
 
 from pyknp import BList
 
-from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate
+from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ class Scorer:
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
+        self.kc = kc
         self.comp_result: Dict[tuple, str] = {}
         self.deptype2analysis = OrderedDict([('overt', 'overt'),
                                              ('dep', 'case_analysis'),
@@ -37,6 +38,7 @@ class Scorer:
         self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
             (case, OrderedDict((anal, Measure()) for anal in self.deptype2analysis.values()))
             for case in self.cases)
+        self.measure_coref: Measure = Measure()
         self.relax_exophors: Dict[str, str] = {}
         for exophor in target_exophors:
             self.relax_exophors[exophor] = exophor
@@ -46,100 +48,187 @@ class Scorer:
         # make sid2predicates_pred and sid2predicates_gold
         self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.sid2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
+        self.sid2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
             last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+
             for predicate_pred in document_pred.get_predicates():
                 if process_all or (predicate_pred.sid == last_sid):
                     self.sid2predicates_pred[predicate_pred.sid].append(predicate_pred)
-
             for predicate_gold in document_gold.get_predicates():
                 process: bool = process_all or (predicate_gold.sid == last_sid)
-                tag = predicate_gold.tag
-                if '用言' in tag.features \
+                if '用言' in predicate_gold.tag.features \
                         and process is True:
                     self.sid2predicates_gold[predicate_gold.sid].append(predicate_gold)
+
+            for mention_pred in document_pred.get_all_mentions():
+                if process_all or (mention_pred.sid == last_sid):
+                    self.sid2mentions_pred[mention_pred.sid].append(mention_pred)
+            for mention_gold in document_gold.get_all_mentions():
+                process: bool = process_all or (mention_gold.sid == last_sid)
+                if '体言' in mention_gold.tag.features \
+                        and process is True:
+                    self.sid2mentions_gold[mention_gold.sid].append(mention_gold)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
+            self._evaluate_pas(doc_id, document_pred, document_gold)
+            self._evaluate_coref(doc_id, document_pred, document_gold)
 
-            process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
-            last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
-            dtid2pred_pred: Dict[int, Predicate] = {}
-            dtid2pred_gold: Dict[int, Predicate] = {}
-            for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
-                if not (process_all or (sid == last_sid)):  # いらないかも
-                    continue
-                for predicate in self.sid2predicates_pred[sid]:
-                    dtid2pred_pred[predicate.dtid] = predicate
-                for predicate in self.sid2predicates_gold[sid]:
-                    dtid2pred_gold[predicate.dtid] = predicate
+    def _evaluate_pas(self, doc_id: str, document_pred, document_gold):
+        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
+        last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+        dtid2pred_pred: Dict[int, Predicate] = {}
+        dtid2pred_gold: Dict[int, Predicate] = {}
+        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
+            if not (process_all or (sid == last_sid)):  # いらないかも
+                continue
+            for predicate in self.sid2predicates_pred[sid]:
+                dtid2pred_pred[predicate.dtid] = predicate
+            for predicate in self.sid2predicates_gold[sid]:
+                dtid2pred_gold[predicate.dtid] = predicate
 
-            # calculate precision
-            for dtid, predicate_pred in dtid2pred_pred.items():
-                arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
-                if dtid in dtid2pred_gold:
-                    predicate_gold = dtid2pred_gold[dtid]
-                    arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
-                else:
-                    predicate_gold = arguments_gold = None
-                for case in self.cases:
-                    if predicate_gold is not None:
-                        args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
-                    else:
-                        args_gold = []
-                    args_pred: List[BaseArgument] = arguments_pred[case]
-                    if not args_pred:
-                        continue
-                    assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
-                    arg = args_pred[0]
-                    assert not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)
-                    key = (doc_id, dtid, case)
-                    analysis = self.deptype2analysis[arg.dep_type]
-                    if arg in args_gold:
-                        self.comp_result[key] = analysis
-                        self.measures[case][analysis].correct += 1
-                    else:
-                        self.comp_result[key] = 'wrong'
-                    self.measures[case][analysis].denom_pred += 1
-
-            # calculate recall
-            # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
-            # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
-            for dtid, predicate_gold in dtid2pred_gold.items():
-                arguments_gold = document_gold.get_arguments(predicate_gold, relax=False)
-                arguments_gold_relaxed = document_gold.get_arguments(predicate_gold, relax=True)
-                if dtid in dtid2pred_pred:
-                    predicate_pred = dtid2pred_pred[dtid]
-                    arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
-                else:
-                    arguments_pred = None
-                for case in self.cases:
-                    args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
-                    assert len(args_pred) in (0, 1)
+        # calculate precision
+        for dtid, predicate_pred in dtid2pred_pred.items():
+            arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
+            if dtid in dtid2pred_gold:
+                predicate_gold = dtid2pred_gold[dtid]
+                arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
+            else:
+                predicate_gold = arguments_gold = None
+            for case in self.cases:
+                if predicate_gold is not None:
                     args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
-                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold,
-                                                          self.relax_exophors)
-                    if not args_gold:
-                        continue
-                    correct = False
-                    arg = args_gold[0]
-                    for arg_ in args_gold_relaxed:
-                        if arg_ in args_pred:
-                            arg = arg_  # 予測されている項を優先して正解の項に採用
-                            correct = True
-                    key = (doc_id, dtid, case)
-                    analysis = self.deptype2analysis[arg.dep_type]
-                    if correct is True:
-                        assert self.comp_result[key] == analysis
-                    elif args_pred:
-                        assert self.comp_result[key] == 'wrong'
-                    else:
-                        self.comp_result[key] = 'wrong'
-                    self.measures[case][analysis].denom_gold += 1
+                else:
+                    args_gold = []
+                args_pred: List[BaseArgument] = arguments_pred[case]
+                if not args_pred:
+                    continue
+                assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
+                arg = args_pred[0]
+                key = (doc_id, dtid, case)
+                analysis = self.deptype2analysis[arg.dep_type]
+                if arg in args_gold:
+                    self.comp_result[key] = analysis
+                    self.measures[case][analysis].correct += 1
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measures[case][analysis].denom_pred += 1
+
+        # calculate recall
+        # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
+        # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
+        for dtid, predicate_gold in dtid2pred_gold.items():
+            arguments_gold = document_gold.get_arguments(predicate_gold, relax=False)
+            arguments_gold_relaxed = document_gold.get_arguments(predicate_gold, relax=True)
+            if dtid in dtid2pred_pred:
+                predicate_pred = dtid2pred_pred[dtid]
+                arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
+            else:
+                arguments_pred = None
+            for case in self.cases:
+                args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
+                assert len(args_pred) in (0, 1)
+                args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
+                args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold,
+                                                      self.relax_exophors)
+                if not args_gold:
+                    continue
+                correct = False
+                arg = args_gold[0]
+                for arg_ in args_gold_relaxed:
+                    if arg_ in args_pred:
+                        arg = arg_  # 予測されている項を優先して正解の項に採用
+                        correct = True
+                key = (doc_id, dtid, case)
+                analysis = self.deptype2analysis[arg.dep_type]
+                if correct is True:
+                    assert self.comp_result[key] == analysis
+                elif args_pred:
+                    assert self.comp_result[key] == 'wrong'
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measures[case][analysis].denom_gold += 1
+
+    def _evaluate_coref(self, doc_id: str, document_pred, document_gold):
+        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
+        last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+        dtid2mention_pred: Dict[int, Mention] = {}
+        dtid2mention_gold: Dict[int, Mention] = {}
+        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
+            if not (process_all or (sid == last_sid)):  # いらないかも
+                continue
+            for mention in self.sid2mentions_pred[sid]:
+                dtid2mention_pred[mention.dtid] = mention
+            for mention in self.sid2mentions_gold[sid]:
+                dtid2mention_gold[mention.dtid] = mention
+
+        # calculate precision
+        for dtid, source_mention_pred in dtid2mention_pred.items():
+            mentions_pred = document_pred.get_siblings(source_mention_pred)
+            exophors_pred = [document_pred.entities[eid].exophor for eid in source_mention_pred.eids
+                             if document_pred.entities[eid].is_special]
+            if dtid in dtid2mention_gold:
+                source_mention_gold = dtid2mention_gold[dtid]
+                mentions_gold = document_gold.get_siblings(source_mention_gold)
+                exophors_gold = [document_gold.entities[eid].exophor for eid in source_mention_gold.eids
+                                 if document_gold.entities[eid].is_special]
+            else:
+                mentions_gold = exophors_gold = []
+
+            key = (doc_id, dtid, '=')
+            if mentions_pred:
+                for mention in mentions_pred:
+                    if mention in mentions_gold:
+                        self.comp_result[key] = 'correct'
+                        self.measure_coref.correct += 1
+                        break
+                else:
+                    self.comp_result[key] = 'wrong'
+            elif exophors_pred:
+                if set(exophors_pred) & set(exophors_gold):
+                    self.comp_result[key] = 'correct'
+                    self.measure_coref.correct += 1
+                else:
+                    self.comp_result[key] = 'wrong'
+            else:
+                continue
+            self.measure_coref.denom_pred += 1
+
+        # calculate recall
+        for dtid, source_mention_gold in dtid2mention_gold.items():
+            mentions_gold = document_gold.get_siblings(source_mention_gold)
+            exophors_gold = [document_gold.entities[eid].exophor for eid in source_mention_gold.eids
+                             if document_gold.entities[eid].is_special]
+            if dtid in dtid2mention_pred:
+                source_mention_pred = dtid2mention_pred[dtid]
+                mentions_pred = document_pred.get_siblings(source_mention_pred)
+                exophors_pred = [document_pred.entities[eid].exophor for eid in source_mention_pred.eids
+                                 if document_pred.entities[eid].is_special]
+            else:
+                mentions_pred = exophors_pred = []
+
+            key = (doc_id, dtid, '=')
+            if mentions_gold:
+                for mention in mentions_gold:
+                    if mention in mentions_pred:
+                        assert self.comp_result[key] == 'correct'
+                        break
+                else:
+                    self.comp_result[key] = 'wrong'
+            elif exophors_pred:
+                if set(exophors_pred) & set(exophors_gold):
+                    assert self.comp_result[key] == 'correct'
+                else:
+                    self.comp_result[key] = 'wrong'
+            else:
+                continue
+            self.measure_coref.denom_gold += 1
 
     @staticmethod
     def _filter_args(args: List[BaseArgument],
@@ -177,8 +266,8 @@ class Scorer:
             all_case_result['zero_all'] += case_result['zero_all']
             all_case_result['all'] += case_result['all']
             result[case] = case_result
+        all_case_result['coreference'] = self.measure_coref
         result['all_case'] = all_case_result
-        # measure = reduce(operator.add, self.measures.values(), Measure())
         return result
 
     def export_txt(self, destination: Union[str, Path, io.TextIOBase]):

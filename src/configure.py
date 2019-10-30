@@ -182,6 +182,7 @@ def main() -> None:
 
     for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
         name = f'{model}-{corpus}-{n_epoch}e'
+        name += '-coref' if args.coreference else ''
         name += '-overt' if args.train_overt else ''
         name += '-large' if args.use_bert_large else ''
         name += args.additional_name if args.additional_name is not None else ''
@@ -289,6 +290,7 @@ def main() -> None:
             'zero_anaphora_f1_intra',
             'zero_anaphora_f1_exophora',
             'zero_anaphora_f1',
+            'coreference_f1',
         ]
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
         lr_scheduler = {

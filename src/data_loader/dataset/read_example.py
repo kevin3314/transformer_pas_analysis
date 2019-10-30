@@ -73,7 +73,7 @@ def read_example(document: Document,
                 if '用言' in tag.features \
                         and mrph is target_mrph \
                         and process is True:
-                    arguments: Dict[str, str] = OrderedDict()
+                    arguments: Dict[str, Optional[str]] = OrderedDict()
                     for case in cases:
                         if dmid in dmid2arguments:
                             # filter out non-target exophors
@@ -103,15 +103,28 @@ def read_example(document: Document,
                     arguments = OrderedDict((case, None) for case in cases)
                     arg_candidates = []
 
-                # TODO: coreference
                 if coreference:
-                    if '<体言>' in tag.fstring and '<内容語>' in mrph.fstring:
+                    if '体言' in tag.features \
+                            and mrph is target_mrph \
+                            and process is True:
                         entities: List[Entity] = document.get_entities(tag)
                         if entities:
-                            arguments['='] = 'NA'
+                            exophors = [e.exophor for e in entities if e.is_special]
+                            dtid = document.tag2dtid[tag]
+                            mentions = set(m for e in entities for m in e.mentions if m.dtid != dtid)
+                            preceding_mentions = [m for m in mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
+                            if preceding_mentions:
+                                arguments['='] = str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
+                            elif exophors and exophors[0] in relax_exophors:
+                                arguments['='] = relax_exophors[exophors[0]]
+                            elif mentions:
+                                arguments['='] = str(list(mentions)[0].dmid)
+                            else:
+                                arguments['='] = 'NA'
                         else:
-                            entity = entities[0]
-                            arguments['='] = str(entity.mentions[0].dmid)
+                            arguments['='] = 'NA'
+                    else:
+                        arguments['='] = None
 
                 arguments_set.append(arguments)
                 arg_candidates_set.append(arg_candidates)

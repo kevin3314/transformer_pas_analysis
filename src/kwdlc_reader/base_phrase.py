@@ -48,6 +48,3 @@ class BasePhrase:
     def midasi(self) -> str:
         """表記"""
         return self.tag.midasi
-
-    def __eq__(self, other: 'BasePhrase'):
-        return self.dtid == other.dtid

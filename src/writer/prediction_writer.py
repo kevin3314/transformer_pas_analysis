@@ -66,9 +66,8 @@ class PredictionKNPWriter:
                                      document.doc_id,
                                      document.target_cases,
                                      document.target_corefs,
-                                     # document.target_exophors,
                                      document.extract_nes,
-                                     use_pas_tag=False)  # TODO: True と False で結果が同じか確認
+                                     use_pas_tag=False)
             documents_pred.append(document_pred)
 
             output_knp_lines = self._add_pas_analysis(output_knp_lines, document_pred)
@@ -195,7 +194,7 @@ class PredictionKNPWriter:
                     # special
                     if argument in self.index_to_special:
                         special_anaphor = self.index_to_special[argument]
-                        if special_anaphor in self.exophors:  # exclude NULL
+                        if special_anaphor in self.exophors:  # exclude NULL and NA
                             rels.append(RelTag(case, special_anaphor, None, None))
                         continue
                     # [SEP] or [CLS]
