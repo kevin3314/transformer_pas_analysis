@@ -16,8 +16,10 @@ class Config:
         self.uid = self.make_uid(self.config)
 
     def dump(self, path: str) -> None:
-        with open(os.path.join(path, f'{self.uid}.json'), 'w') as f:
+        config_path = pathlib.Path(path) / f'{self.uid}.json'
+        with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
+        print(config_path)
 
     @staticmethod
     def make_uid(config: dict):
