@@ -63,7 +63,7 @@ class Path:
             },
             'server': {
                 'release': '/mnt/hinoki/ueda/kwdlc/new/train',
-                'debug': '/mnt/hinoki/ueda/kwdlc/old/sample/train'
+                'debug': '/mnt/hinoki/ueda/kwdlc/new/sample/train'
             }
         },
         valid={
@@ -73,7 +73,7 @@ class Path:
             },
             'server': {
                 'release': '/mnt/hinoki/ueda/kwdlc/new/valid',
-                'debug': '/mnt/hinoki/ueda/kwdlc/old/sample/valid'
+                'debug': '/mnt/hinoki/ueda/kwdlc/new/sample/valid'
             }
         },
         test={
@@ -83,7 +83,7 @@ class Path:
             },
             'server': {
                 'release': '/mnt/hinoki/ueda/kwdlc/new/test',
-                'debug': '/mnt/hinoki/ueda/kwdlc/old/sample/test'
+                'debug': '/mnt/hinoki/ueda/kwdlc/new/sample/test'
             }
         }
     )
