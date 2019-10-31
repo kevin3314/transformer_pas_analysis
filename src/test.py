@@ -75,7 +75,7 @@ class Tester:
                 loss = self.loss(output, arguments_ids, deps)
                 total_loss += loss.item() * input_ids.size(0)
 
-        prediction_output_dir = self.config.save_dir / f'{self.target}_out_knp'
+        prediction_output_dir = self.config.save_dir / f'{self.target}_out_{label}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
