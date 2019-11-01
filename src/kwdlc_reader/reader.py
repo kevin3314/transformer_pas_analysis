@@ -530,7 +530,7 @@ class Document:
         for eid in mention.eids:
             entity = self.entities[eid]
             for mention_ in entity.mentions:
-                if mention_ == mention:
+                if mention_ == mention or mention_ in mentions:
                     continue
                 mentions.append(mention_)
         return mentions
@@ -539,13 +539,13 @@ class Document:
                   sid: str,
                   fh=None,
                   ) -> None:
-        predicates: List[Predicate] = [p for p in self.get_predicates() if p.sid == sid]
         sentence: BList = self[sid]
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         tag_list = sentence.tag_list()
         assert len(tree_strings) == len(tag_list)
+        predicates: List[Predicate] = [p for p in self.get_predicates() if p.sid == sid]
         for predicate in predicates:
             idx = predicate.tid
             arguments = self.get_arguments(predicate)
@@ -554,6 +554,21 @@ class Document:
                 argument = arguments[case]
                 arg = argument[0].midasi if argument else 'NULL'
                 tree_strings[idx] += f'{arg}:{case} '
+
+        for source_mention in self.get_all_mentions():
+            target_mentions = self.get_siblings(source_mention)
+            if not target_mentions:
+                continue
+            idx = source_mention.tid
+            tree_strings[idx] += '  =:'
+            targets = set()
+            for target_mention in target_mentions:
+                target = ''.join(mrph.midasi for mrph in target_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
+                if not target:
+                    target = target_mention.midasi
+                targets.add(target)
+            tree_strings[idx] += ' '.join(targets)
+
         print('\n'.join(tree_strings), file=fh)
 
     def __len__(self):

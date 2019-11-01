@@ -332,13 +332,21 @@ class Scorer:
                 # gold
                 writer.write('<td><pre>\n')
                 for sid in document_gold.sid2sentence.keys():
-                    self._draw_tree(sid, self.sid2predicates_gold[sid], document_gold, fh=writer)
+                    self._draw_tree(sid,
+                                    self.sid2predicates_gold[sid],
+                                    self.sid2mentions_gold[sid],
+                                    document_gold,
+                                    fh=writer)
                     writer.write('\n')
                 writer.write('</pre>')
                 # prediction
                 writer.write('<td><pre>\n')
                 for sid in document_pred.sid2sentence.keys():
-                    self._draw_tree(sid, self.sid2predicates_pred[sid], document_pred, fh=writer)
+                    self._draw_tree(sid,
+                                    self.sid2predicates_pred[sid],
+                                    self.sid2mentions_pred[sid],
+                                    document_pred,
+                                    fh=writer)
                     writer.write('\n')
                 writer.write('</pre>\n</tr>\n')
 
@@ -371,6 +379,7 @@ class Scorer:
     def _draw_tree(self,
                    sid: str,
                    predicates: List[Predicate],
+                   mentions: List[Mention],
                    document: Document,
                    fh=None,
                    html: bool = True
@@ -413,6 +422,23 @@ class Scorer:
                     tree_strings[idx] += f'<font color="{color}">{arg}:{case}</font> '
                 else:
                     tree_strings[idx] += f'{arg}:{case} '
+
+        current_document_mentions = document.get_all_mentions()
+        for source_mention in mentions:
+            if source_mention not in current_document_mentions:
+                continue
+            target_mentions = document.get_siblings(source_mention)
+            if not target_mentions:
+                continue
+            idx = source_mention.tid
+            tree_strings[idx] += '  =:'
+            targets = set()
+            for target_mention in target_mentions:
+                target = ''.join(mrph.midasi for mrph in target_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
+                if not target:
+                    target = target_mention.midasi
+                targets.add(target)
+            tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 
