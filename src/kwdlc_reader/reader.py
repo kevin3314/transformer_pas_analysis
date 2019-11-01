@@ -130,6 +130,7 @@ class Document:
         bnst2dbid (dict): 文節IDと文書レベルの文節IDを紐付ける辞書
         tag2dtid (dict): 基本句IDと文書レベルの基本句IDを紐付ける辞書
         mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
+        mentions (dict): dtid を key とする mention の辞書
         entities (dict): entity id を key として entity オブジェクトが格納されている
         named_entities (list): 抽出した固有表現
     """
@@ -161,7 +162,7 @@ class Document:
         self._assign_document_wide_id()
 
         self._pas: Dict[int, Pas] = OrderedDict()
-        self._mentions: Dict[int, Mention] = OrderedDict()
+        self.mentions: Dict[int, Mention] = OrderedDict()
         self.entities: Dict[int, Entity] = OrderedDict()
         if use_pas_tag:
             self._extract_pas()
@@ -314,14 +315,14 @@ class Document:
         Returns:
             Mention: メンション
         """
-        if bp.dtid not in self._mentions:
+        if bp.dtid not in self.mentions:
             # new coreference cluster is made
             mention = Mention(bp, self.mrph2dmid)
-            self._mentions[bp.dtid] = mention
+            self.mentions[bp.dtid] = mention
             entity = self._create_entity()
             entity.add_mention(mention)
         else:
-            mention = self._mentions[bp.dtid]
+            mention = self.mentions[bp.dtid]
         return mention
 
     def _create_entity(self,
@@ -343,7 +344,7 @@ class Document:
         """
         if exophor:
             if exophor not in ('不特定:人', '不特定:物', '不特定:状況'):  # exophor が singleton entity だった時
-                entities = [e for e in self.get_all_entities() if exophor == e.exophor]
+                entities = [e for e in self.entities.values() if exophor == e.exophor]
                 # すでに singleton entity が存在した場合、新しい entity は作らずにその entity を返す
                 if entities:
                     assert len(entities) == 1  # singleton entity が1つしかないことを保証
@@ -483,12 +484,6 @@ class Document:
     def mrph_list(self) -> List[Morpheme]:
         return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
-    def get_all_mentions(self) -> List[Mention]:
-        return list(self._mentions.values())
-
-    def get_all_entities(self) -> List[Entity]:
-        return list(self.entities.values())
-
     def get_entities(self, tag: Tag) -> List[Entity]:
         return [e for e in self.entities.values() for m in e.mentions if m.dtid == self.tag2dtid[tag]]
 
@@ -555,7 +550,7 @@ class Document:
                 arg = argument[0].midasi if argument else 'NULL'
                 tree_strings[idx] += f'{arg}:{case} '
 
-        for source_mention in self.get_all_mentions():
+        for source_mention in self.mentions.values():
             target_mentions = self.get_siblings(source_mention)
             if not target_mentions:
                 continue
@@ -567,6 +562,10 @@ class Document:
                 if not target:
                     target = target_mention.midasi
                 targets.add(target)
+            for eid in source_mention.eids:
+                entity = self.entities[eid]
+                if entity.is_special:
+                    targets.add(entity.exophor)
             tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)

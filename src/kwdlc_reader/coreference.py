@@ -23,6 +23,9 @@ class Mention(BasePhrase):
         super().__init__(bp.tag, bp.dtid, bp.sid, mrph2dmid)
         self.eids: Set[int] = set()
 
+    def __eq__(self, other: 'Mention'):
+        return self.dtid == other.dtid and self.sid == other.sid
+
 
 class Entity:
     """ 共参照における entity を扱うクラス

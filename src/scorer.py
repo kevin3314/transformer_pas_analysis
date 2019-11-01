@@ -65,10 +65,10 @@ class Scorer:
                         and process is True:
                     self.sid2predicates_gold[predicate_gold.sid].append(predicate_gold)
 
-            for mention_pred in document_pred.get_all_mentions():
+            for mention_pred in document_pred.mentions.values():
                 if process_all or (mention_pred.sid == last_sid):
                     self.sid2mentions_pred[mention_pred.sid].append(mention_pred)
-            for mention_gold in document_gold.get_all_mentions():
+            for mention_gold in document_gold.mentions.values():
                 process: bool = process_all or (mention_gold.sid == last_sid)
                 if '体言' in mention_gold.tag.features \
                         and process is True:
@@ -423,7 +423,7 @@ class Scorer:
                 else:
                     tree_strings[idx] += f'{arg}:{case} '
 
-        current_document_mentions = document.get_all_mentions()
+        current_document_mentions = document.mentions.values()
         for source_mention in mentions:
             if source_mention not in current_document_mentions:
                 continue
@@ -438,6 +438,10 @@ class Scorer:
                 if not target:
                     target = target_mention.midasi
                 targets.add(target)
+            for eid in source_mention.eids:
+                entity = document.entities[eid]
+                if entity.exophor in self.relax_exophors:
+                    targets.add(entity.exophor)
             tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)

@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 from pyknp import BList, Morpheme
 
-from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, Entity
+from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument
 
 
 class PasExample:
@@ -107,18 +107,19 @@ def read_example(document: Document,
                     if '体言' in tag.features \
                             and mrph is target_mrph \
                             and process is True:
-                        entities: List[Entity] = document.get_entities(tag)
-                        if entities:
-                            exophors = [e.exophor for e in entities if e.is_special]
-                            dtid = document.tag2dtid[tag]
-                            mentions = set(m for e in entities for m in e.mentions if m.dtid != dtid)
+                        dtid = document.tag2dtid[tag]
+                        if dtid in document.mentions:
+                            mention = document.mentions[dtid]
+                            mentions = document.get_siblings(mention)
                             preceding_mentions = [m for m in mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
+                            exophors = [document.entities[eid].exophor for eid in mention.eids
+                                        if document.entities[eid].is_special]
                             if preceding_mentions:
                                 arguments['='] = str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
                             elif exophors and exophors[0] in relax_exophors:
                                 arguments['='] = relax_exophors[exophors[0]]
                             elif mentions:
-                                arguments['='] = str(list(mentions)[0].dmid)
+                                arguments['='] = str(mentions[0].dmid)
                             else:
                                 arguments['='] = 'NA'
                         else:
