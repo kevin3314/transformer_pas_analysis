@@ -23,12 +23,12 @@ class PredictionKNPWriter:
         self.gold_arguments_sets: List[List[Dict[str, Optional[str]]]] = \
             [example.arguments_set for example in dataset.examples]
         self.all_features: List[InputFeatures] = dataset.features
-        self.cases: List[str] = dataset.reader.target_cases
+        self.cases: List[str] = dataset.target_cases
         self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
         self.dids = [example.doc_id for example in dataset.examples]
-        self.did2source: Dict[str, Union[Path, str]] = dataset.reader.did2source
+        # self.did2source: Dict[str, Union[Path, str]] = dataset.reader.did2source
         self.did2document: Dict[str, Document] = {doc.doc_id: doc for doc in dataset.documents}
         self.dtid2cfid: Dict[int, str] = {}
         self.logger = logger
@@ -49,15 +49,15 @@ class PredictionKNPWriter:
         documents_pred: List[Document] = []
         for did, features, arguments_set, gold_arguments_set in \
                 zip(self.dids, self.all_features, arguments_sets, self.gold_arguments_sets):
-            input_source = self.did2source[did]
+            # input_source = self.did2source[did]
             document = self.did2document[did]
-            if isinstance(input_source, Path):
-                with input_source.open() as fin:
-                    knp_string = ''.join(fin.readlines())
-            else:
-                assert isinstance(input_source, str)
-                knp_string = input_source
-            output_knp_lines = self._rewrite_rel(knp_string,
+            # if isinstance(input_source, Path):
+            #     with input_source.open() as fin:
+            #         knp_string = ''.join(fin.readlines())
+            # else:
+            #     assert isinstance(input_source, str)
+            #     knp_string = input_source
+            output_knp_lines = self._rewrite_rel(document.knp_string,
                                                  features,
                                                  arguments_set,
                                                  gold_arguments_set,
@@ -66,7 +66,7 @@ class PredictionKNPWriter:
                                      document.doc_id,
                                      document.target_cases,
                                      document.target_corefs,
-                                     document.extract_nes,
+                                     extract_nes=False,
                                      use_pas_tag=False)
             documents_pred.append(document_pred)
 

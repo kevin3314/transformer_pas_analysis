@@ -1,5 +1,6 @@
 import io
 import sys
+import pickle
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Iterator, Union
@@ -35,7 +36,8 @@ class KWDLCReader:
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-        glob_pat (str): コーパスとして扱うファイルのパターン
+        knp_ext (str): KWDLC (or KC) ファイルの拡張子
+        pickle_ext (str): Document を pickle 形式で読む場合の拡張子
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
     """
     def __init__(self,
@@ -43,15 +45,16 @@ class KWDLCReader:
                  target_cases: Optional[List[str]],
                  target_corefs: Optional[List[str]],
                  extract_nes: bool = True,
-                 glob_pat: str = '*.knp',
                  use_pas_tag: bool = False,
+                 knp_ext: str = '.knp',
+                 pickle_ext: str = '.pkl',
                  ) -> None:
         if not (isinstance(source, Path) or isinstance(source, str)):
             raise TypeError(f'source must be Path or str type, but got {type(source)}')
         if isinstance(source, Path):
             if source.is_dir():
-                logger.info(f'got directory path, files in the directory is treated as source knp files')
-                file_paths: List[Path] = sorted(source.glob(glob_pat))
+                logger.info(f'got directory path, files in the directory is treated as source files')
+                file_paths: List[Path] = sorted(source.glob(f'*{knp_ext}')) + sorted(source.glob(f'*{pickle_ext}'))
                 self.did2source: Dict[str, Union[Path, str]] = OrderedDict((path.stem, path) for path in file_paths)
             else:
                 logger.info(f'got file path, this file is treated as a source knp file')
@@ -64,6 +67,8 @@ class KWDLCReader:
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
         self.extract_nes: bool = extract_nes
         self.use_pas_tag: bool = use_pas_tag
+        self.knp_ext: str = knp_ext
+        self.pickle_ext: str = pickle_ext
 
     @staticmethod
     def _get_target(input_: Optional[list],
@@ -90,8 +95,14 @@ class KWDLCReader:
             logger.error(f'unknown document id: {doc_id}')
             return None
         if isinstance(self.did2source[doc_id], Path):
-            with self.did2source[doc_id].open() as f:
-                input_string = f.read()
+            if self.did2source[doc_id].suffix == self.pickle_ext:
+                with self.did2source[doc_id].open(mode='rb') as f:
+                    return pickle.load(f)
+            elif self.did2source[doc_id].suffix == self.knp_ext:
+                with self.did2source[doc_id].open() as f:
+                    input_string = f.read()
+            else:
+                return None
         else:
             input_string = self.did2source[doc_id]
         return Document(input_string,
@@ -122,6 +133,7 @@ class Document:
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
 
     Attributes:
+        knp_string (str): 文書ファイルの内容(knp形式)
         doc_id (str): 文書ID(ファイル名から拡張子を除いたもの)
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
@@ -142,6 +154,7 @@ class Document:
                  extract_nes: bool,
                  use_pas_tag: bool,
                  ) -> None:
+        self.knp_string = knp_string
         self.doc_id = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
