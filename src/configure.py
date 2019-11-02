@@ -27,103 +27,16 @@ class Config:
 
 
 class Path:
-    class CorpusPath:
-        def __init__(self, train, valid, test):
-            self.paths = dict()
-            self.paths['train'] = train
-            self.paths['valid'] = valid
-            self.paths['test'] = test
-
-        def get(self, dataset: str, env: str, debug: bool = False):
-            dic = self.paths[dataset][env]
-            if debug:
-                return dic['debug']
-            else:
-                return dic['release']
-
-    class BertPath:
-        def __init__(self):
-            self.path = {
-                'local': {
-                    'base': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-                    'large': None
-                },
-                'server': {
-                    'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-                    'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE'
-                }
-            }
-
-        def get(self, env: str, large: bool = False):
-            return self.path[env]['large' if large else 'base']
-
-    kwdlc = CorpusPath(
-        train={
-            'local': {
-                'release': '/Users/NobuhiroUeda/Data/kwdlc/old/train',
-                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/train'
-            },
-            'server': {
-                'release': '/mnt/hinoki/ueda/kwdlc/new/train',
-                'debug': '/mnt/hinoki/ueda/kwdlc/new/sample/train'
-            }
+    bert_model = {
+        'local': {
+            'base': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+            'large': None
         },
-        valid={
-            'local': {
-                'release': '/Users/NobuhiroUeda/Data/kwdlc/old/valid',
-                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/valid'
-            },
-            'server': {
-                'release': '/mnt/hinoki/ueda/kwdlc/new/valid',
-                'debug': '/mnt/hinoki/ueda/kwdlc/new/sample/valid'
-            }
-        },
-        test={
-            'local': {
-                'release': '/Users/NobuhiroUeda/Data/kwdlc/old/test',
-                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kwdlc/test'
-            },
-            'server': {
-                'release': '/mnt/hinoki/ueda/kwdlc/new/test',
-                'debug': '/mnt/hinoki/ueda/kwdlc/new/sample/test'
-            }
+        'server': {
+            'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE'
         }
-    )
-
-    kc = CorpusPath(
-        train={
-            'local': {
-                'release': '/Users/NobuhiroUeda/Data/kc/split/train',
-                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kc/train'
-            },
-            'server': {
-                'release': '/mnt/hinoki/ueda/kc/split/train',
-                'debug': None
-            }
-        },
-        valid={
-            'local': {
-                'release': '/Users/NobuhiroUeda/Data/kc/split/valid',
-                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kc/valid'
-            },
-            'server': {
-                'release': '/mnt/hinoki/ueda/kc/split/valid',
-                'debug': None
-            }
-        },
-        test={
-            'local': {
-                'release': '/Users/NobuhiroUeda/Data/kc/split/test',
-                'debug': '/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/kc/test'
-            },
-            'server': {
-                'release': '/mnt/hinoki/ueda/kc/split/test',
-                'debug': None
-            }
-        }
-    )
-
-    bert_model = BertPath()
+    }
 
 
 def main() -> None:
@@ -131,6 +44,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
+    parser.add_argument('-d', '--dataset', type=str,
+                        help='path to dataset directory')
     parser.add_argument('--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
     parser.add_argument('--epoch', '-e', type=int, default=3, nargs='*',
@@ -144,8 +59,6 @@ def main() -> None:
                         help='Perform coreference resolution.')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
-    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
-                        help='Case strings. Separate by ","')
     # parser.add_argument('--dropout', type=float, default=0.1, nargs='*',
     #                     help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
@@ -165,8 +78,6 @@ def main() -> None:
                         help='whether to use BERT_LARGE model')
     parser.add_argument('--no-save-model', action='store_true', default=False,
                         help='whether to save trained model')
-    parser.add_argument('--debug', action='store_true', default=False,
-                        help='use small corpus file')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
                         help='corpus to use in training')
     parser.add_argument('--train-overt', action='store_true', default=False,
@@ -174,13 +85,17 @@ def main() -> None:
     args = parser.parse_args()
 
     os.makedirs(args.config, exist_ok=True)
-    cases: List[str] = args.case_string.split(',')
-    bert_model = Path.bert_model.get(args.env, large=args.use_bert_large)
 
+    bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
     models: List[str] = args.model if type(args.model) == list else [args.model]
     corpus_list: List[str] = args.corpus if type(args.corpus) == list else [args.corpus]
     epochs: List[int] = args.epoch if type(args.epoch) == list else [args.epoch]
     n_gpu: int = args.gpus
+    data_root = pathlib.Path(args.dataset).resolve()
+    with data_root.joinpath('config.json').open() as f:
+        config = json.load(f)
+    cases: List[str] = config['target_cases']
+    corefs: List[str] = config['target_corefs']
 
     for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
         name = f'{model}-{corpus}-{n_epoch}e'
@@ -188,13 +103,14 @@ def main() -> None:
         name += '-overt' if args.train_overt else ''
         name += '-large' if args.use_bert_large else ''
         name += args.additional_name if args.additional_name is not None else ''
-        train_kwdlc_dir = Path.kwdlc.get('train', args.env, debug=args.debug)
-        train_kc_dir = Path.kc.get('train', args.env, debug=args.debug)
+        train_kwdlc_dir = data_root / 'kwdlc' / 'train'
+        train_kc_dir = data_root / 'kc' / 'train'
         num_train_examples = 0
+        glob_pat = '*.' + config['pickle_ext']
         if corpus in ['kwdlc', 'all']:
-            num_train_examples += len(list(pathlib.Path(train_kwdlc_dir).glob('*.knp')))
+            num_train_examples += sum(1 for _ in train_kwdlc_dir.glob(glob_pat))
         if corpus in ['kc', 'all']:
-            num_train_examples += len(list(pathlib.Path(train_kc_dir).glob('*.knp')))
+            num_train_examples += sum(1 for _ in train_kc_dir.glob(glob_pat))
 
         arch = {
             'type': model,
@@ -211,6 +127,7 @@ def main() -> None:
                 'path': None,
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
+                'corefs': corefs,
                 'coreference': args.coreference,
                 'exophors': args.exophors.split(','),
                 'training': None,
@@ -222,30 +139,30 @@ def main() -> None:
 
         train_kwdlc_dataset = copy.deepcopy(dataset)
 
-        train_kwdlc_dataset['args']['path'] = train_kwdlc_dir if corpus in ['kwdlc', 'all'] else None
+        train_kwdlc_dataset['args']['path'] = str(train_kwdlc_dir) if corpus in ('kwdlc', 'all') else None
         train_kwdlc_dataset['args']['training'] = True
         train_kwdlc_dataset['args']['kc'] = False
 
         valid_kwdlc_dataset = copy.deepcopy(dataset)
-        valid_kwdlc_dataset['args']['path'] = Path.kwdlc.get('valid', args.env, args.debug)
+        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid')
         valid_kwdlc_dataset['args']['training'] = False
         valid_kwdlc_dataset['args']['kc'] = False
 
         test_kwdlc_dataset = copy.deepcopy(dataset)
-        test_kwdlc_dataset['args']['path'] = Path.kwdlc.get('test', args.env, args.debug)
+        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test')
         test_kwdlc_dataset['args']['training'] = False
         test_kwdlc_dataset['args']['kc'] = False
 
         train_kc_dataset = copy.deepcopy(train_kwdlc_dataset)
-        train_kc_dataset['args']['path'] = train_kc_dir if corpus in ['kc', 'all'] else None
+        train_kc_dataset['args']['path'] = str(train_kc_dir) if corpus in ('kc', 'all') else None
         train_kc_dataset['args']['kc'] = True
 
         valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
-        valid_kc_dataset['args']['path'] = Path.kc.get('valid', args.env, args.debug)
+        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid')
         valid_kc_dataset['args']['kc'] = True
 
         test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
-        test_kc_dataset['args']['path'] = Path.kc.get('test', args.env, args.debug)
+        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test')
         test_kc_dataset['args']['kc'] = True
 
         data_loader = {

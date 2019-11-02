@@ -46,6 +46,7 @@ class PASDataset(Dataset):
                  path: Optional[str],
                  max_seq_length: int,
                  cases: List[str],
+                 corefs: List[str],
                  exophors: List[str],
                  coreference: bool,
                  training: bool,
@@ -55,23 +56,22 @@ class PASDataset(Dataset):
                  train_overt: bool = False,
                  ) -> None:
         if path is not None:
-            self.reader = KWDLCReader(Path(path),
-                                      target_cases=cases,
-                                      target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                      extract_nes=False)
+            source = Path(path)
         else:
             assert knp_string is not None
-            self.reader = KWDLCReader(knp_string,
-                                      target_cases=cases,
-                                      target_corefs=['=', '=構', '=≒'] if coreference or not training else [],
-                                      extract_nes=False)
+            source = knp_string
+        self.reader = KWDLCReader(source,
+                                  target_cases=cases,
+                                  target_corefs=corefs if coreference or not training else [],
+                                  extract_nes=False)
+        self.target_cases = self.reader.target_cases
         self.target_exophors = exophors
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.num_special_tokens = len(special_tokens)
         self.special_to_index: Dict[str, int] = {token: i + max_seq_length - self.num_special_tokens for i, token
                                                  in enumerate(special_tokens)}
         self.coreference = coreference
-        self.training = training
+        # self.training = training
         self.kc = kc
         self.train_overt = train_overt
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
@@ -85,8 +85,7 @@ class PASDataset(Dataset):
             feature = self._convert_example_to_feature(
                 example,
                 max_seq_length=max_seq_length,
-                vocab_size=bert_config.vocab_size,  # don't use len(self.tokenizer.vocab)
-                num_case=len(self.reader.target_cases))
+                vocab_size=bert_config.vocab_size)  # don't use len(self.tokenizer.vocab)
             if feature is None:
                 continue
             self.examples.append(example)
@@ -107,12 +106,11 @@ class PASDataset(Dataset):
     def _convert_example_to_feature(self,
                                     example: PasExample,
                                     max_seq_length: int,
-                                    vocab_size: int,
-                                    num_case: int) -> Optional[InputFeatures]:
+                                    vocab_size: int) -> Optional[InputFeatures]:
         """Loads a data file into a list of `InputBatch`s."""
 
         num_expand_vocab = len(self.special_to_index)
-        num_case_w_coreference = num_case + 1 if self.coreference else num_case
+        num_case_w_coreference = len(self.target_cases) + int(self.coreference)
 
         all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
         # ignore too long document
