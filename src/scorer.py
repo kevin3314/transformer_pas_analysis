@@ -425,7 +425,7 @@ class Scorer:
 
         current_document_mentions = document.mentions.values()
         for source_mention in mentions:
-            if source_mention not in current_document_mentions:
+            if all(source_mention is not m for m in current_document_mentions):
                 continue
             target_mentions = document.get_siblings(source_mention)
             if not target_mentions:
