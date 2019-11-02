@@ -93,9 +93,9 @@ def main() -> None:
     n_gpu: int = args.gpus
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
-        config = json.load(f)
-    cases: List[str] = config['target_cases']
-    corefs: List[str] = config['target_corefs']
+        dataset_config = json.load(f)
+    cases: List[str] = dataset_config['target_cases']
+    corefs: List[str] = dataset_config['target_corefs']
 
     for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
         name = f'{model}-{corpus}-{n_epoch}e'
@@ -106,7 +106,7 @@ def main() -> None:
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
         num_train_examples = 0
-        glob_pat = '*.' + config['pickle_ext']
+        glob_pat = '*.' + dataset_config['pickle_ext']
         if corpus in ['kwdlc', 'all']:
             num_train_examples += sum(1 for _ in train_kwdlc_dir.glob(glob_pat))
         if corpus in ['kc', 'all']:
