@@ -132,10 +132,9 @@ class Trainer(BaseTrainer):
         prediction_writer = PredictionKNPWriter(valid_data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, None)
 
-        scorer = Scorer(documents_pred,
-                        valid_data_loader.dataset.documents,
-                        valid_data_loader.dataset.target_exophors,
-                        valid_data_loader.dataset.kc)
+        scorer = Scorer(documents_pred, valid_data_loader.dataset.documents, valid_data_loader.dataset.target_exophors,
+                        coreference=valid_data_loader.dataset.coreference,
+                        kc=valid_data_loader.dataset.kc)
         scorer.write_html(self.config.save_dir / f'result_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
 

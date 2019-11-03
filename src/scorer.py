@@ -21,6 +21,7 @@ class Scorer:
                  documents_pred: List[Document],
                  documents_gold: List[Document],
                  target_exophors: List[str],
+                 coreference: bool = True,
                  kc: bool = False):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
@@ -28,6 +29,7 @@ class Scorer:
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
+        self.coreference = coreference
         self.kc = kc
         self.comp_result: Dict[tuple, str] = {}
         self.deptype2analysis = OrderedDict([('overt', 'overt'),
@@ -78,7 +80,8 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             self._evaluate_pas(doc_id, document_pred, document_gold)
-            self._evaluate_coref(doc_id, document_pred, document_gold)
+            if self.coreference:
+                self._evaluate_coref(doc_id, document_pred, document_gold)
 
     def _evaluate_pas(self, doc_id: str, document_pred, document_gold):
         process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
@@ -135,8 +138,7 @@ class Scorer:
                 args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
                 assert len(args_pred) in (0, 1)
                 args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
-                args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold,
-                                                      self.relax_exophors)
+                args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold, self.relax_exophors)
                 if not args_gold:
                     continue
                 correct = False
@@ -266,7 +268,8 @@ class Scorer:
             all_case_result['zero_all'] += case_result['zero_all']
             all_case_result['all'] += case_result['all']
             result[case] = case_result
-        all_case_result['coreference'] = self.measure_coref
+        if self.coreference:
+            all_case_result['coreference'] = self.measure_coref
         result['all_case'] = all_case_result
         return result
 
@@ -422,27 +425,34 @@ class Scorer:
                     tree_strings[idx] += f'<font color="{color}">{arg}:{case}</font> '
                 else:
                     tree_strings[idx] += f'{arg}:{case} '
-
-        current_document_mentions = document.mentions.values()
-        for source_mention in mentions:
-            if all(source_mention is not m for m in current_document_mentions):
-                continue
-            target_mentions = document.get_siblings(source_mention)
-            if not target_mentions:
-                continue
-            idx = source_mention.tid
-            tree_strings[idx] += '  =:'
-            targets = set()
-            for target_mention in target_mentions:
-                target = ''.join(mrph.midasi for mrph in target_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
-                if not target:
-                    target = target_mention.midasi
-                targets.add(target)
-            for eid in source_mention.eids:
-                entity = document.entities[eid]
-                if entity.exophor in self.relax_exophors:
-                    targets.add(entity.exophor)
-            tree_strings[idx] += ' '.join(targets)
+        if self.coreference:
+            current_document_mentions = document.mentions.values()
+            for source_mention in mentions:
+                if all(source_mention is not m for m in current_document_mentions):
+                    continue
+                target_mentions = document.get_siblings(source_mention)
+                if not target_mentions:
+                    continue
+                idx = source_mention.tid
+                tree_strings[idx] += '  =:'
+                targets = set()
+                for target_mention in target_mentions:
+                    target = ''.join(mrph.midasi for mrph in target_mention.tag.mrph_list()
+                                     if '<内容語>' in mrph.fstring)
+                    if not target:
+                        target = target_mention.midasi
+                    targets.add(target)
+                for eid in source_mention.eids:
+                    entity = document.entities[eid]
+                    if entity.exophor in self.relax_exophors:
+                        targets.add(entity.exophor)
+                result = self.comp_result.get((document.doc_id, source_mention.dtid, '='), None)
+                result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
+                if html:
+                    tree_strings[idx] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
+                                         + ' '.join(targets) + '</span> '
+                else:
+                    tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 

@@ -209,8 +209,9 @@ def main() -> None:
             'zero_anaphora_f1_intra',
             'zero_anaphora_f1_exophora',
             'zero_anaphora_f1',
-            'coreference_f1',
         ]
+        if args.coreference:
+            metrics.append('coreference_f1')
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
         lr_scheduler = {
             'type': 'WarmupLinearSchedule',
