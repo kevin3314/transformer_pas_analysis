@@ -24,7 +24,7 @@ class Trainer(BaseTrainer):
         self.valid_kc_data_loader = valid_kc_data_loader
         # self.do_validation = (self.valid_kwdlc_data_loader is not None) or (self.valid_kc_data_loader is not None)
         self.lr_scheduler = lr_scheduler
-        self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.log_step = int(data_loader.n_samples / np.sqrt(data_loader.batch_size) / 200)
 
     def _eval_metrics(self, result: dict, label: str):
         f1_metrics = np.zeros(len(self.metrics))
