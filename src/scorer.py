@@ -241,9 +241,7 @@ class Scorer:
                     self.comp_result[key] = 'wrong'
                 self.measure_coref.denom_gold += 1
             elif exophors_gold:
-                if set(exophors_pred) & set(exophors_gold):
-                    assert self.comp_result[key] == 'correct'
-                else:
+                if not exophors_pred:
                     self.comp_result[key] = 'wrong'
                 self.measure_coref.denom_gold += 1
 
