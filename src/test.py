@@ -122,7 +122,7 @@ def main(config, args):
 
     # print logged information to the screen
     for key, value in log.items():
-        logger.info('{:35s}: {:.4f}'.format(str(key), value))
+        logger.info('{:36s}: {:.4f}'.format(str(key), value))
 
 
 if __name__ == '__main__':

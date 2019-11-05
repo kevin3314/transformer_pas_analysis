@@ -83,7 +83,7 @@ class Scorer:
             if self.coreference:
                 self._evaluate_coref(doc_id, document_pred, document_gold)
 
-    def _evaluate_pas(self, doc_id: str, document_pred, document_gold):
+    def _evaluate_pas(self, doc_id: str, document_pred: Document, document_gold: Document):
         process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
         last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
         dtid2pred_pred: Dict[int, Predicate] = {}
@@ -157,81 +157,6 @@ class Scorer:
                     self.comp_result[key] = 'wrong'
                 self.measures[case][analysis].denom_gold += 1
 
-    def _evaluate_coref(self, doc_id: str, document_pred, document_gold):
-        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
-        last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
-        dtid2mention_pred: Dict[int, Mention] = {}
-        dtid2mention_gold: Dict[int, Mention] = {}
-        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
-            if not (process_all or (sid == last_sid)):  # いらないかも
-                continue
-            for mention in self.sid2mentions_pred[sid]:
-                dtid2mention_pred[mention.dtid] = mention
-            for mention in self.sid2mentions_gold[sid]:
-                dtid2mention_gold[mention.dtid] = mention
-
-        # calculate precision
-        for dtid, source_mention_pred in dtid2mention_pred.items():
-            mentions_pred = document_pred.get_siblings(source_mention_pred)
-            exophors_pred = [document_pred.entities[eid].exophor for eid in source_mention_pred.eids
-                             if document_pred.entities[eid].is_special]
-            if dtid in dtid2mention_gold:
-                source_mention_gold = dtid2mention_gold[dtid]
-                mentions_gold = document_gold.get_siblings(source_mention_gold)
-                exophors_gold = [document_gold.entities[eid].exophor for eid in source_mention_gold.eids
-                                 if document_gold.entities[eid].is_special]
-            else:
-                mentions_gold = exophors_gold = []
-
-            key = (doc_id, dtid, '=')
-            if mentions_pred:
-                for mention in mentions_pred:
-                    if mention in mentions_gold:
-                        self.comp_result[key] = 'correct'
-                        self.measure_coref.correct += 1
-                        break
-                else:
-                    self.comp_result[key] = 'wrong'
-            elif exophors_pred:
-                if set(exophors_pred) & set(exophors_gold):
-                    self.comp_result[key] = 'correct'
-                    self.measure_coref.correct += 1
-                else:
-                    self.comp_result[key] = 'wrong'
-            else:
-                continue
-            self.measure_coref.denom_pred += 1
-
-        # calculate recall
-        for dtid, source_mention_gold in dtid2mention_gold.items():
-            mentions_gold = document_gold.get_siblings(source_mention_gold)
-            exophors_gold = [document_gold.entities[eid].exophor for eid in source_mention_gold.eids
-                             if document_gold.entities[eid].is_special]
-            if dtid in dtid2mention_pred:
-                source_mention_pred = dtid2mention_pred[dtid]
-                mentions_pred = document_pred.get_siblings(source_mention_pred)
-                exophors_pred = [document_pred.entities[eid].exophor for eid in source_mention_pred.eids
-                                 if document_pred.entities[eid].is_special]
-            else:
-                mentions_pred = exophors_pred = []
-
-            key = (doc_id, dtid, '=')
-            if mentions_gold:
-                for mention in mentions_gold:
-                    if mention in mentions_pred:
-                        assert self.comp_result[key] == 'correct'
-                        break
-                else:
-                    self.comp_result[key] = 'wrong'
-            elif exophors_pred:
-                if set(exophors_pred) & set(exophors_gold):
-                    assert self.comp_result[key] == 'correct'
-                else:
-                    self.comp_result[key] = 'wrong'
-            else:
-                continue
-            self.measure_coref.denom_gold += 1
-
     @staticmethod
     def _filter_args(args: List[BaseArgument],
                      predicate: Predicate,
@@ -252,6 +177,79 @@ class Scorer:
     @staticmethod
     def _is_inter_sentential_cataphor(arg: BaseArgument, predicate: Predicate):
         return isinstance(arg, Argument) and predicate.dtid < arg.dtid and arg.sid != predicate.sid
+
+    def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
+        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
+        last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+        dtid2mention_pred: Dict[int, Mention] = {}
+        dtid2mention_gold: Dict[int, Mention] = {}
+        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
+            if not (process_all or (sid == last_sid)):  # いらないかも
+                continue
+            for mention in self.sid2mentions_pred[sid]:
+                dtid2mention_pred[mention.dtid] = mention
+            for mention in self.sid2mentions_gold[sid]:
+                dtid2mention_gold[mention.dtid] = mention
+
+        for dtid in range(len(document_pred.tag_list())):
+            if dtid in dtid2mention_pred:
+                src_mention_pred = dtid2mention_pred[dtid]
+                tgt_mentions_pred = \
+                    self._filter_mentions(document_pred.get_siblings(src_mention_pred), src_mention_pred)
+                exophors_pred = [document_pred.entities[eid].exophor for eid in src_mention_pred.eids
+                                 if document_pred.entities[eid].is_special]
+            else:
+                tgt_mentions_pred = exophors_pred = []
+
+            if dtid in dtid2mention_gold:
+                src_mention_gold = dtid2mention_gold[dtid]
+                tgt_mentions_gold = \
+                    self._filter_mentions(document_gold.get_siblings(src_mention_gold), src_mention_gold)
+                exophors_gold = [document_gold.entities[eid].exophor for eid in src_mention_gold.eids
+                                 if document_gold.entities[eid].is_special]
+            else:
+                tgt_mentions_gold = exophors_gold = []
+
+            key = (doc_id, dtid, '=')
+
+            # calculate precision
+            if tgt_mentions_pred:
+                for mention in tgt_mentions_pred:
+                    if mention in tgt_mentions_gold:
+                        self.comp_result[key] = 'correct'
+                        self.measure_coref.correct += 1
+                        break
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_pred += 1
+            elif exophors_pred:
+                if set(exophors_pred) & set(exophors_gold):
+                    self.comp_result[key] = 'correct'
+                    self.measure_coref.correct += 1
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_pred += 1
+
+            # calculate recall
+            if tgt_mentions_gold:
+                for mention in tgt_mentions_gold:
+                    if mention in tgt_mentions_pred:
+                        assert self.comp_result[key] == 'correct'
+                        break
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_gold += 1
+            elif exophors_pred:
+                if set(exophors_pred) & set(exophors_gold):
+                    assert self.comp_result[key] == 'correct'
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_gold += 1
+
+    @staticmethod
+    def _filter_mentions(tgt_mentions: List[Mention], src_mention: Mention) -> List[Mention]:
+        return [tgt_mention for tgt_mention in tgt_mentions
+                if tgt_mention.dtid < src_mention.dtid or tgt_mention.sid == src_mention.sid]
 
     def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
         result = OrderedDict()
@@ -362,20 +360,25 @@ class Scorer:
     def _html_header():
         return textwrap.dedent('''
         <head>
+        <meta charset="utf-8" />
         <title>Bert Result</title>
         <style type="text/css">
-        <!--
-        td {font-size: 11pt;}
-        td {border: 1px solid #606060;}
-        td {vertical-align: top;}
-        pre {font-family: "ＭＳ ゴシック","Osaka-Mono","Osaka-等幅","さざなみゴシック","Sazanami Gothic",DotumChe,GulimChe,
-        BatangChe,MingLiU, NSimSun, Terminal; white-space:pre;}
-        -->
-
+        td {
+            font-size: 11pt;
+            border: 1px solid #606060;
+            vertical-align: top;
+            margin: 5pt;
+        }
+        .obi1 {
+            background-color: pink;
+            font-size: 12pt;
+        }
+        pre {
+            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
+            GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
+            white-space: pre;
+        }
         </style>
-
-        <meta HTTP-EQUIV="content-type" CONTENT="text/html" charset="utf-8">
-        <link rel="stylesheet" href="result.css" type="text/css"/>
         </head>
         ''')
 

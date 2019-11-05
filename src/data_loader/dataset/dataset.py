@@ -147,8 +147,8 @@ class PASDataset(Dataset):
                     # special token
                     arguments[i] = self.special_to_index[argument]
                 else:
-                    if case != '=' and int(argument) not in example.arg_candidates_set[orig_index]:
-                        # ignore an argument which is not candidate (except for coreference resolution)
+                    if int(argument) not in example.arg_candidates_set[orig_index]:
+                        # ignore an argument which is not candidate
                         logger.debug(f'argument: {argument} of {token} is not in candidates and ignored')
                         continue
                     # normal
@@ -211,7 +211,7 @@ class PASDataset(Dataset):
 
         return feature
 
-    def _get_tokenized_tokens(self, words: List[str]):
+    def _get_tokenized_tokens(self, words: List[str]) -> tuple:
         all_tokens = []
         tok_to_orig_index: List[Optional[int]] = []
         orig_to_tok_index: List[int] = []

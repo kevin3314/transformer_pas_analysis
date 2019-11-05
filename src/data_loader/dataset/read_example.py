@@ -110,16 +110,16 @@ def read_example(document: Document,
                         dtid = document.tag2dtid[tag]
                         if dtid in document.mentions:
                             mention = document.mentions[dtid]
-                            mentions = document.get_siblings(mention)
-                            preceding_mentions = [m for m in mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
+                            tgt_mentions = document.get_siblings(mention)
+                            preceding_mentions = [m for m in tgt_mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
                             exophors = [document.entities[eid].exophor for eid in mention.eids
                                         if document.entities[eid].is_special]
                             if preceding_mentions:
                                 arguments['='] = str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
-                            elif exophors and exophors[0] in relax_exophors:
+                            elif exophors and exophors[0] in relax_exophors:  # if no preceding mention, use exo as gold
                                 arguments['='] = relax_exophors[exophors[0]]
-                            elif mentions:
-                                arguments['='] = str(mentions[0].dmid)
+                            elif tgt_mentions and tgt_mentions[0].sid == mention.sid:
+                                arguments['='] = str(tgt_mentions[0].dmid)
                             else:
                                 arguments['='] = 'NA'
                         else:
@@ -134,7 +134,18 @@ def read_example(document: Document,
     return PasExample(words, arguments_set, arg_candidates_set, dtids, ddeps, document.doc_id)
 
 
-def get_head_dmids(sentence: BList, mrph2dmid: dict) -> List[int]:
+def get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
+    """sentence 中基本句それぞれについて、内容語である形態素の dmid を返す
+
+    内容語がなかった場合、先頭の形態素の dmid を返す
+
+    Args:
+        sentence (BList): 対象の文
+        mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
+
+    Returns:
+        list: 各基本句に含まれる内容語形態素の文書レベル形態素ID
+    """
     head_dmids = []
     for tag in sentence.tag_list():
         head_dmid = None
@@ -144,5 +155,6 @@ def get_head_dmids(sentence: BList, mrph2dmid: dict) -> List[int]:
             if '<内容語>' in mrph.fstring:
                 head_dmid = mrph2dmid[mrph]
                 break
-        head_dmids.append(head_dmid)
+        if head_dmid is not None:
+            head_dmids.append(head_dmid)
     return head_dmids

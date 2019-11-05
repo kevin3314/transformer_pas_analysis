@@ -325,6 +325,7 @@ class Document:
 
         Args:
             bp (BasePhrase): 基本句
+
         Returns:
             Mention: メンション
         """
@@ -352,6 +353,7 @@ class Document:
         Args:
             exophor (Optional[str]): 外界照応詞(optional)
             eid (Optional[int]): エンティティID(省略推奨)
+
         Returns:
              Entity: エンティティ
         """
