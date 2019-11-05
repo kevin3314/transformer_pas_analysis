@@ -181,12 +181,6 @@ class Pas:
             arg.optional = True
             logger.info(f'{self.sid:21}marked {arg.midasi} as optional')
 
-    def copy(self) -> 'Pas':
-        # only for arguments, perform deepcopy
-        new_obj = copy.copy(self)
-        new_obj.arguments = copy.deepcopy(self.arguments)
-        return new_obj
-
     @property
     def dtid(self) -> int:
         return self.predicate.dtid

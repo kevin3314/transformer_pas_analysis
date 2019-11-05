@@ -1,6 +1,7 @@
 import io
 import sys
-import pickle
+import copy
+import _pickle as cPickle
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Iterator, Union
@@ -97,7 +98,7 @@ class KWDLCReader:
         if isinstance(self.did2source[doc_id], Path):
             if self.did2source[doc_id].suffix == self.pickle_ext:
                 with self.did2source[doc_id].open(mode='rb') as f:
-                    return pickle.load(f)
+                    return cPickle.load(f)
             elif self.did2source[doc_id].suffix == self.knp_ext:
                 with self.did2source[doc_id].open() as f:
                     input_string = f.read()
@@ -515,7 +516,8 @@ class Document:
                       ) -> Dict[str, List[BaseArgument]]:
         if predicate.dtid not in self._pas:
             return {}
-        pas = self._pas[predicate.dtid].copy()
+        pas = copy.copy(self._pas[predicate.dtid])
+        pas.arguments = cPickle.loads(cPickle.dumps(pas.arguments, -1))
         if include_optional is False:
             for case in self.target_cases:
                 pas.arguments[case] = list(filter(lambda a: a.optional is False, pas.arguments[case]))
