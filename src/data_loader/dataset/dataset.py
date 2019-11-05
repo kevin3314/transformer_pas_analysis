@@ -2,6 +2,7 @@ import logging
 from typing import List, Dict, Optional
 from pathlib import Path
 
+from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertConfig, BertTokenizer
@@ -80,7 +81,7 @@ class PASDataset(Dataset):
         self.documents = documents if not training else None
         self.examples = []
         self.features = []
-        for document in documents:
+        for document in tqdm(documents, desc='processing documents...'):
             example = read_example(document, exophors, coreference, kc)
             feature = self._convert_example_to_feature(
                 example,
