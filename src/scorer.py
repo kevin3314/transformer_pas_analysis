@@ -207,6 +207,7 @@ class Scorer:
                     self._filter_mentions(document_gold.get_siblings(src_mention_gold), src_mention_gold)
                 exophors_gold = [document_gold.entities[eid].exophor for eid in src_mention_gold.eids
                                  if document_gold.entities[eid].is_special]
+                exophors_gold = [exophor for exophor in exophors_gold if exophor in self.relax_exophors.values()]
             else:
                 tgt_mentions_gold = exophors_gold = []
 
@@ -430,26 +431,25 @@ class Scorer:
                     tree_strings[idx] += f'{arg}:{case} '
         if self.coreference:
             current_document_mentions = document.mentions.values()
-            for source_mention in mentions:
-                if all(source_mention is not m for m in current_document_mentions):
+            for src_mention in mentions:
+                if all(src_mention is not m for m in current_document_mentions):
                     continue
-                target_mentions = document.get_siblings(source_mention)
-                if not target_mentions:
+                tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
+                if not tgt_mentions:
                     continue
-                idx = source_mention.tid
+                idx = src_mention.tid
                 tree_strings[idx] += '  =:'
                 targets = set()
-                for target_mention in target_mentions:
-                    target = ''.join(mrph.midasi for mrph in target_mention.tag.mrph_list()
-                                     if '<内容語>' in mrph.fstring)
+                for tgt_mention in tgt_mentions:
+                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
                     if not target:
-                        target = target_mention.midasi
-                    targets.add(target)
-                for eid in source_mention.eids:
+                        target = tgt_mention.midasi
+                    targets.add(target + str(tgt_mention.dtid))
+                for eid in src_mention.eids:
                     entity = document.entities[eid]
-                    if entity.exophor in self.relax_exophors:
+                    if entity.exophor in self.relax_exophors.values():
                         targets.add(entity.exophor)
-                result = self.comp_result.get((document.doc_id, source_mention.dtid, '='), None)
+                result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
                 result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
                 if html:
                     tree_strings[idx] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
