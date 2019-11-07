@@ -587,6 +587,33 @@ class Document:
 
         print('\n'.join(tree_strings), file=fh)
 
+    def stat(self) -> dict:
+        """calculate document statistics"""
+        ret = dict()
+        ret['num_sents'] = len(self)
+        ret['num_tags'] = len(self.tag_list())
+        ret['num_mrphs'] = len(self.mrph_list())
+        ret['num_taigen'] = sum(1 for tag in self.tag_list() if '体言' in tag.features)
+        ret['num_yougen'] = sum(1 for tag in self.tag_list() if '用言' in tag.features)
+        ret['num_entities'] = len(self.entities)
+        ret['num_special_entities'] = sum(1 for ent in self.entities.values() if ent.is_special)
+
+        num_mention = num_taigen = num_yougen = 0
+        for src_mention in self.mentions.values():
+            tgt_mentions: List[Mention] = self.get_siblings(src_mention)
+            if tgt_mentions:
+                num_mention += 1
+            for tgt_mention in tgt_mentions:
+                if '体言' in tgt_mention.tag.features:
+                    num_taigen += 1
+                if '用言' in tgt_mention.tag.features:
+                    num_yougen += 1
+        ret['num_mentions'] = num_mention
+        ret['num_taigen_mentions'] = num_taigen
+        ret['num_yougen_mentions'] = num_yougen
+
+        return ret
+
     def __len__(self):
         return len(self.sid2sentence)
 
