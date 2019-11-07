@@ -230,10 +230,10 @@ class Document:
             rels = []
             for rel in self._extract_rel_tags(tag):
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
-                    logger.warning(f'{tag2sid[tag]:21}sentence: {rel.sid} not found in {self.doc_id}')
+                    logger.warning(f'{tag2sid[tag]:24}sentence: {rel.sid} not found in {self.doc_id}')
                     continue
                 if rel.atype not in (self.target_cases + self.target_corefs):
-                    logger.info(f'{tag2sid[tag]:21}relation type: {rel.atype} is ignored')
+                    logger.info(f'{tag2sid[tag]:24}relation type: {rel.atype} is ignored')
                     continue
                 rels.append(rel)
             src_bp = BasePhrase(tag, self.tag2dtid[tag], tag2sid[tag], self.mrph2dmid)
@@ -254,7 +254,7 @@ class Document:
                             pas.set_arguments_optional(rel.atype)
                             continue
                         if rel.target not in ALL_EXOPHORS:
-                            logger.warning(f'{pas.sid:21}unknown exophor: {rel.target}')
+                            logger.warning(f'{pas.sid:24}unknown exophor: {rel.target}')
                             continue
                         entity = self._create_entity(rel.target)
                         pas.add_special_argument(rel.atype, rel.target, entity.eid, rel.mode)
@@ -299,12 +299,12 @@ class Document:
             if target_bp is None:
                 return
             if target_bp.dtid == source_dtid:
-                logger.warning(f'{source_bp.sid:21}coreference with self found: {source_bp.midasi}')
+                logger.warning(f'{source_bp.sid:24}coreference with self found: {source_bp.midasi}')
                 return
         else:
             target_bp = None
             if rel.target not in ALL_EXOPHORS:
-                logger.warning(f'{source_bp.sid:21}unknown exophor: {rel.target}')
+                logger.warning(f'{source_bp.sid:24}unknown exophor: {rel.target}')
                 return
 
         source_mention = self._create_mention(source_bp)
@@ -369,7 +369,7 @@ class Document:
         if eid in eids:
             eid_ = eid
             eid: int = max(eids) + 1
-            logger.warning(f'{self.doc_id:21}eid: {eid_} is already used. use eid: {eid} instead.')
+            logger.warning(f'{self.doc_id:24}eid: {eid_} is already used. use eid: {eid} instead.')
         elif eid is None or eid < 0:
             eid: int = max(eids) + 1 if eids else 0
         entity = Entity(eid, exophor=exophor)
@@ -427,7 +427,7 @@ class Document:
         if eid not in self.entities:
             return
         entity = self.entities[eid]
-        logger.info(f'{sid:21}delete entity: {eid} ({entity.midasi})')
+        logger.info(f'{sid:24}delete entity: {eid} ({entity.midasi})')
         for mention in entity.mentions:
             mention.eids.remove(eid)
         self.entities.pop(eid)
@@ -447,7 +447,7 @@ class Document:
         """
         tag_list = self.sid2sentence[sid].tag_list()
         if not (0 <= tid < len(tag_list)):
-            logger.warning(f'{sid:21}tag out of range (tag_id: {tid})')
+            logger.warning(f'{sid:24}tag out of range (tag_id: {tid})')
             return None
         tag = tag_list[tid]
         return BasePhrase(tag, self.tag2dtid[tag], sid, self.mrph2dmid)
@@ -462,12 +462,12 @@ class Document:
                     continue
                 category, midasi = tag.features['NE'].split(':', maxsplit=1)
                 if category not in NE_CATEGORIES:
-                    logger.warning(f'{sentence.sid:21}unknown NE category: {category}')
+                    logger.warning(f'{sentence.sid:24}unknown NE category: {category}')
                     continue
                 mrph_list = [m for t in tag_list[:tag.tag_id + 1] for m in t.mrph_list()]
                 mrph_span = self._find_mrph_span(midasi, mrph_list, tag)
                 if mrph_span is None:
-                    logger.warning(f'{sentence.sid:21}mrph span of "{midasi}" not found')
+                    logger.warning(f'{sentence.sid:24}mrph span of "{midasi}" not found')
                     continue
                 ne = NamedEntity(category, midasi, sentence, mrph_span, self.mrph2dmid)
                 self.named_entities.append(ne)

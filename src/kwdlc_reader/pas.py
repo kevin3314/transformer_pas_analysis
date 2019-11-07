@@ -1,4 +1,3 @@
-import copy
 import logging
 from typing import List, Dict, Set
 from collections import defaultdict
@@ -175,11 +174,11 @@ class Pas:
 
     def set_arguments_optional(self, case: str) -> None:
         if not self.arguments[case]:
-            logger.info(f'{self.sid:21}no preceding argument found. なし is ignored')
+            logger.info(f'{self.sid:24}no preceding argument found. なし is ignored')
             return
         for arg in self.arguments[case]:
             arg.optional = True
-            logger.info(f'{self.sid:21}marked {arg.midasi} as optional')
+            logger.info(f'{self.sid:24}marked {arg.midasi} as optional')
 
     @property
     def dtid(self) -> int:
