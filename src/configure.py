@@ -107,18 +107,16 @@ def main() -> None:
         train_kc_dir = data_root / 'kc' / 'train'
         num_train_examples = 0
         glob_pat = '*.' + dataset_config['pickle_ext']
-        if corpus in ['kwdlc', 'all']:
+        if corpus in ('kwdlc', 'all'):
             num_train_examples += sum(1 for _ in train_kwdlc_dir.glob(glob_pat))
-        if corpus in ['kc', 'all']:
+        if corpus in ('kc', 'all'):
             num_train_examples += sum(1 for _ in train_kc_dir.glob(glob_pat))
 
         arch = {
             'type': model,
             'args': {
                 'bert_model': bert_model,
-                'parsing_algorithm': 'zhang',
                 'num_case': len(cases) if not args.coreference else len(cases) + 1,
-                'arc_representation_dim': 400,
             },
         }
         dataset = {

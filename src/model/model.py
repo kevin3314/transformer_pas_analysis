@@ -8,33 +8,21 @@ from base import BaseModel
 class BaselineModel(BaseModel):
     def __init__(self,
                  bert_model: str,
-                 parsing_algorithm: str,
                  num_case: int,
-                 arc_representation_dim: int) -> None:
+                 ) -> None:
         super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model)
-        # torch.save(list(self.bert.state_dict().values()), 'values.bin'); exit(1)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.num_case = num_case
-        self.parsing_algorithm = parsing_algorithm
-
         bert_hidden_size = self.bert.config.hidden_size
-        # Deep Biaffine [Dozart+ 17]
-        if self.parsing_algorithm == "biaffine":
-            self.head_arc_linear = nn.Linear(bert_hidden_size, arc_representation_dim)
-            self.child_arc_linear = nn.Linear(bert_hidden_size, arc_representation_dim)
-
-            self.arc_W = nn.Parameter(torch.randn((arc_representation_dim, arc_representation_dim), requires_grad=True))
-            self.arc_b = nn.Linear(arc_representation_dim, 1, bias=False)
 
         # head selection [Zhang+ 16]
-        elif self.parsing_algorithm == "zhang":
-            self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
-            self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
-            self.v_a = nn.Linear(bert_hidden_size, 1, bias=False)
+        self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
+        self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size * num_case)
+        self.v_a = nn.Linear(bert_hidden_size, 1, bias=False)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -47,22 +35,11 @@ class BaselineModel(BaseModel):
         sequence_output, _ = self.bert(input_ids,
                                        attention_mask=attention_mask)
 
-        g_logits = torch.Tensor()
-        if self.parsing_algorithm == "biaffine":
-            h_i = torch.relu(self.child_arc_linear(sequence_output))  # (b, seq, arc)
-            h_j = torch.relu(self.head_arc_linear(sequence_output))   # (b, seq, arc)
-
-            inter = torch.matmul(h_j, self.arc_W)  # (b, seq, arc)
-            g_logits = torch.matmul(inter, h_i.transpose(1, 2))  # (b, seq, seq)
-            bias = self.arc_b(h_j).squeeze(2).unsqueeze(1)  # (b, 1, seq)
-            g_logits = g_logits + bias  # (b, seq, seq)
-
-        elif self.parsing_algorithm == "zhang":
-            h_i = self.W_a(sequence_output)  # (b, seq, case*hid)
-            h_j = self.U_a(sequence_output)  # (b, seq, case*hid)
-            h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-            h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-            g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)  # (b, seq, seq, case)
+        h_i = self.W_a(sequence_output)  # (b, seq, case*hid)
+        h_j = self.U_a(sequence_output)  # (b, seq, case*hid)
+        h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)  # (b, seq, seq, case)
 
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
@@ -85,16 +62,15 @@ class BaselineModel(BaseModel):
         new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
         new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
         new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
-        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        new_word_embeddings.from_pretrained(torch.tensor(new_word_embeddings_numpy), freeze=False)
         self.bert.embeddings.word_embeddings = new_word_embeddings
 
 
 class BaseAsymModel(BaseModel):
     def __init__(self,
                  bert_model: str,
-                 parsing_algorithm: str,
                  num_case: int,
-                 arc_representation_dim: int) -> None:
+                 ) -> None:
         super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model)
@@ -150,16 +126,15 @@ class BaseAsymModel(BaseModel):
         new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
         new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
         new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
-        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        new_word_embeddings.from_pretrained(torch.tensor(new_word_embeddings_numpy), freeze=False)
         self.bert.embeddings.word_embeddings = new_word_embeddings
 
 
 class DependencyModel(BaseModel):
     def __init__(self,
                  bert_model: str,
-                 parsing_algorithm: str,
                  num_case: int,
-                 arc_representation_dim: int) -> None:
+                 ) -> None:
         super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model)
@@ -217,16 +192,15 @@ class DependencyModel(BaseModel):
         new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
         new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
         new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
-        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        new_word_embeddings.from_pretrained(torch.tensor(new_word_embeddings_numpy), freeze=False)
         self.bert.embeddings.word_embeddings = new_word_embeddings
 
 
 class LayerAttentionModel(BaseModel):
     def __init__(self,
                  bert_model: str,
-                 parsing_algorithm: str,
                  num_case: int,
-                 arc_representation_dim: int) -> None:
+                 ) -> None:
         super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model, output_hidden_states=True)
@@ -290,16 +264,15 @@ class LayerAttentionModel(BaseModel):
         new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
         new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
         new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
-        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        new_word_embeddings.from_pretrained(torch.tensor(new_word_embeddings_numpy), freeze=False)
         self.bert.embeddings.word_embeddings = new_word_embeddings
 
 
 class MultitaskDepModel(BaseModel):
     def __init__(self,
                  bert_model: str,
-                 parsing_algorithm: str,
                  num_case: int,
-                 arc_representation_dim: int) -> None:
+                 ) -> None:
         super().__init__()
 
         self.bert = BertModel.from_pretrained(bert_model)
@@ -363,5 +336,5 @@ class MultitaskDepModel(BaseModel):
         new_word_embeddings = nn.Embedding(vocab_size + num_expand_vocab, bert_word_embeddings.weight.shape[1])
         new_word_embeddings_numpy = new_word_embeddings.weight.detach().numpy()
         new_word_embeddings_numpy[:vocab_size, :] = old_word_embeddings_numpy
-        new_word_embeddings.from_pretrained(torch.Tensor(new_word_embeddings_numpy), freeze=False)
+        new_word_embeddings.from_pretrained(torch.tensor(new_word_embeddings_numpy), freeze=False)
         self.bert.embeddings.word_embeddings = new_word_embeddings
