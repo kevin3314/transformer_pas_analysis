@@ -70,10 +70,10 @@ def read_example(document: Document,
                 words.append(mrph.midasi)
                 dtids.append(document.tag2dtid[tag])
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
+                arguments = OrderedDict((case, None) for case in cases)
                 if '用言' in tag.features \
                         and mrph is target_mrph \
                         and process is True:
-                    arguments: Dict[str, Optional[str]] = OrderedDict()
                     for case in cases:
                         if dmid in dmid2arguments:
                             # filter out non-target exophors
@@ -98,10 +98,6 @@ def read_example(document: Document,
                                 arguments[case] = arg.midasi
                         else:
                             arguments[case] = 'NULL'
-                    arg_candidates = [x for x in head_dmids if x != dmid]
-                else:
-                    arguments = OrderedDict((case, None) for case in cases)
-                    arg_candidates = []
 
                 if coreference:
                     if '体言' in tag.features \
@@ -128,7 +124,7 @@ def read_example(document: Document,
                         arguments['='] = None
 
                 arguments_set.append(arguments)
-                arg_candidates_set.append(arg_candidates)
+                arg_candidates_set.append([x for x in head_dmids if x != dmid])
                 dmid += 1
 
     return PasExample(words, arguments_set, arg_candidates_set, dtids, ddeps, document.doc_id)
