@@ -446,7 +446,7 @@ class Document:
         """
         tag_list = self.sid2sentence[sid].tag_list()
         if not (0 <= tid < len(tag_list)):
-            logger.warning(f'{sid:24}tag out of range (tag_id: {tid})')
+            logger.warning(f'{sid:24}tag id: {tid} out of range')
             return None
         tag = tag_list[tid]
         return BasePhrase(tag, self.tag2dtid[tag], sid, self.mrph2dmid)
