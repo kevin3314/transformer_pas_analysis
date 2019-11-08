@@ -1,6 +1,8 @@
-import numpy as np
+import math
+import datetime
 from typing import List
 
+import numpy as np
 import torch
 
 from base import BaseTrainer
@@ -23,7 +25,7 @@ class Trainer(BaseTrainer):
         self.valid_kc_data_loader = valid_kc_data_loader
         # self.do_validation = (self.valid_kwdlc_data_loader is not None) or (self.valid_kc_data_loader is not None)
         self.lr_scheduler = lr_scheduler
-        self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.log_step = math.ceil(data_loader.n_samples / np.sqrt(data_loader.batch_size) / 200)
 
     def _eval_metrics(self, result: dict, label: str):
         f1_metrics = np.zeros(len(self.metrics))
@@ -49,15 +51,15 @@ class Trainer(BaseTrainer):
 
         total_loss = 0
         # total_metrics = np.zeros(len(self.metrics))
-        for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(self.data_loader):
+        for batch_idx, (input_ids, input_mask, arguments_ids, ng_token_mask, deps) in enumerate(self.data_loader):
             input_ids = input_ids.to(self.device)          # (b, seq)
             input_mask = input_mask.to(self.device)        # (b, seq)
             arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
-            ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+            ng_token_mask = ng_token_mask.to(self.device)  # (b, seq, case, seq)
             deps = deps.to(self.device)                    # (b ,seq, seq)
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case(+1), seq)
+            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
             loss = self.loss(output, arguments_ids, deps)
             loss.backward()
             self.optimizer.step()
@@ -69,11 +71,12 @@ class Trainer(BaseTrainer):
             # total_metrics += self._eval_metrics(output, target)
 
             if batch_idx % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Loss: {:.6f}'.format(
+                self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
                     epoch,
                     batch_idx * self.data_loader.batch_size,
                     self.data_loader.n_samples,
                     100.0 * batch_idx / len(self.data_loader),
+                    datetime.datetime.now().strftime('%H:%M:%S'),
                     loss.item()))
 
             if self.lr_scheduler is not None:
@@ -103,37 +106,34 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         total_val_loss = 0
-        # total_val_metrics = np.zeros(len(self.metrics))
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(valid_data_loader):
+            for batch_idx, (input_ids, input_mask, arguments_ids, ng_token_mask, deps) in enumerate(valid_data_loader):
                 input_ids = input_ids.to(self.device)          # (b, seq)
                 input_mask = input_mask.to(self.device)        # (b, seq)
                 arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
-                ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+                ng_token_mask = ng_token_mask.to(self.device)  # (b, seq, case, seq)
                 deps = deps.to(self.device)                    # (b, seq, seq)
 
-                output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case(+1) seq)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
-                # computing loss, metrics on test set
+                # computing loss, metrics on valid set
                 loss = self.loss(output, arguments_ids, deps)
                 total_val_loss += loss.item() * input_ids.size(0)
 
                 self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')
                 self.writer.add_scalar(f'loss_{label}', loss.item())
-                # total_val_metrics += self._eval_metrics(output, target)
 
         # prediction_output_dir = self.config.save_dir / 'valid_out_knp'
         prediction_writer = PredictionKNPWriter(valid_data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, None)
 
-        scorer = Scorer(documents_pred,
-                        valid_data_loader.dataset.documents,
-                        valid_data_loader.dataset.target_exophors,
-                        valid_data_loader.dataset.kc)
+        scorer = Scorer(documents_pred, valid_data_loader.dataset.documents, valid_data_loader.dataset.target_exophors,
+                        coreference=valid_data_loader.dataset.coreference,
+                        kc=valid_data_loader.dataset.kc)
         scorer.write_html(self.config.save_dir / f'result_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
 

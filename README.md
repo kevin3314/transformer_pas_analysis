@@ -6,13 +6,21 @@
 2. `pipenv sync`
 3. `pipenv shell`
 
+## Preprocess Documents
+
+First, you need to load corpus and pickle it.
+
+```zsh
+python src/preprocess.py --kwdlc <path-to-KWDLC-directory> --kc <path-to-KyotoCorpus-directory> --out <path-to-output-directory>
+```
+
 ## Configuring Settings
 
 Before starting model training, prepare the configuration files.
 The resultant files will be located at `config/`.
 
 ```zsh
-python src/configure.py -c config -e <num-epochs> -b <batch-size> --model <model-name> --corpus kwdlc
+python src/configure.py -c config -d <path-to-dataset-directory> -e <num-epochs> -b <batch-size> --model <model-name> --corpus kwdlc
 ```
 
 example:

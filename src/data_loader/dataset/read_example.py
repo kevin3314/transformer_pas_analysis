@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 from pyknp import BList, Morpheme
 
-from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, Entity
+from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument
 
 
 class PasExample:
@@ -13,6 +13,7 @@ class PasExample:
                  words: List[str],
                  arguments_set: List[Dict[str, Optional[str]]],
                  arg_candidates_set: List[List[int]],
+                 ment_candidates_set: List[List[int]],
                  dtids: List[int],
                  ddeps: List[int],
                  doc_id: str,
@@ -20,6 +21,7 @@ class PasExample:
         self.words = words
         self.arguments_set = arguments_set
         self.arg_candidates_set = arg_candidates_set
+        self.ment_candidates_set = ment_candidates_set
         self.dtids = dtids  # dmid -> dtid
         self.ddeps = ddeps  # dmid -> dmid which has dep
         self.doc_id = doc_id
@@ -49,7 +51,7 @@ def read_example(document: Document,
         if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
             for n in '１２３４５６７８９':
                 relax_exophors[exophor + n] = exophor
-    words, dtids, ddeps, arguments_set, arg_candidates_set = [], [], [], [], []
+    words, dtids, ddeps, arguments_set, arg_candidates_set, ment_candidates_set = [], [], [], [], [], []
     dmid = 0
     head_dmids = []
     for sentence in document:
@@ -70,10 +72,10 @@ def read_example(document: Document,
                 words.append(mrph.midasi)
                 dtids.append(document.tag2dtid[tag])
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
+                arguments = OrderedDict((case, None) for case in cases)
                 if '用言' in tag.features \
                         and mrph is target_mrph \
                         and process is True:
-                    arguments: Dict[str, str] = OrderedDict()
                     for case in cases:
                         if dmid in dmid2arguments:
                             # filter out non-target exophors
@@ -98,29 +100,51 @@ def read_example(document: Document,
                                 arguments[case] = arg.midasi
                         else:
                             arguments[case] = 'NULL'
-                    arg_candidates = [x for x in head_dmids if x != dmid]
-                else:
-                    arguments = OrderedDict((case, None) for case in cases)
-                    arg_candidates = []
 
-                # TODO: coreference
                 if coreference:
-                    if '<体言>' in tag.fstring and '<内容語>' in mrph.fstring:
-                        entities: List[Entity] = document.get_entities(tag)
-                        if entities:
-                            arguments['='] = 'NA'
+                    if '体言' in tag.features \
+                            and mrph is target_mrph \
+                            and process is True:
+                        dtid = document.tag2dtid[tag]
+                        if dtid in document.mentions:
+                            mention = document.mentions[dtid]
+                            tgt_mentions = document.get_siblings(mention)
+                            preceding_mentions = [m for m in tgt_mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
+                            exophors = [document.entities[eid].exophor for eid in mention.eids
+                                        if document.entities[eid].is_special]
+                            if preceding_mentions:
+                                arguments['='] = str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
+                            elif exophors and exophors[0] in relax_exophors:  # if no preceding mention, use exo as gold
+                                arguments['='] = relax_exophors[exophors[0]]  # 不特定:人１ -> 不特定:人
+                            elif tgt_mentions:
+                                arguments['='] = None  # don't train cataphor
+                            else:
+                                arguments['='] = 'NA'
                         else:
-                            entity = entities[0]
-                            arguments['='] = str(entity.mentions[0].dmid)
+                            arguments['='] = 'NA'
+                    else:
+                        arguments['='] = None
 
                 arguments_set.append(arguments)
-                arg_candidates_set.append(arg_candidates)
+                arg_candidates_set.append([x for x in head_dmids if x != dmid])
+                ment_candidates_set.append([x for x in head_dmids if x < dmid])
                 dmid += 1
 
-    return PasExample(words, arguments_set, arg_candidates_set, dtids, ddeps, document.doc_id)
+    return PasExample(words, arguments_set, arg_candidates_set, ment_candidates_set, dtids, ddeps, document.doc_id)
 
 
-def get_head_dmids(sentence: BList, mrph2dmid: dict) -> List[int]:
+def get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
+    """sentence 中の基本句それぞれについて、内容語である形態素の dmid を返す
+
+    内容語がなかった場合、先頭の形態素の dmid を返す
+
+    Args:
+        sentence (BList): 対象の文
+        mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
+
+    Returns:
+        list: 各基本句に含まれる内容語形態素の文書レベル形態素ID
+    """
     head_dmids = []
     for tag in sentence.tag_list():
         head_dmid = None
@@ -130,5 +154,6 @@ def get_head_dmids(sentence: BList, mrph2dmid: dict) -> List[int]:
             if '<内容語>' in mrph.fstring:
                 head_dmid = mrph2dmid[mrph]
                 break
-        head_dmids.append(head_dmid)
+        if head_dmid is not None:
+            head_dmids.append(head_dmid)
     return head_dmids

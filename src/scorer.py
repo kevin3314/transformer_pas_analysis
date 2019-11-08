@@ -9,7 +9,7 @@ from collections import OrderedDict
 
 from pyknp import BList
 
-from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate
+from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ class Scorer:
                  documents_pred: List[Document],
                  documents_gold: List[Document],
                  target_exophors: List[str],
+                 coreference: bool = True,
                  kc: bool = False):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
@@ -28,13 +29,18 @@ class Scorer:
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
-        self.measures: Dict[str, Dict[str, Measure]] = \
-            OrderedDict((case, OrderedDefaultDict(lambda: Measure())) for case in self.cases)
-        self.comp_result = {}
-        self.deptype2analysis = OrderedDict([('dep', 'case_analysis'),
+        self.coreference = coreference
+        self.kc = kc
+        self.comp_result: Dict[tuple, str] = {}
+        self.deptype2analysis = OrderedDict([('overt', 'overt'),
+                                             ('dep', 'case_analysis'),
                                              ('intra', 'zero_intra_sentential'),
                                              ('inter', 'zero_inter_sentential'),
                                              ('exo', 'zero_exophora')])
+        self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
+            (case, OrderedDict((anal, Measure()) for anal in self.deptype2analysis.values()))
+            for case in self.cases)
+        self.measure_coref: Measure = Measure()
         self.relax_exophors: Dict[str, str] = {}
         for exophor in target_exophors:
             self.relax_exophors[exophor] = exophor
@@ -44,109 +50,112 @@ class Scorer:
         # make sid2predicates_pred and sid2predicates_gold
         self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.sid2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
+        self.sid2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
             last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+
             for predicate_pred in document_pred.get_predicates():
                 if process_all or (predicate_pred.sid == last_sid):
                     self.sid2predicates_pred[predicate_pred.sid].append(predicate_pred)
-
             for predicate_gold in document_gold.get_predicates():
                 process: bool = process_all or (predicate_gold.sid == last_sid)
-                tag = predicate_gold.tag
-                if '用言' in tag.features \
+                if '用言' in predicate_gold.tag.features \
                         and process is True:
                     self.sid2predicates_gold[predicate_gold.sid].append(predicate_gold)
+
+            for mention_pred in document_pred.mentions.values():
+                if process_all or (mention_pred.sid == last_sid):
+                    self.sid2mentions_pred[mention_pred.sid].append(mention_pred)
+            for mention_gold in document_gold.mentions.values():
+                process: bool = process_all or (mention_gold.sid == last_sid)
+                if '体言' in mention_gold.tag.features \
+                        and process is True:
+                    self.sid2mentions_gold[mention_gold.sid].append(mention_gold)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
+            self._evaluate_pas(doc_id, document_pred, document_gold)
+            if self.coreference:
+                self._evaluate_coref(doc_id, document_pred, document_gold)
 
-            process_all = (kc is False) or (doc_id.split('-')[-1] == '00')
-            last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
-            dtid2pred_pred: Dict[int, Predicate] = {}
-            dtid2pred_gold: Dict[int, Predicate] = {}
-            for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
-                if not (process_all or (sid == last_sid)):  # いらないかも
-                    continue
-                for predicate in self.sid2predicates_pred[sid]:
-                    dtid2pred_pred[predicate.dtid] = predicate
-                for predicate in self.sid2predicates_gold[sid]:
-                    dtid2pred_gold[predicate.dtid] = predicate
+    def _evaluate_pas(self, doc_id: str, document_pred: Document, document_gold: Document):
+        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
+        last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+        dtid2pred_pred: Dict[int, Predicate] = {}
+        dtid2pred_gold: Dict[int, Predicate] = {}
+        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
+            if not (process_all or (sid == last_sid)):  # いらないかも
+                continue
+            for predicate in self.sid2predicates_pred[sid]:
+                dtid2pred_pred[predicate.dtid] = predicate
+            for predicate in self.sid2predicates_gold[sid]:
+                dtid2pred_gold[predicate.dtid] = predicate
 
-            # calculate precision
-            for dtid, predicate_pred in dtid2pred_pred.items():
-                arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
-                if dtid in dtid2pred_gold:
-                    predicate_gold = dtid2pred_gold[dtid]
-                    arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
-                else:
-                    predicate_gold = arguments_gold = None
-                for case in self.cases:
-                    args_pred: List[BaseArgument] = arguments_pred[case]
-                    if predicate_gold is not None:
-                        args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
-                    else:
-                        args_gold = []
-                    if not args_pred:
-                        continue
-                    assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
-                    arg = args_pred[0]
-                    assert not (isinstance(arg, SpecialArgument) and arg.exophor not in target_exophors)
-                    key = (doc_id, dtid, case)
-                    if arg.dep_type == 'overt':
-                        if arg in args_gold:
-                            self.comp_result[key] = 'overt'
-                            continue
-                        analysis = 'case_analysis'
-                    else:
-                        analysis = self.deptype2analysis[arg.dep_type]
-                    if arg in args_gold:
-                        self.comp_result[key] = analysis
-                        self.measures[case][analysis].correct += 1
-                    else:
-                        self.comp_result[key] = 'wrong'
-                    self.measures[case][analysis].denom_pred += 1
-
-            # calculate recall
-            # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
-            # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
-            for dtid, predicate_gold in dtid2pred_gold.items():
-                arguments_gold = document_gold.get_arguments(predicate_gold, relax=False)
-                arguments_gold_relaxed = document_gold.get_arguments(predicate_gold, relax=True)
-                if dtid in dtid2pred_pred:
-                    predicate_pred = dtid2pred_pred[dtid]
-                    arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
-                else:
-                    arguments_pred = None
-                for case in self.cases:
-                    args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
-                    assert len(args_pred) in (0, 1)
+        # calculate precision
+        for dtid, predicate_pred in dtid2pred_pred.items():
+            arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
+            if dtid in dtid2pred_gold:
+                predicate_gold = dtid2pred_gold[dtid]
+                arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
+            else:
+                predicate_gold = arguments_gold = None
+            for case in self.cases:
+                if predicate_gold is not None:
                     args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
-                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold,
-                                                          self.relax_exophors)
-                    if not args_gold:
-                        continue
-                    correct = False
-                    arg = args_gold[0]
-                    for arg_ in args_gold_relaxed:
-                        if arg_ in args_pred:
-                            arg = arg_  # 予測されている項を優先して正解の項に採用
-                            correct = True
-                    key = (doc_id, dtid, case)
-                    if arg.dep_type == 'overt':  # ignore overt case
-                        assert self.comp_result[key] == 'overt'
-                        continue
-                    analysis = self.deptype2analysis[arg.dep_type]
-                    if correct is True:
-                        assert self.comp_result[key] == analysis
-                    elif args_pred:
-                        assert self.comp_result[key] == 'wrong'
-                    else:
-                        self.comp_result[key] = 'wrong'
-                    self.measures[case][analysis].denom_gold += 1
+                else:
+                    args_gold = []
+                args_pred: List[BaseArgument] = arguments_pred[case]
+                if not args_pred:
+                    continue
+                assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
+                arg = args_pred[0]
+                key = (doc_id, dtid, case)
+                analysis = self.deptype2analysis[arg.dep_type]
+                if arg in args_gold:
+                    self.comp_result[key] = analysis
+                    self.measures[case][analysis].correct += 1
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measures[case][analysis].denom_pred += 1
+
+        # calculate recall
+        # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
+        # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
+        for dtid, predicate_gold in dtid2pred_gold.items():
+            arguments_gold = document_gold.get_arguments(predicate_gold, relax=False)
+            arguments_gold_relaxed = document_gold.get_arguments(predicate_gold, relax=True)
+            if dtid in dtid2pred_pred:
+                predicate_pred = dtid2pred_pred[dtid]
+                arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
+            else:
+                arguments_pred = None
+            for case in self.cases:
+                args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
+                assert len(args_pred) in (0, 1)
+                args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
+                args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold, self.relax_exophors)
+                if not args_gold:
+                    continue
+                correct = False
+                arg = args_gold[0]
+                for arg_ in args_gold_relaxed:
+                    if arg_ in args_pred:
+                        arg = arg_  # 予測されている項を優先して正解の項に採用
+                        correct = True
+                key = (doc_id, dtid, case)
+                analysis = self.deptype2analysis[arg.dep_type]
+                if correct is True:
+                    assert self.comp_result[key] == analysis
+                elif args_pred:
+                    assert self.comp_result[key] == 'wrong'
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measures[case][analysis].denom_gold += 1
 
     @staticmethod
     def _filter_args(args: List[BaseArgument],
@@ -169,11 +178,82 @@ class Scorer:
     def _is_inter_sentential_cataphor(arg: BaseArgument, predicate: Predicate):
         return isinstance(arg, Argument) and predicate.dtid < arg.dtid and arg.sid != predicate.sid
 
+    def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
+        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
+        last_sid = document_pred.sentences[-1].sid if len(document_pred) > 0 else None
+        dtid2mention_pred: Dict[int, Mention] = {}
+        dtid2mention_gold: Dict[int, Mention] = {}
+        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
+            if not (process_all or (sid == last_sid)):  # いらないかも
+                continue
+            for mention in self.sid2mentions_pred[sid]:
+                dtid2mention_pred[mention.dtid] = mention
+            for mention in self.sid2mentions_gold[sid]:
+                dtid2mention_gold[mention.dtid] = mention
+
+        for dtid in range(len(document_pred.tag_list())):
+            if dtid in dtid2mention_pred:
+                src_mention_pred = dtid2mention_pred[dtid]
+                tgt_mentions_pred = \
+                    self._filter_mentions(document_pred.get_siblings(src_mention_pred), src_mention_pred)
+                exophors_pred = [document_pred.entities[eid].exophor for eid in src_mention_pred.eids
+                                 if document_pred.entities[eid].is_special]
+            else:
+                tgt_mentions_pred = exophors_pred = []
+
+            if dtid in dtid2mention_gold:
+                src_mention_gold = dtid2mention_gold[dtid]
+                tgt_mentions_gold = \
+                    self._filter_mentions(document_gold.get_siblings(src_mention_gold), src_mention_gold)
+                exophors_gold = [document_gold.entities[eid].exophor for eid in src_mention_gold.eids
+                                 if document_gold.entities[eid].is_special]
+                exophors_gold = [exophor for exophor in exophors_gold if exophor in self.relax_exophors.values()]
+            else:
+                tgt_mentions_gold = exophors_gold = []
+
+            key = (doc_id, dtid, '=')
+
+            # calculate precision
+            if tgt_mentions_pred:
+                for mention in tgt_mentions_pred:
+                    if mention in tgt_mentions_gold:
+                        self.comp_result[key] = 'correct'
+                        self.measure_coref.correct += 1
+                        break
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_pred += 1
+            elif exophors_pred:
+                if set(exophors_pred) & set(exophors_gold):
+                    self.comp_result[key] = 'correct'
+                    self.measure_coref.correct += 1
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_pred += 1
+
+            # calculate recall
+            if tgt_mentions_gold:
+                for mention in tgt_mentions_gold:
+                    if mention in tgt_mentions_pred:
+                        assert self.comp_result[key] == 'correct'
+                        break
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_gold += 1
+            elif exophors_gold:
+                if not exophors_pred:
+                    self.comp_result[key] = 'wrong'
+                self.measure_coref.denom_gold += 1
+
+    @staticmethod
+    def _filter_mentions(tgt_mentions: List[Mention], src_mention: Mention) -> List[Mention]:
+        return [tgt_mention for tgt_mention in tgt_mentions if tgt_mention.dtid < src_mention.dtid]
+
     def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
         result = OrderedDict()
         all_case_result = OrderedDefaultDict(lambda: Measure())
         for case, measures in self.measures.items():
-            case_result = {anal: Measure() for anal in self.deptype2analysis.values()}
+            case_result = OrderedDefaultDict(lambda: Measure())
             for analysis, measure in measures.items():
                 case_result[analysis] = measure
                 all_case_result[analysis] += measure
@@ -184,8 +264,9 @@ class Scorer:
             all_case_result['zero_all'] += case_result['zero_all']
             all_case_result['all'] += case_result['all']
             result[case] = case_result
+        if self.coreference:
+            all_case_result['coreference'] = self.measure_coref
         result['all_case'] = all_case_result
-        # measure = reduce(operator.add, self.measures.values(), Measure())
         return result
 
     def export_txt(self, destination: Union[str, Path, io.TextIOBase]):
@@ -250,13 +331,21 @@ class Scorer:
                 # gold
                 writer.write('<td><pre>\n')
                 for sid in document_gold.sid2sentence.keys():
-                    self._draw_tree(sid, self.sid2predicates_gold[sid], document_gold, fh=writer)
+                    self._draw_tree(sid,
+                                    self.sid2predicates_gold[sid],
+                                    self.sid2mentions_gold[sid],
+                                    document_gold,
+                                    fh=writer)
                     writer.write('\n')
                 writer.write('</pre>')
                 # prediction
                 writer.write('<td><pre>\n')
                 for sid in document_pred.sid2sentence.keys():
-                    self._draw_tree(sid, self.sid2predicates_pred[sid], document_pred, fh=writer)
+                    self._draw_tree(sid,
+                                    self.sid2predicates_pred[sid],
+                                    self.sid2mentions_pred[sid],
+                                    document_pred,
+                                    fh=writer)
                     writer.write('\n')
                 writer.write('</pre>\n</tr>\n')
 
@@ -269,26 +358,32 @@ class Scorer:
     def _html_header():
         return textwrap.dedent('''
         <head>
+        <meta charset="utf-8" />
         <title>Bert Result</title>
         <style type="text/css">
-        <!--
-        td {font-size: 11pt;}
-        td {border: 1px solid #606060;}
-        td {vertical-align: top;}
-        pre {font-family: "ＭＳ ゴシック","Osaka-Mono","Osaka-等幅","さざなみゴシック","Sazanami Gothic",DotumChe,GulimChe,
-        BatangChe,MingLiU, NSimSun, Terminal; white-space:pre;}
-        -->
-
+        td {
+            font-size: 11pt;
+            border: 1px solid #606060;
+            vertical-align: top;
+            margin: 5pt;
+        }
+        .obi1 {
+            background-color: pink;
+            font-size: 12pt;
+        }
+        pre {
+            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
+            GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
+            white-space: pre;
+        }
         </style>
-
-        <meta HTTP-EQUIV="content-type" CONTENT="text/html" charset="utf-8">
-        <link rel="stylesheet" href="result.css" type="text/css"/>
         </head>
         ''')
 
     def _draw_tree(self,
                    sid: str,
                    predicates: List[Predicate],
+                   mentions: List[Mention],
                    document: Document,
                    fh=None,
                    html: bool = True
@@ -331,6 +426,33 @@ class Scorer:
                     tree_strings[idx] += f'<font color="{color}">{arg}:{case}</font> '
                 else:
                     tree_strings[idx] += f'{arg}:{case} '
+        if self.coreference:
+            current_document_mentions = document.mentions.values()
+            for src_mention in mentions:
+                if all(src_mention is not m for m in current_document_mentions):
+                    continue
+                tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
+                if not tgt_mentions:
+                    continue
+                idx = src_mention.tid
+                tree_strings[idx] += '  =:'
+                targets = set()
+                for tgt_mention in tgt_mentions:
+                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
+                    if not target:
+                        target = tgt_mention.midasi
+                    targets.add(target + str(tgt_mention.dtid))
+                for eid in src_mention.eids:
+                    entity = document.entities[eid]
+                    if entity.exophor in self.relax_exophors.values():
+                        targets.add(entity.exophor)
+                result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
+                result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
+                if html:
+                    tree_strings[idx] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
+                                         + ' '.join(targets) + '</span> '
+                else:
+                    tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 

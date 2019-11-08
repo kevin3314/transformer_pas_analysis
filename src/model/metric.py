@@ -48,3 +48,7 @@ def zero_anaphora_f1_intra(result: dict):
 
 def zero_anaphora_f1_exophora(result: dict):
     return result['all_case']['zero_exophora'].f1
+
+
+def coreference_f1(result: dict):
+    return result['all_case']['coreference'].f1

@@ -16,7 +16,7 @@ from scorer import Scorer
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger):
+    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger, predict_overt):
         self.model = model
         self.loss = loss
         self.metrics = metrics
@@ -25,6 +25,7 @@ class Tester:
         self.kc_data_loader = kc_data_loader
         self.target = target
         self.logger = logger
+        self.predict_overt = predict_overt
 
         self.device, device_ids = prepare_device(config['n_gpu'], self.logger)
         self._load_model()
@@ -58,31 +59,33 @@ class Tester:
         # total_metrics = torch.zeros(len(metric_fns))
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(data_loader):
+            for batch_idx, (input_ids, input_mask, arguments_ids, ng_token_mask, deps) in enumerate(data_loader):
                 input_ids = input_ids.to(self.device)          # (b, seq)
                 input_mask = input_mask.to(self.device)        # (b, seq)
                 arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
-                ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+                ng_token_mask = ng_token_mask.to(self.device)  # (b, seq, case, seq)
                 deps = deps.to(self.device)                    # (b, seq, seq)
 
-                output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case, seq)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
                 # computing loss on test set
                 loss = self.loss(output, arguments_ids, deps)
                 total_loss += loss.item() * input_ids.size(0)
 
-        prediction_output_dir = self.config.save_dir / f'{self.target}_out_knp'
-        prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
+        prediction_output_dir = self.config.save_dir / f'{self.target}_out_{label}'
+        prediction_writer = PredictionKNPWriter(data_loader.dataset,
+                                                self.logger,
+                                                use_gold_overt=(not self.predict_overt))
         documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
-        scorer = Scorer(documents_pred,
-                        data_loader.dataset.documents,
-                        data_loader.dataset.target_exophors,
-                        data_loader.dataset.kc)
-        scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
+        scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
+                        coreference=data_loader.dataset.coreference,
+                        kc=data_loader.dataset.kc)
+        if self.target != 'test':
+            scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{self.target}_{label}.txt')
         scorer.export_csv(self.config.save_dir / f'result_{self.target}_{label}.csv')
 
@@ -113,13 +116,14 @@ def main(config, args):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger)
+    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger,
+                    args.predict_overt)
 
     log = tester.test()
 
     # print logged information to the screen
     for key, value in log.items():
-        logger.info('{:35s}: {:.4f}'.format(str(key), value))
+        logger.info('{:36s}: {:.4f}'.format(str(key), value))
 
 
 if __name__ == '__main__':
@@ -133,5 +137,7 @@ if __name__ == '__main__':
                         help='config file path (default: None)')
     parser.add_argument('--target', default='test', type=str, choices=['valid', 'test'],
                         help='evaluation target')
+    parser.add_argument('--predict-overt', action='store_true', default=False,
+                        help='calculate scores for overt arguments instead of using gold')
 
     main(ConfigParser(parser, timestamp=False), parser.parse_args())
