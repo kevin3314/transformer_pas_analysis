@@ -59,16 +59,16 @@ class Tester:
         # total_metrics = torch.zeros(len(metric_fns))
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
-            for batch_idx, (input_ids, input_mask, arguments_ids, ng_arg_mask, deps) in enumerate(data_loader):
+            for batch_idx, (input_ids, input_mask, arguments_ids, ng_token_mask, deps) in enumerate(data_loader):
                 input_ids = input_ids.to(self.device)          # (b, seq)
                 input_mask = input_mask.to(self.device)        # (b, seq)
                 arguments_ids = arguments_ids.to(self.device)  # (b, seq, case)
-                ng_arg_mask = ng_arg_mask.to(self.device)      # (b, seq, seq)
+                ng_token_mask = ng_token_mask.to(self.device)  # (b, seq, case, seq)
                 deps = deps.to(self.device)                    # (b, seq, seq)
 
-                output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (b, seq, case, seq)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
                 # computing loss on test set
@@ -84,7 +84,8 @@ class Tester:
         scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
                         coreference=data_loader.dataset.coreference,
                         kc=data_loader.dataset.kc)
-        scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
+        if self.target != 'test':
+            scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{self.target}_{label}.txt')
         scorer.export_csv(self.config.save_dir / f'result_{self.target}_{label}.csv')
 

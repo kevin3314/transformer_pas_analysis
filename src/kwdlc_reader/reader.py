@@ -293,12 +293,11 @@ class Document:
                     source_bp: BasePhrase,
                     rel: Rel,
                     ) -> None:
-        source_dtid = source_bp.dtid
         if rel.sid is not None:
             target_bp = self._get_bp(rel.sid, rel.tid)
             if target_bp is None:
                 return
-            if target_bp.dtid == source_dtid:
+            if target_bp.dtid == source_bp.dtid:
                 logger.warning(f'{source_bp.sid:24}coreference with self found: {source_bp.midasi}')
                 return
         else:

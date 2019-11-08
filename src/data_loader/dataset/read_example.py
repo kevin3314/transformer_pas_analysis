@@ -13,6 +13,7 @@ class PasExample:
                  words: List[str],
                  arguments_set: List[Dict[str, Optional[str]]],
                  arg_candidates_set: List[List[int]],
+                 ment_candidates_set: List[List[int]],
                  dtids: List[int],
                  ddeps: List[int],
                  doc_id: str,
@@ -20,6 +21,7 @@ class PasExample:
         self.words = words
         self.arguments_set = arguments_set
         self.arg_candidates_set = arg_candidates_set
+        self.ment_candidates_set = ment_candidates_set
         self.dtids = dtids  # dmid -> dtid
         self.ddeps = ddeps  # dmid -> dmid which has dep
         self.doc_id = doc_id
@@ -49,7 +51,7 @@ def read_example(document: Document,
         if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
             for n in '１２３４５６７８９':
                 relax_exophors[exophor + n] = exophor
-    words, dtids, ddeps, arguments_set, arg_candidates_set = [], [], [], [], []
+    words, dtids, ddeps, arguments_set, arg_candidates_set, ment_candidates_set = [], [], [], [], [], []
     dmid = 0
     head_dmids = []
     for sentence in document:
@@ -113,9 +115,9 @@ def read_example(document: Document,
                             if preceding_mentions:
                                 arguments['='] = str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
                             elif exophors and exophors[0] in relax_exophors:  # if no preceding mention, use exo as gold
-                                arguments['='] = relax_exophors[exophors[0]]
-                            elif tgt_mentions and tgt_mentions[0].sid == mention.sid:
-                                arguments['='] = str(tgt_mentions[0].dmid)
+                                arguments['='] = relax_exophors[exophors[0]]  # 不特定:人１ -> 不特定:人
+                            elif tgt_mentions:
+                                arguments['='] = None  # don't train cataphor
                             else:
                                 arguments['='] = 'NA'
                         else:
@@ -125,13 +127,14 @@ def read_example(document: Document,
 
                 arguments_set.append(arguments)
                 arg_candidates_set.append([x for x in head_dmids if x != dmid])
+                ment_candidates_set.append([x for x in head_dmids if x < dmid])
                 dmid += 1
 
-    return PasExample(words, arguments_set, arg_candidates_set, dtids, ddeps, document.doc_id)
+    return PasExample(words, arguments_set, arg_candidates_set, ment_candidates_set, dtids, ddeps, document.doc_id)
 
 
 def get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
-    """sentence 中基本句それぞれについて、内容語である形態素の dmid を返す
+    """sentence 中の基本句それぞれについて、内容語である形態素の dmid を返す
 
     内容語がなかった場合、先頭の形態素の dmid を返す
 

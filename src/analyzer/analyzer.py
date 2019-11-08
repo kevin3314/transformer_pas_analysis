@@ -79,15 +79,15 @@ class Analyzer:
         dataset = PASDataset(**dataset_config)
 
         with torch.no_grad():
-            input_ids, input_mask, arguments_ids, ng_arg_mask, deps = dataset[0]
-            input_ids = torch.tensor(input_ids).to(self.device).unsqueeze(0)  # (1, seq)
-            input_mask = torch.tensor(input_mask).to(self.device).unsqueeze(0)  # (1, seq)
+            input_ids, input_mask, arguments_ids, ng_token_mask, deps = dataset[0]
+            input_ids = torch.tensor(input_ids).to(self.device).unsqueeze(0)          # (1, seq)
+            input_mask = torch.tensor(input_mask).to(self.device).unsqueeze(0)        # (1, seq)
             arguments_ids = torch.tensor(arguments_ids).to(self.device).unsqueeze(0)  # (1, seq, case)
-            ng_arg_mask = torch.tensor(ng_arg_mask).to(self.device).unsqueeze(0)  # (1, seq, seq)
-            deps = torch.tensor(deps).to(self.device).unsqueeze(0)  # (1, seq, seq)
+            ng_token_mask = torch.tensor(ng_token_mask).to(self.device).unsqueeze(0)  # (1, seq, case, seq)
+            deps = torch.tensor(deps).to(self.device).unsqueeze(0)                    # (1, seq, seq)
 
-            output = self.model(input_ids, input_mask, ng_arg_mask, deps)  # (1, seq, case, seq)
-            arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (1, seq, case)
+            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (1, seq, case, seq)
+            arguments_set = torch.argmax(output, dim=3)  # (1, seq, case)
 
         return arguments_set.tolist(), dataset
 

@@ -27,7 +27,7 @@ class BaselineModel(BaseModel):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
@@ -39,13 +39,13 @@ class BaselineModel(BaseModel):
         h_j = self.U_a(sequence_output)  # (b, seq, case*hid)
         h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)  # (b, seq, seq, case)
+        # (b, seq, seq, case, hid) -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
+        g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)
 
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
         extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
-        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
         mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
 
         g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
@@ -88,7 +88,7 @@ class BaseAsymModel(BaseModel):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # (b, seq, hid)
@@ -108,8 +108,7 @@ class BaseAsymModel(BaseModel):
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
         extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
-        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
         mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
 
         g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
@@ -151,7 +150,7 @@ class DependencyModel(BaseModel):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # (b, seq, hid)
@@ -174,8 +173,7 @@ class DependencyModel(BaseModel):
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
         extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
-        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
         mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
 
         g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
@@ -220,7 +218,7 @@ class LayerAttentionModel(BaseModel):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # [(b, seq, hid)]
@@ -246,8 +244,7 @@ class LayerAttentionModel(BaseModel):
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
         extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
-        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
         mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
 
         g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
@@ -293,8 +290,8 @@ class MultitaskDepModel(BaseModel):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_arg_mask: torch.Tensor,     # (b, seq, seq)
-                _: torch.Tensor,            # (b, seq, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, seq)
+                _: torch.Tensor,               # (b, seq, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
@@ -318,8 +315,7 @@ class MultitaskDepModel(BaseModel):
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
         extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        ng_arg_mask = ng_arg_mask.unsqueeze(2)  # (b, seq, 1, seq)
-        mask = extended_attention_mask & ng_arg_mask  # (b, seq, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
         mask = mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
 
         g_logits += (1.0 - mask) * -1024.0  # (b, seq, case, seq)
