@@ -566,19 +566,19 @@ class Document:
                 arg = argument[0].midasi if argument else 'NULL'
                 tree_strings[idx] += f'{arg}:{case} '
 
-        for source_mention in self.mentions.values():
-            target_mentions = self.get_siblings(source_mention)
-            if not target_mentions:
+        for src_mention in self.mentions.values():
+            tgt_mentions = [tgt for tgt in self.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
+            if not tgt_mentions:
                 continue
-            idx = source_mention.tid
+            idx = src_mention.tid
             tree_strings[idx] += '  =:'
             targets = set()
-            for target_mention in target_mentions:
-                target = ''.join(mrph.midasi for mrph in target_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
+            for tgt_mention in tgt_mentions:
+                target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
                 if not target:
-                    target = target_mention.midasi
-                targets.add(target)
-            for eid in source_mention.eids:
+                    target = tgt_mention.midasi
+                targets.add(target + str(tgt_mention.dtid))
+            for eid in src_mention.eids:
                 entity = self.entities[eid]
                 if entity.is_special:
                     targets.add(entity.exophor)
