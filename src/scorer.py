@@ -247,8 +247,7 @@ class Scorer:
 
     @staticmethod
     def _filter_mentions(tgt_mentions: List[Mention], src_mention: Mention) -> List[Mention]:
-        return [tgt_mention for tgt_mention in tgt_mentions
-                if tgt_mention.dtid < src_mention.dtid or tgt_mention.sid == src_mention.sid]
+        return [tgt_mention for tgt_mention in tgt_mentions if tgt_mention.dtid < src_mention.dtid]
 
     def result_dict(self) -> Dict[str, Dict[str, 'Measure']]:
         result = OrderedDict()
