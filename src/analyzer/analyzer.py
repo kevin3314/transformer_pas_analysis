@@ -82,7 +82,6 @@ class Analyzer:
             input_ids, input_mask, arguments_ids, ng_token_mask, deps = dataset[0]
             input_ids = torch.tensor(input_ids).to(self.device).unsqueeze(0)          # (1, seq)
             input_mask = torch.tensor(input_mask).to(self.device).unsqueeze(0)        # (1, seq)
-            arguments_ids = torch.tensor(arguments_ids).to(self.device).unsqueeze(0)  # (1, seq, case)
             ng_token_mask = torch.tensor(ng_token_mask).to(self.device).unsqueeze(0)  # (1, seq, case, seq)
             deps = torch.tensor(deps).to(self.device).unsqueeze(0)                    # (1, seq, seq)
 
