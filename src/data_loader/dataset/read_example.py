@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from collections import OrderedDict
 
-from pyknp import BList, Morpheme
+from pyknp import BList, Tag, Morpheme
 
 from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument
 
@@ -56,7 +56,7 @@ def read_example(document: Document,
     head_dmids = []
     for sentence in document:
         process: bool = process_all or (sentence is last_sent)
-        head_dmids += get_head_dmids(sentence, document.mrph2dmid)
+        head_dmids += _get_head_dmids(sentence, document.mrph2dmid)
         dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
                                                                     for pred in document.get_predicates()}
         for tag in sentence.tag_list():
@@ -73,67 +73,83 @@ def read_example(document: Document,
                 dtids.append(document.tag2dtid[tag])
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
                 arguments = OrderedDict((case, None) for case in cases)
+                arg_candidates = ment_candidates = []
                 if '用言' in tag.features \
                         and mrph is target_mrph \
                         and process is True:
                     for case in cases:
-                        if dmid in dmid2arguments:
-                            # filter out non-target exophors
-                            args = []
-                            for arg in dmid2arguments[dmid][case]:
-                                if isinstance(arg, SpecialArgument):
-                                    if arg.exophor in relax_exophors:
-                                        arg.exophor = relax_exophors[arg.exophor]
-                                        args.append(arg)
-                                else:
-                                    args.append(arg)
-                            if not args:
-                                arguments[case] = 'NULL'
-                                continue
-                            arg: BaseArgument = args[0]  # use first argument now
-                            if isinstance(arg, Argument):
-                                arguments[case] = str(arg.dmid)
-                                if arg.dep_type == 'overt':
-                                    arguments[case] += '%C'
-                            # exophor
-                            else:
-                                arguments[case] = arg.midasi
-                        else:
-                            arguments[case] = 'NULL'
+                        dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
+                        arguments[case] = _get_arg(dmid, dmid2args, relax_exophors)
+                    arg_candidates = [x for x in head_dmids if x != dmid]
 
                 if coreference:
+                    arguments['='] = None
                     if '体言' in tag.features \
                             and mrph is target_mrph \
                             and process is True:
-                        dtid = document.tag2dtid[tag]
-                        if dtid in document.mentions:
-                            mention = document.mentions[dtid]
-                            tgt_mentions = document.get_siblings(mention)
-                            preceding_mentions = [m for m in tgt_mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
-                            exophors = [document.entities[eid].exophor for eid in mention.eids
-                                        if document.entities[eid].is_special]
-                            if preceding_mentions:
-                                arguments['='] = str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
-                            elif exophors and exophors[0] in relax_exophors:  # if no preceding mention, use exo as gold
-                                arguments['='] = relax_exophors[exophors[0]]  # 不特定:人１ -> 不特定:人
-                            elif tgt_mentions:
-                                arguments['='] = None  # don't train cataphor
-                            else:
-                                arguments['='] = 'NA'
-                        else:
-                            arguments['='] = 'NA'
-                    else:
-                        arguments['='] = None
+                        arguments['='] = _get_mention(tag, document, relax_exophors)
+                        ment_candidates = [x for x in head_dmids if x < dmid]
 
                 arguments_set.append(arguments)
-                arg_candidates_set.append([x for x in head_dmids if x != dmid])
-                ment_candidates_set.append([x for x in head_dmids if x < dmid])
+                arg_candidates_set.append(arg_candidates)
+                ment_candidates_set.append(ment_candidates)
                 dmid += 1
 
     return PasExample(words, arguments_set, arg_candidates_set, ment_candidates_set, dtids, ddeps, document.doc_id)
 
 
-def get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
+def _get_arg(dmid: int,
+             dmid2args: Dict[int, List[BaseArgument]],
+             relax_exophors: Dict[str, str],
+             ) -> Optional[str]:
+    # filter out non-target exophors
+    args = []
+    for arg in dmid2args.get(dmid, []):
+        if isinstance(arg, SpecialArgument):
+            if arg.exophor in relax_exophors:
+                arg.exophor = relax_exophors[arg.exophor]
+                args.append(arg)
+            elif arg.exophor == '[不明]':
+                return None  # don't train uncertain argument
+        else:
+            args.append(arg)
+    if not args:
+        return 'NULL'
+    arg: BaseArgument = args[0]  # use first argument now
+    if isinstance(arg, Argument):
+        if arg.dep_type == 'overt':
+            return f'{arg.dmid}%C'
+        else:
+            return str(arg.dmid)
+    # exophor
+    else:
+        return arg.midasi
+
+
+def _get_mention(tag: Tag,
+                 document: Document,
+                 relax_exophors: Dict[str, str]
+                 ) -> Optional[str]:
+    dtid = document.tag2dtid[tag]
+    if dtid in document.mentions:
+        mention = document.mentions[dtid]
+        tgt_mentions = document.get_siblings(mention)
+        preceding_mentions = [m for m in tgt_mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
+        exophors = [document.entities[eid].exophor for eid in mention.eids
+                    if document.entities[eid].is_special]
+        if preceding_mentions:
+            return str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
+        elif exophors and exophors[0] in relax_exophors:  # if no preceding mention, use exophor as gold mention
+            return relax_exophors[exophors[0]]  # 不特定:人１ -> 不特定:人
+        elif tgt_mentions:
+            return None  # don't train cataphor
+        else:
+            return 'NA'
+    else:
+        return 'NA'
+
+
+def _get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
     """sentence 中の基本句それぞれについて、内容語である形態素の dmid を返す
 
     内容語がなかった場合、先頭の形態素の dmid を返す
