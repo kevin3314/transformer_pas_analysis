@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 from pyknp import BList, Tag, Morpheme
 
-from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument
+from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 
 class PasExample:
@@ -109,7 +109,7 @@ def _get_arg(dmid: int,
             if arg.exophor in relax_exophors:
                 arg.exophor = relax_exophors[arg.exophor]
                 args.append(arg)
-            elif arg.exophor == '[不明]':
+            elif arg.exophor == UNCERTAIN:
                 return None  # don't train uncertain argument
         else:
             args.append(arg)

@@ -38,6 +38,8 @@ CORE_COREFS = [
     "=構",
 ]
 
+UNCERTAIN = "[不明]"
+
 UNSPECIFIED_PERSON = [
     "不特定:人１",
     "不特定:人２",
@@ -84,7 +86,7 @@ ALL_EXOPHORS = [
     "不特定:状況",
     "前文",
     "後文",
-] + UNSPECIFIED_PERSON + UNSPECIFIED_OBJECT + UNSPECIFIED_CIRCUMSTANCES
+] + [UNCERTAIN] + UNSPECIFIED_PERSON + UNSPECIFIED_OBJECT + UNSPECIFIED_CIRCUMSTANCES
 
 DEP_TYPES = [
     "overt",
