@@ -63,6 +63,10 @@ def main() -> None:
     #                     help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
+    parser.add_argument('--lr-schedule', type=str, default='WarmupLinearSchedule',
+                        choices=['ConstantLRSchedule', 'WarmupConstantSchedule', 'WarmupLinearSchedule',
+                                 'WarmupCosineSchedule', 'WarmupCosineWithHardRestartsSchedule'],
+                        help='lr scheduler')
     parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
                              'E.g., 0.1 = 10% of training.')
@@ -103,6 +107,7 @@ def main() -> None:
         name += '-overt' if args.train_overt else ''
         name += '-large' if args.use_bert_large else ''
         name += args.additional_name if args.additional_name is not None else ''
+
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
         num_train_examples = 0
@@ -119,6 +124,7 @@ def main() -> None:
                 'num_case': len(cases) if not args.coreference else len(cases) + 1,
             },
         }
+
         dataset = {
             'type': 'PASDataset',
             'args': {
@@ -189,10 +195,12 @@ def main() -> None:
                 'weight_decay': 0.01,
             },
         }
+
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
         else:
             loss = 'cross_entropy_pas_loss'
+
         metrics = [
             'case_analysis_f1_ga',
             'case_analysis_f1_wo',
@@ -210,14 +218,21 @@ def main() -> None:
         ]
         if args.coreference:
             metrics.append('coreference_f1')
+
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
-        lr_scheduler = {
-            'type': 'WarmupLinearSchedule',
-            'args': {
-                'warmup_steps': t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps,
-                't_total': t_total,
-            }
-        }
+        warmup_steps = t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps
+        lr_scheduler = {'type': args.lr_schedule}
+        if args.lr_schedule == 'ConstantLRSchedule':
+            lr_scheduler['args'] = {}
+        elif args.lr_schedule == 'WarmupConstantSchedule':
+            lr_scheduler['args'] = {'warmup_steps': warmup_steps}
+        elif args.lr_schedule in ('WarmupLinearSchedule',
+                                  'WarmupCosineSchedule',
+                                  'WarmupCosineWithHardRestartsSchedule'):
+            lr_scheduler['args'] = {'warmup_steps': warmup_steps, 't_total': t_total}
+        else:
+            raise ValueError(f'unknown lr schedule: {args.lr_schedule}')
+
         trainer = {
             'epochs': n_epoch,
             'save_dir': 'result/',
@@ -228,6 +243,7 @@ def main() -> None:
             'early_stop': 10,
             'tensorboard': True,
         }
+
         config = Config(
             name=name,
             n_gpu=n_gpu,
