@@ -14,7 +14,7 @@ class BaselineModel(BaseModel):
 
         self.bert = BertModel.from_pretrained(bert_model)
         # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
 
         self.num_case = num_case
         bert_hidden_size = self.bert.config.hidden_size
@@ -40,7 +40,7 @@ class BaselineModel(BaseModel):
         h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         # (b, seq, seq, case, hid) -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
-        g_logits = self.v_a(torch.tanh(h_i.unsqueeze(1) + h_j.unsqueeze(2))).squeeze(-1)
+        g_logits = self.v_a(torch.tanh(self.dropout(h_i.unsqueeze(1) + h_j.unsqueeze(2)))).squeeze(-1)
 
         g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
