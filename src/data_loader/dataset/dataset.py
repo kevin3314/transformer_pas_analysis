@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Optional
 from pathlib import Path
+from collections import defaultdict
 
 from tqdm import tqdm
 import numpy as np
@@ -93,6 +94,60 @@ class PASDataset(Dataset):
                 continue
             self.examples.append(example)
             self.features.append(feature)
+
+    def stat(self) -> dict:
+        n_examples = n_preds = n_mentions = 0
+        n_args = defaultdict(int)
+        pas_overt = pas_exo = pas_null = pas_normal = 0
+        coref_exo = coref_na = coref_normal = 0
+
+        for example in self.examples:
+            for arguments in example.arguments_set:
+                for case, argument in arguments.items():
+                    if argument is None:
+                        continue
+                    if case == '=':
+                        if argument in self.target_exophors:
+                            coref_exo += 1
+                        elif argument == 'NA':
+                            coref_na += 1
+                        else:
+                            coref_normal += 1
+                    else:
+                        if '%C' in argument:
+                            pas_overt += 1
+                        elif argument in self.target_exophors:
+                            pas_exo += 1
+                        elif argument == 'NULL':
+                            pas_null += 1
+                            continue
+                        else:
+                            pas_normal += 1
+                        n_args[case] += 1
+                if self.coreference:
+                    if arguments['='] is not None:
+                        n_mentions += 1
+                    if any(arg is not None for arg in list(arguments.values())[:-1]):
+                        n_preds += 1
+                else:
+                    if any(arg is not None for arg in arguments.values()):
+                        n_preds += 1
+            n_examples += 1
+
+        return {'examples': n_examples,
+                'predicates': n_preds,
+                'mentions': n_mentions,
+                'ga_cases': n_args['ガ'],
+                'wo_cases': n_args['ヲ'],
+                'ni_cases': n_args['ニ'],
+                'ga2_cases': n_args['ガ２'],
+                'pas_overt': pas_overt,
+                'pas_exophor': pas_exo,
+                'pas_normal': pas_normal,
+                'pas_null': pas_null,
+                'coref_exophor': coref_exo,
+                'coref_normal': coref_normal,
+                'coref_na': coref_na}
 
     def __len__(self) -> int:
         return len(self.features)
