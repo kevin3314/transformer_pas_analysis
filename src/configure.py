@@ -100,7 +100,7 @@ def main() -> None:
         name += '-coref' if args.coreference else ''
         name += '-overt' if args.train_overt else ''
         name += '-large' if args.use_bert_large else ''
-        name += args.additional_name if args.additional_name is not None else ''
+        name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
