@@ -68,6 +68,7 @@ class PASDataset(Dataset):
         self.coreference = coreference
         self.kc = kc
         self.train_overt = train_overt
+        self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
@@ -84,7 +85,6 @@ class PASDataset(Dataset):
                 continue
             self.examples.append(example)
             self.features.append(feature)
-        self.logger = logger if logger else logging.getLogger(__file__)
 
     def stat(self) -> dict:
         n_examples = n_preds = n_mentions = 0
