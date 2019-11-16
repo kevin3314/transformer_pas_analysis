@@ -1,4 +1,3 @@
-import os
 import json
 import math
 import copy
@@ -13,17 +12,13 @@ class Config:
         self.config = {}
         for key, value in kwargs.items():
             self.config.update({key: value})
-        self.uid = self.make_uid(self.config)
 
-    def dump(self, path: str) -> None:
-        config_path = pathlib.Path(path) / f'{self.uid}.json'
+    def dump(self, path: pathlib.Path) -> None:
+        path.mkdir(exist_ok=True, parents=True)
+        config_path = path / f'{self.config["name"]}.json'
         with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(config_path)
-
-    @staticmethod
-    def make_uid(config: dict):
-        return config['name']
 
 
 class Path:
@@ -40,7 +35,7 @@ class Path:
 
 
 def main() -> None:
-    all_models = ['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
+    all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
                   'CaseInteractionModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
@@ -60,8 +55,8 @@ def main() -> None:
                         help='Perform coreference resolution.')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
-    # parser.add_argument('--dropout', type=float, default=0.1, nargs='*',
-    #                     help='dropout ratio')
+    parser.add_argument('--dropout', type=float, default=0.0, nargs='*',
+                        help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--lr-schedule', type=str, default='WarmupLinearSchedule',
@@ -88,8 +83,6 @@ def main() -> None:
     parser.add_argument('--train-overt', action='store_true', default=False,
                         help='include overt arguments in training data')
     args = parser.parse_args()
-
-    os.makedirs(args.config, exist_ok=True)
 
     bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
     models: List[str] = args.model if type(args.model) == list else [args.model]
@@ -122,7 +115,9 @@ def main() -> None:
             'type': model,
             'args': {
                 'bert_model': bert_model,
-                'num_case': len(cases) if not args.coreference else len(cases) + 1,
+                'dropout': args.dropout,
+                'num_case': len(cases),
+                'coreference': args.coreference,
             },
         }
 
@@ -264,7 +259,8 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(args.config)
+        config_path = pathlib.Path(args.config) / model / corpus
+        config.dump(config_path)
 
 
 if __name__ == '__main__':

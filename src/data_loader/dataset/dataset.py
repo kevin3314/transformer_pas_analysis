@@ -6,16 +6,10 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset
-from transformers import BertConfig, BertTokenizer
+from transformers import BertTokenizer
 
 from kwdlc_reader import KWDLCReader
 from data_loader.dataset.read_example import read_example, PasExample
-
-
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class InputFeatures:
@@ -58,6 +52,7 @@ class PASDataset(Dataset):
                  kc: bool = False,
                  knp_string: Optional[str] = None,
                  train_overt: bool = False,
+                 logger=None,
                  ) -> None:
         if path is not None:
             source = Path(path)
@@ -70,30 +65,26 @@ class PASDataset(Dataset):
                                   extract_nes=False)
         self.target_cases = self.reader.target_cases
         self.target_exophors = exophors
-        special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
-        self.num_special_tokens = len(special_tokens)
-        self.special_to_index: Dict[str, int] = {token: i + max_seq_length - self.num_special_tokens for i, token
-                                                 in enumerate(special_tokens)}
         self.coreference = coreference
-        # self.training = training
         self.kc = kc
         self.train_overt = train_overt
+        special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
+        self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
+                                                 in enumerate(reversed(special_tokens))}
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
-        bert_config = BertConfig.from_json_file(Path(bert_model) / 'bert_config.json')
+        self.expanded_vocab_size = self.tokenizer.vocab_size + len(special_tokens)
         documents = list(self.reader.process_all_documents())
         self.documents = documents if not training else None
         self.examples = []
         self.features = []
         for document in tqdm(documents, desc='processing documents...'):
             example = read_example(document, exophors, coreference, kc)
-            feature = self._convert_example_to_feature(
-                example,
-                max_seq_length=max_seq_length,
-                vocab_size=bert_config.vocab_size)  # don't use len(self.tokenizer.vocab)
+            feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:
                 continue
             self.examples.append(example)
             self.features.append(feature)
+        self.logger = logger if logger else logging.getLogger(__file__)
 
     def stat(self) -> dict:
         n_examples = n_preds = n_mentions = 0
@@ -166,10 +157,10 @@ class PASDataset(Dataset):
 
     def _convert_example_to_feature(self,
                                     example: PasExample,
-                                    max_seq_length: int,
-                                    vocab_size: int) -> Optional[InputFeatures]:
+                                    max_seq_length: int) -> Optional[InputFeatures]:
         """Loads a data file into a list of `InputBatch`s."""
 
+        vocab_size = self.tokenizer.vocab_size
         num_expand_vocab = len(self.special_to_index)
         num_case_w_coreference = len(self.target_cases) + int(self.coreference)
 
@@ -213,11 +204,11 @@ class PASDataset(Dataset):
                 else:
                     if case == '=':
                         if int(argument) not in example.ment_candidates_set[orig_index]:
-                            logger.debug(f'mention: {argument} of {token} is not in candidates and ignored')
+                            self.logger.debug(f'mention: {argument} of {token} is not in candidates and ignored')
                             continue
                     else:
                         if int(argument) not in example.arg_candidates_set[orig_index]:
-                            logger.debug(f'argument: {argument} of {token} is not in candidates and ignored')
+                            self.logger.debug(f'argument: {argument} of {token} is not in candidates and ignored')
                             continue
                     # normal
                     arguments[i] = orig_to_tok_index[int(argument)]

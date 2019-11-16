@@ -13,6 +13,7 @@ from utils.parse_config import ConfigParser
 from utils import prepare_device
 from writer.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
+from base.base_model import BaseModel
 
 
 class Tester:
@@ -102,14 +103,13 @@ def main(config, args):
     logger = config.get_logger(args.target)
 
     # setup data_loader instances
-    kwdlc_dataset = config.initialize(f'{args.target}_kwdlc_dataset', module_dataset)
-    kc_dataset = config.initialize(f'{args.target}_kc_dataset', module_dataset)
-    kwdlc_data_loader = config.initialize(f'{args.target}_data_loader', module_loader, kwdlc_dataset)
-    kc_data_loader = config.initialize(f'{args.target}_data_loader', module_loader, kc_dataset)
+    kwdlc_dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset)
+    kc_dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset)
+    kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kwdlc_dataset)
+    kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kc_dataset)
 
     # build model architecture
-    model = config.initialize('arch', module_arch)
-    model.expand_vocab(kwdlc_dataset.num_special_tokens)  # same as that in dataset.py.
+    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=kwdlc_dataset.expanded_vocab_size)
     logger.info(model)
 
     # get function handles of loss and metrics
@@ -140,4 +140,4 @@ if __name__ == '__main__':
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
 
-    main(ConfigParser(parser, timestamp=False), parser.parse_args())
+    main(ConfigParser.from_parser(parser, run_id=''), parser.parse_args())
