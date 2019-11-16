@@ -229,13 +229,18 @@ class Document:
         for tag in self.tag_list():
             rels = []
             for rel in self._extract_rel_tags(tag):
+                valid = True
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'{tag2sid[tag]:24}sentence: {rel.sid} not found in {self.doc_id}')
-                    continue
-                if rel.atype not in (self.target_cases + self.target_corefs):
-                    logger.info(f'{tag2sid[tag]:24}relation type: {rel.atype} is ignored')
-                    continue
-                rels.append(rel)
+                    valid = False
+                if rel.atype in (ALL_CASES + ALL_COREFS):
+                    if rel.atype not in (self.target_cases + self.target_corefs):
+                        logger.info(f'{tag2sid[tag]:24}relation type: {rel.atype} is ignored')
+                        valid = False
+                else:
+                    logger.warning(f'{tag2sid[tag]:24}unknown relation: {rel.atype}')
+                if valid:
+                    rels.append(rel)
             src_bp = BasePhrase(tag, self.tag2dtid[tag], tag2sid[tag], self.mrph2dmid)
             # extract PAS
             pas = Pas(src_bp)
