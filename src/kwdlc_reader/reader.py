@@ -553,6 +553,7 @@ class Document:
 
     def draw_tree(self,
                   sid: str,
+                  coreference: bool,
                   fh=None,
                   ) -> None:
         sentence: BList = self[sid]
@@ -571,23 +572,24 @@ class Document:
                 arg = argument[0].midasi if argument else 'NULL'
                 tree_strings[idx] += f'{arg}:{case} '
 
-        for src_mention in self.mentions.values():
-            tgt_mentions = [tgt for tgt in self.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
-            if not tgt_mentions:
-                continue
-            idx = src_mention.tid
-            tree_strings[idx] += '  =:'
-            targets = set()
-            for tgt_mention in tgt_mentions:
-                target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
-                if not target:
-                    target = tgt_mention.midasi
-                targets.add(target + str(tgt_mention.dtid))
-            for eid in src_mention.eids:
-                entity = self.entities[eid]
-                if entity.is_special:
-                    targets.add(entity.exophor)
-            tree_strings[idx] += ' '.join(targets)
+        if coreference:
+            for src_mention in self.mentions.values():
+                tgt_mentions = [tgt for tgt in self.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
+                if not tgt_mentions:
+                    continue
+                idx = src_mention.tid
+                tree_strings[idx] += '  =:'
+                targets = set()
+                for tgt_mention in tgt_mentions:
+                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
+                    if not target:
+                        target = tgt_mention.midasi
+                    targets.add(target + str(tgt_mention.dtid))
+                for eid in src_mention.eids:
+                    entity = self.entities[eid]
+                    if entity.is_special:
+                        targets.add(entity.exophor)
+                tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 

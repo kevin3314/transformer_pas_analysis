@@ -27,19 +27,23 @@ def api():
 
     html_string = textwrap.dedent('''
         <style type="text/css">
-        <!--
-        td {font-size: 11pt;}
-        td {border: 1px solid #606060;}
-        td {vertical-align: top;}
-        pre {font-family: "ＭＳ ゴシック","Osaka-Mono","Osaka-等幅","さざなみゴシック","Sazanami Gothic",DotumChe,GulimChe,
-        BatangChe,MingLiU, NSimSun, Terminal; white-space:pre;}
-        -->
+        td {
+            font-size: 11pt;
+            border: 1px solid #606060;
+            vertical-align: top;
+            margin: 5pt;
+        }
+        pre {
+            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
+            GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
+            white-space: pre;
+        }
         </style>
         ''')
     html_string += '<pre>\n'
     for sid in document.sid2sentence.keys():
         with io.StringIO() as string:
-            document.draw_tree(sid, string)
+            document.draw_tree(sid, dataset.coreference, string)
             tree_string = string.getvalue()
         logger.info('output:\n' + tree_string)
         html_string += tree_string
