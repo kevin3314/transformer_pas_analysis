@@ -24,7 +24,7 @@ def main(args):
     else:
         document_pred: Document = prediction_writer.write(arguments_set, None)[0]
         for sid in document_pred.sid2sentence.keys():
-            document_pred.draw_tree(sid, sys.stdout)
+            document_pred.draw_tree(sid, dataset.coreference, sys.stdout)
 
 
 if __name__ == '__main__':

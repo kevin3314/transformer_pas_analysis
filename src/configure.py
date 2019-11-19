@@ -1,4 +1,3 @@
-import os
 import json
 import math
 import copy
@@ -13,17 +12,13 @@ class Config:
         self.config = {}
         for key, value in kwargs.items():
             self.config.update({key: value})
-        self.uid = self.make_uid(self.config)
 
-    def dump(self, path: str) -> None:
-        config_path = pathlib.Path(path) / f'{self.uid}.json'
+    def dump(self, path: pathlib.Path) -> None:
+        path.mkdir(exist_ok=True, parents=True)
+        config_path = path / f'{self.config["name"]}.json'
         with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(config_path)
-
-    @staticmethod
-    def make_uid(config: dict):
-        return config['name']
 
 
 class Path:
@@ -40,7 +35,8 @@ class Path:
 
 
 def main() -> None:
-    all_models = ['BaselineModel', 'BaseAsymModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel']
+    all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
+                  'CaseInteractionModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
@@ -59,10 +55,14 @@ def main() -> None:
                         help='Perform coreference resolution.')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
-    # parser.add_argument('--dropout', type=float, default=0.1, nargs='*',
-    #                     help='dropout ratio')
+    parser.add_argument('--dropout', type=float, default=0.0, nargs='*',
+                        help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
+    parser.add_argument('--lr-schedule', type=str, default='WarmupLinearSchedule',
+                        choices=['ConstantLRSchedule', 'WarmupConstantSchedule', 'WarmupLinearSchedule',
+                                 'WarmupCosineSchedule', 'WarmupCosineWithHardRestartsSchedule'],
+                        help='lr scheduler')
     parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
                              'E.g., 0.1 = 10% of training.')
@@ -84,8 +84,6 @@ def main() -> None:
                         help='include overt arguments in training data')
     args = parser.parse_args()
 
-    os.makedirs(args.config, exist_ok=True)
-
     bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
     models: List[str] = args.model if type(args.model) == list else [args.model]
     corpus_list: List[str] = args.corpus if type(args.corpus) == list else [args.corpus]
@@ -102,7 +100,8 @@ def main() -> None:
         name += '-coref' if args.coreference else ''
         name += '-overt' if args.train_overt else ''
         name += '-large' if args.use_bert_large else ''
-        name += args.additional_name if args.additional_name is not None else ''
+        name += f'-{args.additional_name}' if args.additional_name is not None else ''
+
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
         num_train_examples = 0
@@ -116,9 +115,12 @@ def main() -> None:
             'type': model,
             'args': {
                 'bert_model': bert_model,
-                'num_case': len(cases) if not args.coreference else len(cases) + 1,
+                'dropout': args.dropout,
+                'num_case': len(cases),
+                'coreference': args.coreference,
             },
         }
+
         dataset = {
             'type': 'PASDataset',
             'args': {
@@ -189,10 +191,12 @@ def main() -> None:
                 'weight_decay': 0.01,
             },
         }
+
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
         else:
             loss = 'cross_entropy_pas_loss'
+
         metrics = [
             'case_analysis_f1_ga',
             'case_analysis_f1_wo',
@@ -210,14 +214,21 @@ def main() -> None:
         ]
         if args.coreference:
             metrics.append('coreference_f1')
+
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
-        lr_scheduler = {
-            'type': 'WarmupLinearSchedule',
-            'args': {
-                'warmup_steps': t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps,
-                't_total': t_total,
-            }
-        }
+        warmup_steps = t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps
+        lr_scheduler = {'type': args.lr_schedule}
+        if args.lr_schedule == 'ConstantLRSchedule':
+            lr_scheduler['args'] = {}
+        elif args.lr_schedule == 'WarmupConstantSchedule':
+            lr_scheduler['args'] = {'warmup_steps': warmup_steps}
+        elif args.lr_schedule in ('WarmupLinearSchedule',
+                                  'WarmupCosineSchedule',
+                                  'WarmupCosineWithHardRestartsSchedule'):
+            lr_scheduler['args'] = {'warmup_steps': warmup_steps, 't_total': t_total}
+        else:
+            raise ValueError(f'unknown lr schedule: {args.lr_schedule}')
+
         trainer = {
             'epochs': n_epoch,
             'save_dir': 'result/',
@@ -228,6 +239,7 @@ def main() -> None:
             'early_stop': 10,
             'tensorboard': True,
         }
+
         config = Config(
             name=name,
             n_gpu=n_gpu,
@@ -247,7 +259,8 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(args.config)
+        config_path = pathlib.Path(args.config) / model / corpus
+        config.dump(config_path)
 
 
 if __name__ == '__main__':

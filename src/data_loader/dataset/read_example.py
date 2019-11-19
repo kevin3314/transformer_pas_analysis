@@ -134,7 +134,7 @@ def _get_mention(tag: Tag,
     if dtid in document.mentions:
         mention = document.mentions[dtid]
         tgt_mentions = document.get_siblings(mention)
-        preceding_mentions = [m for m in tgt_mentions if m.dtid < dtid].sort(key=lambda m: m.dtid)
+        preceding_mentions = sorted([m for m in tgt_mentions if m.dtid < dtid], key=lambda m: m.dtid)
         exophors = [document.entities[eid].exophor for eid in mention.eids
                     if document.entities[eid].is_special]
         if preceding_mentions:

@@ -4,7 +4,7 @@ import random
 
 import transformers.optimization as module_optim
 import torch
-import numpy
+import numpy as np
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -13,12 +13,13 @@ import model.metric as module_metric
 import model.model as module_arch
 from utils.parse_config import ConfigParser
 from trainer import Trainer
+from base.base_model import BaseModel
 
 
-def main(config):
+def main(config: ConfigParser):
     torch.manual_seed(42)
     random.seed(42)
-    numpy.random.seed(42)
+    np.random.seed(42)
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
 
@@ -26,38 +27,39 @@ def main(config):
 
     # setup data_loader instances
     if config['train_kwdlc_dataset']['args']['path'] is not None:
-        train_kwdlc_dataset = config.initialize('train_kwdlc_dataset', module_dataset)
-        train_data_loader = config.initialize('train_data_loader', module_loader, train_kwdlc_dataset)
+        train_kwdlc_dataset = config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger)
+        train_data_loader = config.init_obj('train_data_loader', module_loader, train_kwdlc_dataset)
         if config['train_kc_dataset']['args']['path'] is not None:
-            train_kc_dataset = config.initialize('train_kc_dataset', module_dataset)
+            train_kc_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
             train_data_loader.add(train_kc_dataset)
     else:
-        train_kc_dataset = config.initialize('train_kc_dataset', module_dataset)
-        train_data_loader = config.initialize('train_data_loader', module_loader, train_kc_dataset)
-    valid_kwdlc_dataset = config.initialize('valid_kwdlc_dataset', module_dataset)
-    valid_kc_dataset = config.initialize('valid_kc_dataset', module_dataset)
-    valid_kwdlc_data_loader = config.initialize('valid_data_loader', module_loader, valid_kwdlc_dataset)
-    valid_kc_data_loader = config.initialize('valid_data_loader', module_loader, valid_kc_dataset)
+        train_kc_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
+        train_data_loader = config.init_obj('train_data_loader', module_loader, train_kc_dataset)
+    valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
+    valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset)
+    valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
+    valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
 
     # build model architecture, then print to console
-    model = config.initialize('arch', module_arch)
-    model.expand_vocab(valid_kwdlc_dataset.num_special_tokens)  # same as that in dataset.py. TODO: consider resume case
+    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=valid_kwdlc_dataset.expanded_vocab_size)
     logger.info(model)
 
     # get function handles of loss and metrics
     loss = getattr(module_loss, config['loss'])
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
-    # prepare optimizer
-    param_optimizer = filter(lambda np: np[1].requires_grad, model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    # build optimizer, learning rate scheduler
+    trainable_named_params = filter(lambda x: x[1].requires_grad, model.named_parameters())
+    no_decay = ('bias', 'LayerNorm.weight')
+    weight_decay = config['optimizer']['args']['weight_decay']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        {'params': [p for n, p in trainable_named_params if not any(nd in n for nd in no_decay)],
+         'weight_decay': weight_decay},
+        {'params': [p for n, p in trainable_named_params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
-    optimizer = config.initialize('optimizer', module_optim, optimizer_grouped_parameters)
+    optimizer = config.init_obj('optimizer', module_optim, optimizer_grouped_parameters)
 
-    lr_scheduler = config.initialize('lr_scheduler', module_optim, optimizer)
+    lr_scheduler = config.init_obj('lr_scheduler', module_optim, optimizer)
 
     trainer = Trainer(model, loss, metrics, optimizer,
                       config=config,
@@ -83,7 +85,7 @@ if __name__ == '__main__':
     # custom cli options to modify configuration from default values given in json file.
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
-        CustomArgs(['--lr', '--learning_rate'], type=float, target=('optimizer', 'args', 'lr')),
-        CustomArgs(['--bs', '--batch_size'], type=int, target=('data_loader', 'args', 'batch_size'))
+        CustomArgs(['--lr', '--learning_rate'], type=float, target='optimizer;args;lr'),
+        CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
     ]
-    main(config=ConfigParser(parser, options))
+    main(config=ConfigParser.from_parser(parser, options))

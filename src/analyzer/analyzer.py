@@ -1,18 +1,19 @@
 import os
-import json
 import socket
 from typing import Dict, Tuple
 import configparser
 from pathlib import Path
-from collections import OrderedDict
 
 import torch
 from mojimoji import han_to_zen
 from pyknp import Juman, KNP
+from transformers import BertConfig
 
 import model.model as module_arch
+import data_loader.dataset as module_dataset
 from data_loader.dataset import PASDataset
-from utils import prepare_device
+from utils import read_json, prepare_device
+from utils.parse_config import ConfigParser
 
 
 class Analyzer:
@@ -34,18 +35,20 @@ class Analyzer:
         self.bertknp = bertknp
 
         config_path = Path(model_path).parent / 'config.json'
-        with config_path.open() as handle:
-            self.config = json.load(handle, object_hook=OrderedDict)
+        config = read_json(config_path)
+        self.config = ConfigParser(config, resume=model_path, run_id='')  # save_dir 作らせたくない
 
-        os.environ["CUDA_VISIBLE_DEVICES"] = device
+        dataset_config = config['test_kwdlc_dataset']['args']
+        bert_config = BertConfig.from_pretrained(dataset_config['bert_model'])
+        coreference = dataset_config['coreference']
+        exophors = dataset_config['exophors']
+        expanded_vocab_size = bert_config.vocab_size + len(exophors) + 1 + int(coreference)
+
+        os.environ['CUDA_VISIBLE_DEVICES'] = device
         self.device, device_ids = prepare_device(1, self.logger)
 
         # build model architecture
-        model_args = dict(self.config['arch']['args'])
-        model = getattr(module_arch, self.config['arch']['type'])(**model_args)
-        coreference = self.config['test_kwdlc_dataset']['args']['coreference']
-        model.expand_vocab(
-            len(self.config['test_kwdlc_dataset']['args']['exophors']) + 1 + int(coreference))  # NULL and (NA)
+        model = self.config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
         self.logger.info(model)
 
         # prepare model
@@ -76,7 +79,7 @@ class Analyzer:
         dataset_config: dict = self.config['test_kwdlc_dataset']['args']
         dataset_config['path'] = None
         dataset_config['knp_string'] = knp_string
-        dataset = PASDataset(**dataset_config)
+        dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
 
         with torch.no_grad():
             input_ids, input_mask, arguments_ids, ng_token_mask, deps = dataset[0]
