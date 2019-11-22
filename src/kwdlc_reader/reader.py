@@ -33,11 +33,13 @@ class KWDLCReader:
     """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
 
     Args:
-        source (Path or str): 入力ソース．Path オブジェクトを指定するとその場所のファイルを読む
-        target_cases (list): 抽出の対象とする格
-        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        source (Union[Path, str]): 入力ソース．Path オブジェクトを指定するとその場所のファイルを読む
+        target_cases (Optional[List[str]]): 抽出の対象とする格
+        target_corefs (Optional[List[str]]): 抽出の対象とする共参照関係(=など)
+        relax_cases (bool): ガ≒格などをガ格として扱うか
+        relax_corefs (bool): 共参照関係 =≒ などを = として扱うか
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-        knp_ext (str): KWDLC (or KC) ファイルの拡張子
+        knp_ext (str): KWDLC または KC ファイルの拡張子
         pickle_ext (str): Document を pickle 形式で読む場合の拡張子
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
     """
@@ -45,6 +47,8 @@ class KWDLCReader:
                  source: Union[Path, str],
                  target_cases: Optional[List[str]],
                  target_corefs: Optional[List[str]],
+                 relax_cases: bool = False,
+                 relax_corefs: bool = False,
                  extract_nes: bool = True,
                  use_pas_tag: bool = False,
                  knp_ext: str = '.knp',
@@ -66,6 +70,8 @@ class KWDLCReader:
 
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
+        self.relax_cases: bool = relax_cases
+        self.relax_corefs: bool = relax_corefs
         self.extract_nes: bool = extract_nes
         self.use_pas_tag: bool = use_pas_tag
         self.knp_ext: str = knp_ext
@@ -110,6 +116,8 @@ class KWDLCReader:
                         doc_id,
                         self.target_cases,
                         self.target_corefs,
+                        self.relax_cases,
+                        self.relax_corefs,
                         self.extract_nes,
                         self.use_pas_tag)
 
@@ -130,6 +138,8 @@ class Document:
         doc_id (str): 文書ID
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
+        relax_cases (bool): ガ≒格などをガ格として扱うか
+        relax_corefs (bool): 共参照関係 =≒ などを = として扱うか
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
 
@@ -152,6 +162,8 @@ class Document:
                  doc_id: str,
                  target_cases: List[str],
                  target_corefs: List[str],
+                 relax_cases: bool,
+                 relax_corefs: bool,
                  extract_nes: bool,
                  use_pas_tag: bool,
                  ) -> None:
@@ -159,6 +171,8 @@ class Document:
         self.doc_id = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
+        self.relax_cases: bool = relax_cases
+        self.relax_corefs: bool = relax_corefs
         self.extract_nes: bool = extract_nes
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
@@ -209,6 +223,9 @@ class Document:
                 continue
             pas = Pas(BasePhrase(tag, self.tag2dtid[tag], tag.pas.sid, self.mrph2dmid))
             for case, arguments in tag.pas.arguments.items():
+                if self.relax_cases:
+                    if case in ALL_CASES and case.endswith('≒'):
+                        case = case.rstrip('≒')  # ガ≒ -> ガ
                 for arg in arguments:
                     arg.midasi = mojimoji.han_to_zen(arg.midasi, ascii=False)  # 不特定:人1 -> 不特定:人１
                     # exophor
@@ -229,6 +246,12 @@ class Document:
         for tag in self.tag_list():
             rels = []
             for rel in self._extract_rel_tags(tag):
+                if self.relax_cases:
+                    if rel.atype in ALL_CASES and rel.atype.endswith('≒'):
+                        rel.atype = rel.atype.rstrip('≒')  # ガ≒ -> ガ
+                if self.relax_corefs:
+                    if rel.atype in ALL_COREFS and rel.atype.endswith('≒'):
+                        rel.atype = rel.atype.rstrip('≒')  # =構≒ -> =構
                 valid = True
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'{tag2sid[tag]:24}sentence: {rel.sid} not found in {self.doc_id}')
