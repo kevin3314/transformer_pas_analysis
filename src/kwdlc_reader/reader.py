@@ -516,6 +516,11 @@ class Document:
 
     @property
     def sentences(self) -> List[BList]:
+        """文を構成する全文節列オブジェクト
+
+        Returns:
+            List[BList]
+        """
         return list(self.sid2sentence.values())
 
     def bnst_list(self) -> List[Bunsetsu]:
@@ -539,8 +544,18 @@ class Document:
     def get_arguments(self,
                       predicate: Predicate,
                       relax: bool = False,
-                      include_optional: bool = False,  # 「すぐに」などの修飾的な項も返すかどうか
+                      include_optional: bool = False,
                       ) -> Dict[str, List[BaseArgument]]:
+        """述語 predicate が持つ全ての項を返す
+
+        Args:
+            predicate (Predicate): 述語
+            relax (bool): coreference chain によってより多くの項を返すかどうか
+            include_optional (bool): 「すぐに」などの修飾的な項も返すかどうか
+
+        Returns:
+            Dict[str, List[BaseArgument]]: 格を key とする述語の項の辞書
+        """
         if predicate.dtid not in self._pas:
             return {}
         pas = copy.copy(self._pas[predicate.dtid])
@@ -606,7 +621,7 @@ class Document:
                 if not tgt_mentions:
                     continue
                 idx = src_mention.tid
-                tree_strings[idx] += '  =:'
+                tree_strings[idx] += '  ＝:'
                 targets = set()
                 for tgt_mention in tgt_mentions:
                     target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
