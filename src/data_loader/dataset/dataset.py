@@ -125,6 +125,18 @@ class PASDataset(Dataset):
                         n_preds += 1
             n_examples += 1
 
+        n_all_tokens = n_input_tokens = n_unk_tokens = 0
+        unk_id = self.tokenizer.convert_tokens_to_ids('[UNK]')
+        pad_id = 0
+        for feature in self.features:
+            for token_id in feature.input_ids:
+                n_all_tokens += 1
+                if token_id == pad_id:
+                    continue
+                n_input_tokens += 1
+                if token_id == unk_id:
+                    n_unk_tokens += 1
+
         return {'examples': n_examples,
                 'predicates': n_preds,
                 'mentions': n_mentions,
@@ -138,7 +150,11 @@ class PASDataset(Dataset):
                 'pas_null': pas_null,
                 'coref_exophor': coref_exo,
                 'coref_normal': coref_normal,
-                'coref_na': coref_na}
+                'coref_na': coref_na,
+                'n_all_tokens': n_all_tokens,
+                'n_input_tokens': n_input_tokens,
+                'n_unk_tokens': n_unk_tokens,
+                }
 
     def __len__(self) -> int:
         return len(self.features)
