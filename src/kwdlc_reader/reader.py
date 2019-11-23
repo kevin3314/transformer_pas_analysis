@@ -56,8 +56,6 @@ class KWDLCReader:
                  ) -> None:
         if not (isinstance(source, Path) or isinstance(source, str)):
             raise TypeError(f'source must be Path or str type, but got {type(source)}')
-        if isinstance(source, str) and Path(source).exists():
-            source = Path(source)
         if isinstance(source, Path):
             if source.is_dir():
                 logger.info(f'got directory path, files in the directory is treated as source files')

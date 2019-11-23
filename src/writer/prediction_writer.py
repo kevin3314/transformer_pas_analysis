@@ -58,6 +58,8 @@ class PredictionKNPWriter:
                                      document.doc_id,
                                      document.target_cases,
                                      document.target_corefs,
+                                     document.relax_cases,
+                                     document.relax_corefs,
                                      extract_nes=False,
                                      use_pas_tag=False)
             documents_pred.append(document_pred)
