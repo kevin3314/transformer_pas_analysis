@@ -1,7 +1,7 @@
 import io
 import re
 from logging import Logger
-from typing import List, Optional, Dict, NamedTuple, Union
+from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 from pathlib import Path
 
 from pyknp import Tag
@@ -35,7 +35,7 @@ class PredictionKNPWriter:
 
     def write(self,
               arguments_sets: List[List[List[int]]],
-              destination: Union[Path, io.TextIOBase, None],
+              destination: Union[Path, TextIO, None],
               ) -> List[Document]:
         """Write final predictions to the file."""
 

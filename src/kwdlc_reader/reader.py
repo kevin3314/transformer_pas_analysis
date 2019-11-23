@@ -4,7 +4,7 @@ import copy
 import _pickle as cPickle
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Iterator, Union
+from typing import List, Dict, Optional, Iterator, Union, TextIO
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
@@ -56,6 +56,8 @@ class KWDLCReader:
                  ) -> None:
         if not (isinstance(source, Path) or isinstance(source, str)):
             raise TypeError(f'source must be Path or str type, but got {type(source)}')
+        if isinstance(source, str) and Path(source).exists():
+            source = Path(source)
         if isinstance(source, Path):
             if source.is_dir():
                 logger.info(f'got directory path, files in the directory is treated as source files')
@@ -577,16 +579,21 @@ class Document:
     def draw_tree(self,
                   sid: str,
                   coreference: bool,
-                  fh=None,
+                  fh: Optional[TextIO] = None,
                   ) -> None:
+        """sid で指定された文の述語項構造・共参照関係をツリー形式で fh に書き出す
+
+       Args:
+           sid (str): 出力対象の文ID
+           coreference (bool): 共参照関係も出力するかどうか
+           fh (Optional[TextIO]): 出力ストリーム
+        """
         sentence: BList = self[sid]
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
-        tag_list = sentence.tag_list()
-        assert len(tree_strings) == len(tag_list)
-        predicates: List[Predicate] = [p for p in self.get_predicates() if p.sid == sid]
-        for predicate in predicates:
+        assert len(tree_strings) == len(sentence.tag_list())
+        for predicate in filter(lambda p: p.sid == sid, self.get_predicates()):
             idx = predicate.tid
             arguments = self.get_arguments(predicate)
             tree_strings[idx] += '  '
@@ -596,7 +603,7 @@ class Document:
                 tree_strings[idx] += f'{arg}:{case} '
 
         if coreference:
-            for src_mention in self.mentions.values():
+            for src_mention in filter(lambda m: m.sid == sid, self.mentions.values()):
                 tgt_mentions = [tgt for tgt in self.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
                 if not tgt_mentions:
                     continue
