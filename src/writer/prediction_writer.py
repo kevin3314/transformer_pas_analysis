@@ -85,6 +85,7 @@ class PredictionKNPWriter:
                      gold_arguments_set: List[Dict[str, Optional[str]]],
                      document: Document,
                      ) -> List[str]:
+        self.dtid2cfid = {}
         dtid2tag: Dict[int, Tag] = {dtid: tag for tag, dtid in document.tag2dtid.items()}
         dtid = 0
         sent_idx = 0
@@ -218,8 +219,8 @@ class PredictionKNPWriter:
             if not line.startswith('+ '):
                 output_knp_lines.append(line.strip())
                 continue
-            if dtid in dtid2pas and dtid in self.dtid2cfid:
-                pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid[dtid], sid2index)
+            if dtid in dtid2pas:
+                pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid.get(dtid, 'dummy:dummy'), sid2index)
                 output_knp_lines.append(line + pas_string)
             else:
                 output_knp_lines.append(line)
