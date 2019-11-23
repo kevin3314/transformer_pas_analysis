@@ -47,29 +47,29 @@ class Scorer:
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
                 for n in '１２３４５６７８９':
                     self.relax_exophors[exophor + n] = exophor
-        # make sid2predicates_pred and sid2predicates_gold
-        self.sid2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.sid2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.sid2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
-        self.sid2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
+
+        self.did2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.did2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.did2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
+        self.did2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             for predicate_pred in document_pred.get_predicates():
                 if self._process(predicate_pred.sid, doc_id):
-                    self.sid2predicates_pred[predicate_pred.sid].append(predicate_pred)
+                    self.did2predicates_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
                 if '用言' in predicate_gold.tag.features \
                         and self._process(predicate_gold.sid, doc_id):
-                    self.sid2predicates_gold[predicate_gold.sid].append(predicate_gold)
+                    self.did2predicates_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
                 if self._process(mention_pred.sid, doc_id):
-                    self.sid2mentions_pred[mention_pred.sid].append(mention_pred)
+                    self.did2mentions_pred[doc_id].append(mention_pred)
             for mention_gold in document_gold.mentions.values():
                 if '体言' in mention_gold.tag.features \
                         and self._process(mention_gold.sid, doc_id):
-                    self.sid2mentions_gold[mention_gold.sid].append(mention_gold)
+                    self.did2mentions_gold[doc_id].append(mention_gold)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
@@ -87,15 +87,8 @@ class Scorer:
 
     def _evaluate_pas(self, doc_id: str, document_pred: Document, document_gold: Document):
         """calculate PAS analysis scores"""
-        dtid2pred_pred: Dict[int, Predicate] = {}
-        dtid2pred_gold: Dict[int, Predicate] = {}
-        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
-            if not self._process(sid, doc_id):
-                continue
-            for predicate in self.sid2predicates_pred[sid]:
-                dtid2pred_pred[predicate.dtid] = predicate
-            for predicate in self.sid2predicates_gold[sid]:
-                dtid2pred_gold[predicate.dtid] = predicate
+        dtid2pred_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2predicates_pred[doc_id]}
+        dtid2pred_gold: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2predicates_gold[doc_id]}
 
         # calculate precision
         for dtid, predicate_pred in dtid2pred_pred.items():
@@ -180,15 +173,8 @@ class Scorer:
         return isinstance(arg, Argument) and predicate.dtid < arg.dtid and arg.sid != predicate.sid
 
     def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
-        dtid2mention_pred: Dict[int, Mention] = {}
-        dtid2mention_gold: Dict[int, Mention] = {}
-        for sid in document_pred.sid2sentence.keys():  # gold と pred で sid は共通
-            if not self._process(sid, doc_id):
-                continue
-            for mention in self.sid2mentions_pred[sid]:
-                dtid2mention_pred[mention.dtid] = mention
-            for mention in self.sid2mentions_gold[sid]:
-                dtid2mention_gold[mention.dtid] = mention
+        dtid2mention_pred: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_pred[doc_id]}
+        dtid2mention_gold: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_gold[doc_id]}
 
         for dtid in range(len(document_pred.tag_list())):
             if dtid in dtid2mention_pred:
@@ -330,24 +316,22 @@ class Scorer:
                 # gold
                 writer.write('<td><pre>\n')
                 for sid in document_gold.sid2sentence.keys():
-                    if self._process(sid, doc_id):
-                        self._draw_tree(sid,
-                                        self.sid2predicates_gold[sid],
-                                        self.sid2mentions_gold[sid],
-                                        document_gold,
-                                        fh=writer)
-                        writer.write('\n')
+                    self._draw_tree(sid,
+                                    self.did2predicates_gold[doc_id],
+                                    self.did2mentions_gold[doc_id],
+                                    document_gold,
+                                    fh=writer)
+                    writer.write('\n')
                 writer.write('</pre>')
                 # prediction
                 writer.write('<td><pre>\n')
                 for sid in document_pred.sid2sentence.keys():
-                    if self._process(sid, doc_id):
-                        self._draw_tree(sid,
-                                        self.sid2predicates_pred[sid],
-                                        self.sid2mentions_pred[sid],
-                                        document_pred,
-                                        fh=writer)
-                        writer.write('\n')
+                    self._draw_tree(sid,
+                                    self.did2predicates_pred[doc_id],
+                                    self.did2mentions_pred[doc_id],
+                                    document_pred,
+                                    fh=writer)
+                    writer.write('\n')
                 writer.write('</pre>\n</tr>\n')
 
                 writer.write('</table>\n')
@@ -404,13 +388,10 @@ class Scorer:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(sentence.tag_list())
-        # current_document_predicates = document.get_predicates()
         for predicate in filter(lambda p: p.sid == sid, predicates):
-            # if predicate not in current_document_predicates:
-            #     continue
             idx = predicate.tid
-            arguments = document.get_arguments(predicate)
             tree_strings[idx] += '  '
+            arguments = document.get_arguments(predicate)
             for case in self.cases:
                 args = arguments[case]
                 if args:
@@ -438,14 +419,8 @@ class Scorer:
                 else:
                     tree_strings[idx] += f'{arg}:{case} '
         if self.coreference:
-            # current_document_mentions = document.mentions.values()
             for src_mention in filter(lambda m: m.sid == sid, mentions):
-                # if all(src_mention is not m for m in current_document_mentions):
-                #     continue
                 tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
-                # if not tgt_mentions:
-                #     continue
-                idx = src_mention.tid
                 targets = set()
                 for tgt_mention in tgt_mentions:
                     target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
@@ -460,7 +435,8 @@ class Scorer:
                     continue
                 result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
                 result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
-                tree_strings[idx] += '  =:'
+                idx = src_mention.tid
+                tree_strings[idx] += '  ＝:'
                 if html:
                     tree_strings[idx] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
                                          + ' '.join(targets) + '</span> '

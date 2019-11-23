@@ -608,8 +608,8 @@ class Document:
         assert len(tree_strings) == len(sentence.tag_list())
         for predicate in filter(lambda p: p.sid == sid, self.get_predicates()):
             idx = predicate.tid
-            arguments = self.get_arguments(predicate)
             tree_strings[idx] += '  '
+            arguments = self.get_arguments(predicate)
             for case in self.target_cases:
                 argument = arguments[case]
                 arg = argument[0].midasi if argument else 'NULL'
@@ -618,10 +618,6 @@ class Document:
         if coreference:
             for src_mention in filter(lambda m: m.sid == sid, self.mentions.values()):
                 tgt_mentions = [tgt for tgt in self.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
-                if not tgt_mentions:
-                    continue
-                idx = src_mention.tid
-                tree_strings[idx] += '  ＝:'
                 targets = set()
                 for tgt_mention in tgt_mentions:
                     target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
@@ -632,6 +628,10 @@ class Document:
                     entity = self.entities[eid]
                     if entity.is_special:
                         targets.add(entity.exophor)
+                if not targets:
+                    continue
+                idx = src_mention.tid
+                tree_strings[idx] += '  ＝:'
                 tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
