@@ -1,7 +1,7 @@
 import io
 import re
 from logging import Logger
-from typing import List, Optional, Dict, NamedTuple, Union
+from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 from pathlib import Path
 
 from pyknp import Tag
@@ -35,7 +35,7 @@ class PredictionKNPWriter:
 
     def write(self,
               arguments_sets: List[List[List[int]]],
-              destination: Union[Path, io.TextIOBase, None],
+              destination: Union[Path, TextIO, None],
               ) -> List[Document]:
         """Write final predictions to the file."""
 
@@ -58,6 +58,8 @@ class PredictionKNPWriter:
                                      document.doc_id,
                                      document.target_cases,
                                      document.target_corefs,
+                                     document.relax_cases,
+                                     document.relax_corefs,
                                      extract_nes=False,
                                      use_pas_tag=False)
             documents_pred.append(document_pred)
@@ -83,6 +85,7 @@ class PredictionKNPWriter:
                      gold_arguments_set: List[Dict[str, Optional[str]]],
                      document: Document,
                      ) -> List[str]:
+        self.dtid2cfid = {}
         dtid2tag: Dict[int, Tag] = {dtid: tag for tag, dtid in document.tag2dtid.items()}
         dtid = 0
         sent_idx = 0
@@ -216,8 +219,8 @@ class PredictionKNPWriter:
             if not line.startswith('+ '):
                 output_knp_lines.append(line.strip())
                 continue
-            if dtid in dtid2pas and dtid in self.dtid2cfid:
-                pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid[dtid], sid2index)
+            if dtid in dtid2pas:
+                pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid.get(dtid, 'dummy:dummy'), sid2index)
                 output_knp_lines.append(line + pas_string)
             else:
                 output_knp_lines.append(line)

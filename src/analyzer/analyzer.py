@@ -82,11 +82,8 @@ class Analyzer:
         dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
 
         with torch.no_grad():
-            input_ids, input_mask, arguments_ids, ng_token_mask, deps = dataset[0]
-            input_ids = torch.tensor(input_ids).to(self.device).unsqueeze(0)          # (1, seq)
-            input_mask = torch.tensor(input_mask).to(self.device).unsqueeze(0)        # (1, seq)
-            ng_token_mask = torch.tensor(ng_token_mask).to(self.device).unsqueeze(0)  # (1, seq, case, seq)
-            deps = torch.tensor(deps).to(self.device).unsqueeze(0)                    # (1, seq, seq)
+            batch = tuple(torch.tensor(t).to(self.device).unsqueeze(0) for t in dataset[0])
+            input_ids, input_mask, _, ng_token_mask, deps = batch
 
             output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (1, seq, case, seq)
             arguments_set = torch.argmax(output, dim=3)  # (1, seq, case)

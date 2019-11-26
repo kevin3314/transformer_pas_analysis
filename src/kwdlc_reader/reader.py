@@ -4,7 +4,7 @@ import copy
 import _pickle as cPickle
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Iterator, Union
+from typing import List, Dict, Optional, Iterator, Union, TextIO
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
@@ -33,11 +33,13 @@ class KWDLCReader:
     """ KWDLC(または Kyoto Corpus)の文書集合を扱うクラス
 
     Args:
-        source (Path or str): 入力ソース．Path オブジェクトを指定するとその場所のファイルを読む
-        target_cases (list): 抽出の対象とする格
-        target_corefs (list): 抽出の対象とする共参照関係(=など)
+        source (Union[Path, str]): 入力ソース．Path オブジェクトを指定するとその場所のファイルを読む
+        target_cases (Optional[List[str]]): 抽出の対象とする格
+        target_corefs (Optional[List[str]]): 抽出の対象とする共参照関係(=など)
+        relax_cases (bool): ガ≒格などをガ格として扱うか
+        relax_corefs (bool): 共参照関係 =≒ などを = として扱うか
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
-        knp_ext (str): KWDLC (or KC) ファイルの拡張子
+        knp_ext (str): KWDLC または KC ファイルの拡張子
         pickle_ext (str): Document を pickle 形式で読む場合の拡張子
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
     """
@@ -45,6 +47,8 @@ class KWDLCReader:
                  source: Union[Path, str],
                  target_cases: Optional[List[str]],
                  target_corefs: Optional[List[str]],
+                 relax_cases: bool = False,
+                 relax_corefs: bool = False,
                  extract_nes: bool = True,
                  use_pas_tag: bool = False,
                  knp_ext: str = '.knp',
@@ -66,6 +70,8 @@ class KWDLCReader:
 
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
+        self.relax_cases: bool = relax_cases
+        self.relax_corefs: bool = relax_corefs
         self.extract_nes: bool = extract_nes
         self.use_pas_tag: bool = use_pas_tag
         self.knp_ext: str = knp_ext
@@ -110,6 +116,8 @@ class KWDLCReader:
                         doc_id,
                         self.target_cases,
                         self.target_corefs,
+                        self.relax_cases,
+                        self.relax_corefs,
                         self.extract_nes,
                         self.use_pas_tag)
 
@@ -130,6 +138,8 @@ class Document:
         doc_id (str): 文書ID
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
+        relax_cases (bool): ガ≒格などをガ格として扱うか
+        relax_corefs (bool): 共参照関係 =≒ などを = として扱うか
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
 
@@ -152,6 +162,8 @@ class Document:
                  doc_id: str,
                  target_cases: List[str],
                  target_corefs: List[str],
+                 relax_cases: bool,
+                 relax_corefs: bool,
                  extract_nes: bool,
                  use_pas_tag: bool,
                  ) -> None:
@@ -159,6 +171,8 @@ class Document:
         self.doc_id = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
+        self.relax_cases: bool = relax_cases
+        self.relax_corefs: bool = relax_corefs
         self.extract_nes: bool = extract_nes
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
@@ -209,6 +223,9 @@ class Document:
                 continue
             pas = Pas(BasePhrase(tag, self.tag2dtid[tag], tag.pas.sid, self.mrph2dmid))
             for case, arguments in tag.pas.arguments.items():
+                if self.relax_cases:
+                    if case in ALL_CASES and case.endswith('≒'):
+                        case = case.rstrip('≒')  # ガ≒ -> ガ
                 for arg in arguments:
                     arg.midasi = mojimoji.han_to_zen(arg.midasi, ascii=False)  # 不特定:人1 -> 不特定:人１
                     # exophor
@@ -229,6 +246,12 @@ class Document:
         for tag in self.tag_list():
             rels = []
             for rel in self._extract_rel_tags(tag):
+                if self.relax_cases:
+                    if rel.atype in ALL_CASES and rel.atype.endswith('≒'):
+                        rel.atype = rel.atype.rstrip('≒')  # ガ≒ -> ガ
+                if self.relax_corefs:
+                    if rel.atype in ALL_COREFS and rel.atype.endswith('≒'):
+                        rel.atype = rel.atype.rstrip('≒')  # =構≒ -> =構
                 valid = True
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'{tag2sid[tag]:24}sentence: {rel.sid} not found in {self.doc_id}')
@@ -493,6 +516,11 @@ class Document:
 
     @property
     def sentences(self) -> List[BList]:
+        """文を構成する全文節列オブジェクト
+
+        Returns:
+            List[BList]
+        """
         return list(self.sid2sentence.values())
 
     def bnst_list(self) -> List[Bunsetsu]:
@@ -516,8 +544,18 @@ class Document:
     def get_arguments(self,
                       predicate: Predicate,
                       relax: bool = False,
-                      include_optional: bool = False,  # 「すぐに」などの修飾的な項も返すかどうか
+                      include_optional: bool = False,
                       ) -> Dict[str, List[BaseArgument]]:
+        """述語 predicate が持つ全ての項を返す
+
+        Args:
+            predicate (Predicate): 述語
+            relax (bool): coreference chain によってより多くの項を返すかどうか
+            include_optional (bool): 「すぐに」などの修飾的な項も返すかどうか
+
+        Returns:
+            Dict[str, List[BaseArgument]]: 格を key とする述語の項の辞書
+        """
         if predicate.dtid not in self._pas:
             return {}
         pas = copy.copy(self._pas[predicate.dtid])
@@ -554,31 +592,32 @@ class Document:
     def draw_tree(self,
                   sid: str,
                   coreference: bool,
-                  fh=None,
+                  fh: Optional[TextIO] = None,
                   ) -> None:
+        """sid で指定された文の述語項構造・共参照関係をツリー形式で fh に書き出す
+
+       Args:
+           sid (str): 出力対象の文ID
+           coreference (bool): 共参照関係も出力するかどうか
+           fh (Optional[TextIO]): 出力ストリーム
+        """
         sentence: BList = self[sid]
         with io.StringIO() as string:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
-        tag_list = sentence.tag_list()
-        assert len(tree_strings) == len(tag_list)
-        predicates: List[Predicate] = [p for p in self.get_predicates() if p.sid == sid]
-        for predicate in predicates:
+        assert len(tree_strings) == len(sentence.tag_list())
+        for predicate in filter(lambda p: p.sid == sid, self.get_predicates()):
             idx = predicate.tid
-            arguments = self.get_arguments(predicate)
             tree_strings[idx] += '  '
+            arguments = self.get_arguments(predicate)
             for case in self.target_cases:
                 argument = arguments[case]
                 arg = argument[0].midasi if argument else 'NULL'
                 tree_strings[idx] += f'{arg}:{case} '
 
         if coreference:
-            for src_mention in self.mentions.values():
+            for src_mention in filter(lambda m: m.sid == sid, self.mentions.values()):
                 tgt_mentions = [tgt for tgt in self.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
-                if not tgt_mentions:
-                    continue
-                idx = src_mention.tid
-                tree_strings[idx] += '  =:'
                 targets = set()
                 for tgt_mention in tgt_mentions:
                     target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
@@ -589,6 +628,10 @@ class Document:
                     entity = self.entities[eid]
                     if entity.is_special:
                         targets.add(entity.exophor)
+                if not targets:
+                    continue
+                idx = src_mention.tid
+                tree_strings[idx] += '  ＝:'
                 tree_strings[idx] += ' '.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
