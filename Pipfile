@@ -15,9 +15,9 @@ mojimoji = "*"
 flask = "*"
 tensorboard = "*"
 future = "*"
-torch = "==1.2.0"
-transformers = "*"
+transformers = "==2.1.1"
 pyknp = {editable = true,git = "https://github.com/ku-nlp/pyknp.git"}
+torch = "*"
 
 [requires]
 python_version = "3.6"
