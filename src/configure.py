@@ -13,9 +13,9 @@ class Config:
         for key, value in kwargs.items():
             self.config.update({key: value})
 
-    def dump(self, path: pathlib.Path) -> None:
-        path.mkdir(exist_ok=True, parents=True)
-        config_path = path / f'{self.config["name"]}.json'
+    def dump(self, config_dir: pathlib.Path, base_name: str) -> None:
+        config_dir.mkdir(exist_ok=True, parents=True)
+        config_path = config_dir / f'{base_name}.json'
         with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(config_path)
@@ -96,11 +96,11 @@ def main() -> None:
     corefs: List[str] = dataset_config['target_corefs']
 
     for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
-        name = f'{model}-{corpus}-{n_epoch}e'
-        name += '-coref' if args.coreference else ''
-        name += '-overt' if args.train_overt else ''
-        name += '-large' if args.use_bert_large else ''
-        name += f'-{args.additional_name}' if args.additional_name is not None else ''
+        config_dir = pathlib.Path(model) / corpus / f'{n_epoch}e'
+        base_name = 'large' if args.use_bert_large else 'base'
+        base_name += '-coref' if args.coreference else ''
+        base_name += '-overt' if args.train_overt else ''
+        base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
@@ -241,7 +241,7 @@ def main() -> None:
         }
 
         config = Config(
-            name=name,
+            name=str(config_dir / base_name).replace('/', '-'),
             n_gpu=n_gpu,
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
@@ -259,8 +259,7 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config_path = pathlib.Path(args.config) / model / corpus
-        config.dump(config_path)
+        config.dump(args.config / config_dir, base_name)
 
 
 if __name__ == '__main__':
