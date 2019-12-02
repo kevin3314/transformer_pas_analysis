@@ -27,14 +27,12 @@ def main(config: ConfigParser):
 
     # setup data_loader instances
     if config['train_kwdlc_dataset']['args']['path'] is not None:
-        train_kwdlc_dataset = config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger)
-        train_data_loader = config.init_obj('train_data_loader', module_loader, train_kwdlc_dataset)
+        train_dataset = config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger)
         if config['train_kc_dataset']['args']['path'] is not None:
-            train_kc_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
-            train_data_loader.add(train_kc_dataset)
+            train_dataset += config.init_obj('train_kc_dataset', module_dataset, logger=logger)
     else:
-        train_kc_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
-        train_data_loader = config.init_obj('train_data_loader', module_loader, train_kc_dataset)
+        train_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
+    train_data_loader = config.init_obj('train_data_loader', module_loader, train_dataset)
     valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
     valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset)
     valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
