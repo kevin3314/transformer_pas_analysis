@@ -1,4 +1,5 @@
 import io
+import html
 import logging
 import textwrap
 import argparse
@@ -53,7 +54,7 @@ def api():
         "input": analyzer.sanitize_string(input_string),
         "output": [
             {'result': html_string},
-            {'results in a KNP format': knp_result.replace('\n', '<br>')}
+            {'results in a KNP format': html.escape(knp_result).replace('\n', '<br>')}
         ]
     }))
 
