@@ -1,6 +1,6 @@
 import os
 import socket
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple, Union, Optional
 import configparser
 from pathlib import Path
 from datetime import datetime
@@ -23,7 +23,7 @@ from utils.parse_config import ConfigParser
 class Analyzer:
     """Perform PAS analysis given a sentence."""
 
-    def __init__(self, model_path: str, device: str, logger, bertknp: bool = False, log_dir: str = 'log'):
+    def __init__(self, model_path: str, device: str, logger, bertknp: bool = False):
         cfg = configparser.ConfigParser()
         here = Path(__file__).parent
         cfg.read(here / 'config.ini')
@@ -37,8 +37,6 @@ class Analyzer:
         self.pos_map, self.pos_map_inv = self._read_pos_list(here / 'pos.list')
         self.logger = logger
         self.bertknp = bertknp
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(exist_ok=True)
 
         config_path = Path(model_path).parent / 'config.json'
         config = read_json(config_path)
@@ -66,7 +64,7 @@ class Analyzer:
             self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
         self.model.eval()
 
-    def analyze(self, source: Union[Path, str]) -> Tuple[list, PASDataset]:
+    def analyze(self, source: Union[Path, str], knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
         did2doc = {}
         if isinstance(source, Path):
             if source.is_dir():
@@ -79,11 +77,14 @@ class Analyzer:
         else:
             did2doc['doc'] = source
 
-        save_dir = self.log_dir / datetime.now().strftime(r'%m%d_%H%M%S')
-        save_dir.mkdir()
+        save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir.mkdir(exist_ok=True)
         for did, doc in tqdm(did2doc.items(), desc='applying knp'):
             sents = [self.sanitize_string(sent) for sent in ssplit(doc)]
             self.logger.info('input: ' + ''.join(sents))
+            if save_dir.joinpath(f'{did}.knp').exists():
+                self.logger.info(f'{did} skipped')
+                continue
             knp_out = ''
             for i, sent in enumerate(sents):
                 sent = self.sanitize_string(sent)
@@ -95,9 +96,9 @@ class Analyzer:
 
         return self._analysis(save_dir)
 
-    def analyze_from_knp(self, knp_out: str) -> Tuple[list, PASDataset]:
-        save_dir = self.log_dir / datetime.now().strftime(r'%m%d_%H%M%S')
-        save_dir.mkdir()
+    def analyze_from_knp(self, knp_out: str, knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
+        save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir.mkdir(exist_ok=True)
         with save_dir.joinpath('doc.knp').open(mode='wt') as f:
             f.write(knp_out)
         return self._analysis(save_dir)
