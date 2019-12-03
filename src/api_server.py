@@ -23,7 +23,7 @@ def api():
     prediction_writer = PredictionKNPWriter(dataset, logger)
     with io.StringIO() as string:
         document: Document = prediction_writer.write(arguments_set, string)[0]
-        knp_result = string.getvalue()
+        knp_result: str = string.getvalue()
 
     html_string = textwrap.dedent('''
         <style type="text/css">
@@ -53,7 +53,7 @@ def api():
         "input": analyzer.sanitize_string(input_string),
         "output": [
             {'result': html_string},
-            {'results in a KNP format': knp_result}
+            {'results in a KNP format': knp_result.replace('\n', '<br>')}
         ]
     }))
 
