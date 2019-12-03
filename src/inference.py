@@ -1,6 +1,8 @@
 import sys
 import logging
 import argparse
+from pathlib import Path
+from typing import List
 
 from writer.prediction_writer import PredictionKNPWriter
 from kwdlc_reader import Document
@@ -12,19 +14,24 @@ def main(args):
     analyzer = Analyzer(args.model, device=args.device, logger=logger, bertknp=args.use_bertknp)
 
     if args.input is not None:
-        input_string = args.input
+        source = args.input
+    elif args.target_dir is not None:
+        source = Path(args.target_dir)
     else:
-        input_string = ''.join(sys.stdin.readlines())
+        source = ''.join(sys.stdin.readlines())
 
-    arguments_set, dataset = analyzer.analyze(input_string)
+    arguments_set, dataset = analyzer.analyze(source)
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
+    destination = Path(args.export_dir) if args.export_dir is not None else sys.stdout
     if args.tab is True:
-        prediction_writer.write(arguments_set, sys.stdout)
+        prediction_writer.write(arguments_set, destination)
     else:
-        document_pred: Document = prediction_writer.write(arguments_set, None)[0]
-        for sid in document_pred.sid2sentence.keys():
-            document_pred.draw_tree(sid, dataset.coreference, sys.stdout)
+        documents_pred: List[Document] = prediction_writer.write(arguments_set, destination)
+        for document_pred in documents_pred:
+            for sid in document_pred.sid2sentence.keys():
+                document_pred.draw_tree(sid, dataset.coreference, sys.stdout)
+            print()
 
 
 if __name__ == '__main__':
@@ -36,6 +43,10 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('--input', default=None, type=str,
                         help='sentences to analysis (if not specified, use stdin)')
+    parser.add_argument('--target-dir', default=None, type=str,
+                        help='if you want to analyze some documents at once, specify the directory path here')
+    parser.add_argument('--export-dir', default=None, type=str,
+                        help='directory where analysis result is exported')
     parser.add_argument('-tab', action='store_true', default=False,
                         help='whether to output details')
     parser.add_argument('--use-bertknp', action='store_true', default=False,

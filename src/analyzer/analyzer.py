@@ -1,16 +1,20 @@
 import os
 import socket
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 import configparser
 from pathlib import Path
+from datetime import datetime
 
 import torch
 from mojimoji import han_to_zen
 from pyknp import Juman, KNP
 from transformers import BertConfig
+from textformatting import ssplit
+from tqdm import tqdm
 
 import model.model as module_arch
 import data_loader.dataset as module_dataset
+import data_loader.data_loaders as module_loader
 from data_loader.dataset import PASDataset
 from utils import read_json, prepare_device
 from utils.parse_config import ConfigParser
@@ -19,7 +23,7 @@ from utils.parse_config import ConfigParser
 class Analyzer:
     """Perform PAS analysis given a sentence."""
 
-    def __init__(self, model_path: str, device: str, logger, bertknp: bool = False):
+    def __init__(self, model_path: str, device: str, logger, bertknp: bool = False, log_dir: str = 'log'):
         cfg = configparser.ConfigParser()
         here = Path(__file__).parent
         cfg.read(here / 'config.ini')
@@ -33,6 +37,8 @@ class Analyzer:
         self.pos_map, self.pos_map_inv = self._read_pos_list(here / 'pos.list')
         self.logger = logger
         self.bertknp = bertknp
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(exist_ok=True)
 
         config_path = Path(model_path).parent / 'config.json'
         config = read_json(config_path)
@@ -60,33 +66,55 @@ class Analyzer:
             self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
         self.model.eval()
 
-    def analyze(self, doc: str) -> Tuple[list, PASDataset]:
-        doc = self.sanitize_string(doc)
-        sents = self.split_document(doc)
-        self.logger.info('input: ' + ''.join(sents))
-        knp_out = ''
-        for i, sent in enumerate(sents):
-            knp_out_ = self._apply_knp(sent)
-            knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
-            knp_out += knp_out_
+    def analyze(self, source: Union[Path, str]) -> Tuple[list, PASDataset]:
+        did2doc = {}
+        if isinstance(source, Path):
+            if source.is_dir():
+                for path in source.glob('*.*'):
+                    with path.open() as f:
+                        did2doc[path.stem] = f.read()
+            else:
+                with source.open() as f:
+                    did2doc[source.stem] = f.read()
+        else:
+            did2doc['doc'] = source
 
-        return self._analysis(knp_out)
+        save_dir = self.log_dir / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir.mkdir()
+        for did, doc in tqdm(did2doc.items(), desc='applying knp'):
+            sents = [self.sanitize_string(sent) for sent in ssplit(doc)]
+            self.logger.info('input: ' + ''.join(sents))
+            knp_out = ''
+            for i, sent in enumerate(sents):
+                sent = self.sanitize_string(sent)
+                knp_out_ = self._apply_knp(sent)
+                knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
+                knp_out += knp_out_
+            with save_dir.joinpath(f'{did}.knp').open(mode='wt') as f:
+                f.write(knp_out)
 
-    def analyze_from_knp(self, knp_out) -> Tuple[list, PASDataset]:
-        return self._analysis(knp_out)
+        return self._analysis(save_dir)
 
-    def _analysis(self, knp_string) -> Tuple[list, PASDataset]:
+    def analyze_from_knp(self, knp_out: str) -> Tuple[list, PASDataset]:
+        save_dir = self.log_dir / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir.mkdir()
+        with save_dir.joinpath('doc.knp').open(mode='wt') as f:
+            f.write(knp_out)
+        return self._analysis(save_dir)
+
+    def _analysis(self, path: Path) -> Tuple[list, PASDataset]:
         dataset_config: dict = self.config['test_kwdlc_dataset']['args']
-        dataset_config['path'] = None
-        dataset_config['knp_string'] = knp_string
+        dataset_config['path'] = str(path)
         dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
+        data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
 
         with torch.no_grad():
-            batch = tuple(torch.tensor(t).to(self.device).unsqueeze(0) for t in dataset[0])
-            input_ids, input_mask, _, ng_token_mask, deps = batch
+            for batch_idx, batch in enumerate(tqdm(data_loader, desc='PAS analysis')):
+                batch = tuple(t.to(self.device) for t in batch)
+                input_ids, input_mask, _, ng_token_mask, deps = batch
 
-            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (1, seq, case, seq)
-            arguments_set = torch.argmax(output, dim=3)  # (1, seq, case)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
 
         return arguments_set.tolist(), dataset
 
@@ -254,7 +282,3 @@ class Analyzer:
         string = ''.join(string.split())  # remove space character
         string = han_to_zen(string)
         return string
-
-    @staticmethod
-    def split_document(doc: str):
-        return [s.strip() + '。' for s in doc.rstrip('。').split('。')]
