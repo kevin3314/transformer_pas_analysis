@@ -1,6 +1,6 @@
 import os
 import socket
-from typing import Dict, Tuple, Union, Optional
+from typing import Dict, Tuple, Union, Optional, List
 import configparser
 from pathlib import Path
 from datetime import datetime
@@ -109,6 +109,7 @@ class Analyzer:
         dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
         data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
 
+        arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(data_loader, desc='PAS analysis')):
                 batch = tuple(t.to(self.device) for t in batch)
@@ -116,8 +117,9 @@ class Analyzer:
 
                 output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
                 arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
+                arguments_sets += arguments_set.tolist()
 
-        return arguments_set.tolist(), dataset
+        return arguments_sets, dataset
 
     def _apply_jumanpp(self, inp: str) -> Tuple[str, str]:
         jumanpp = Juman(command=self.juman, option=self.juman_option)
