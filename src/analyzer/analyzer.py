@@ -113,10 +113,10 @@ class Analyzer:
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(data_loader, desc='PAS analysis')):
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, _, ng_token_mask, deps = batch
+                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
                 output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
-                arguments_set = torch.argmax(output, dim=3)  # (b, seq, case)
+                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
         return arguments_sets, dataset
