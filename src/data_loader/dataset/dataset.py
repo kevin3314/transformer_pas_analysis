@@ -78,7 +78,7 @@ class PASDataset(Dataset):
         self.documents = documents if not training else None
         self.examples = []
         self.features = []
-        for document in tqdm(documents, desc='processing documents...'):
+        for document in tqdm(documents, desc='processing documents'):
             example = read_example(document, exophors, coreference, kc)
             feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:
