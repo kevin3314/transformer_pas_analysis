@@ -15,12 +15,12 @@ def main(args):
 
     if args.input is not None:
         source = args.input
-    elif args.text_dir is not None:
-        source = Path(args.text_dir)
+    elif args.knp_dir is not None:
+        source = Path(args.knp_dir)
     else:
         source = ''.join(sys.stdin.readlines())
 
-    arguments_set, dataset = analyzer.analyze(source, knp_dir=args.knp_dir)
+    arguments_set, dataset = analyzer.analyze(source)
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
     destination = Path(args.export_dir) if args.export_dir is not None else sys.stdout
@@ -43,8 +43,6 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('--input', default=None, type=str,
                         help='sentences to analysis (if not specified, use stdin)')
-    parser.add_argument('--text-dir', default=None, type=str,
-                        help='if you want to analyze some documents at once, specify the directory path here')
     parser.add_argument('--knp-dir', default=None, type=str,
                         help='path to the directory where parsed documents are saved'
                              'in case parsed files exist here, KNP is skipped')

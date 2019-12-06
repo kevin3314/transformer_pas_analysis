@@ -65,33 +65,20 @@ class Analyzer:
         self.model.eval()
 
     def analyze(self, source: Union[Path, str], knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
-        did2doc = {}
         if isinstance(source, Path):
-            if source.is_dir():
-                for path in source.glob('*.*'):
-                    with path.open() as f:
-                        did2doc[path.stem] = f.read()
-            else:
-                with source.open() as f:
-                    did2doc[source.stem] = f.read()
+            self.logger.info(f'read knp files from {source}')
+            save_dir = source
         else:
-            did2doc['doc'] = source
-
-        save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
-        save_dir.mkdir(exist_ok=True)
-        for did, doc in tqdm(did2doc.items(), desc='applying knp'):
-            sents = [self.sanitize_string(sent) for sent in ssplit(doc)]
+            save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+            save_dir.mkdir(exist_ok=True)
+            sents = [self.sanitize_string(sent) for sent in ssplit(source)]
             self.logger.info('input: ' + ''.join(sents))
-            if save_dir.joinpath(f'{did}.knp').exists():
-                self.logger.info(f'{did} skipped')
-                continue
             knp_out = ''
             for i, sent in enumerate(sents):
-                sent = self.sanitize_string(sent)
                 knp_out_ = self._apply_knp(sent)
                 knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
                 knp_out += knp_out_
-            with save_dir.joinpath(f'{did}.knp').open(mode='wt') as f:
+            with save_dir.joinpath(f'doc.knp').open(mode='wt') as f:
                 f.write(knp_out)
 
         return self._analysis(save_dir)
