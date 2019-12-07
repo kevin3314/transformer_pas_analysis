@@ -92,7 +92,7 @@ def main() -> None:
     cases: List[str] = dataset_config['target_cases']
     corefs: List[str] = dataset_config['target_corefs']
 
-    for model, corpus, n_epoch in itertools.product(args.models, args.corpus_list, args.epochs):
+    for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         config_dir = pathlib.Path(model) / corpus / f'{n_epoch}e'
         base_name = 'large' if args.use_bert_large else 'base'
         base_name += '-coref' if args.coreference else ''
