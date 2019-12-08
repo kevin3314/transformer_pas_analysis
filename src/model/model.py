@@ -249,7 +249,7 @@ class CaseInteractionModel(BaseModel):
         # head selection [Zhang+ 16]
         self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
         self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.v_a = nn.Linear(bert_hidden_size + num_case, 1, bias=False)
+        self.v_a = nn.Linear(bert_hidden_size + self.num_case, 1, bias=False)
 
         self.ref = nn.Linear(bert_hidden_size, 1)
 
