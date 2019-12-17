@@ -57,6 +57,12 @@ If you specify the config file, the setting is overwritten.
 python src/scorer.py --prediction-dir <system-output-directory> --gold-dir <gold-directory> --read-prediction-from-pas-tag
 ```
 
+## Analyze Your Own data
+
+```zsh
+python src/inference.py -r <path-to-trained-model> --input "太郎はパンを買って食べた。" -tab -d <gpu-ids>
+```
+
 ## Dataset
 
 - /mnt/hinoki/ueda/kwdlc/new
