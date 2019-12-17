@@ -56,7 +56,8 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             for predicate_pred in document_pred.get_predicates():
-                if self._process(predicate_pred.sid, doc_id):
+                if '用言' in predicate_pred.tag.features \
+                        and self._process(predicate_pred.sid, doc_id):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
                 if '用言' in predicate_gold.tag.features \
@@ -64,7 +65,8 @@ class Scorer:
                     self.did2predicates_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
-                if self._process(mention_pred.sid, doc_id):
+                if '体言' in mention_pred.tag.features \
+                        and self._process(mention_pred.sid, doc_id):
                     self.did2mentions_pred[doc_id].append(mention_pred)
             for mention_gold in document_gold.mentions.values():
                 if '体言' in mention_gold.tag.features \
