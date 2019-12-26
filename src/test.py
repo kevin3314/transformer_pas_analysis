@@ -106,7 +106,7 @@ def main(config, args):
     if config[f'{args.target}_kwdlc_dataset']['args']['path'] is not None:
         kwdlc_dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
         kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kwdlc_dataset)
-        expanded_vocab_size = kwdlc_data_loader.expanded_vocab_size
+        expanded_vocab_size = kwdlc_dataset.expanded_vocab_size
     if config[f'{args.target}_kc_dataset']['args']['path'] is not None:
         kc_dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
         kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kc_dataset)
