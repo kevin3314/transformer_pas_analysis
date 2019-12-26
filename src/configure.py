@@ -13,9 +13,9 @@ class Config:
         for key, value in kwargs.items():
             self.config.update({key: value})
 
-    def dump(self, path: pathlib.Path) -> None:
-        path.mkdir(exist_ok=True, parents=True)
-        config_path = path / f'{self.config["name"]}.json'
+    def dump(self, config_dir: pathlib.Path, base_name: str) -> None:
+        config_dir.mkdir(exist_ok=True, parents=True)
+        config_path = config_dir / f'{base_name}.json'
         with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(config_path)
@@ -36,7 +36,7 @@ class Path:
 
 def main() -> None:
     all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel']
+                  'CaseInteractionModel', 'CaseInteractionModel2', 'CaseInteractionModel3']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
@@ -55,7 +55,7 @@ def main() -> None:
                         help='Perform coreference resolution.')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
-    parser.add_argument('--dropout', type=float, default=0.0, nargs='*',
+    parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
@@ -85,9 +85,6 @@ def main() -> None:
     args = parser.parse_args()
 
     bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
-    models: List[str] = args.model if type(args.model) == list else [args.model]
-    corpus_list: List[str] = args.corpus if type(args.corpus) == list else [args.corpus]
-    epochs: List[int] = args.epoch if type(args.epoch) == list else [args.epoch]
     n_gpu: int = args.gpus
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
@@ -95,17 +92,17 @@ def main() -> None:
     cases: List[str] = dataset_config['target_cases']
     corefs: List[str] = dataset_config['target_corefs']
 
-    for model, corpus, n_epoch in itertools.product(models, corpus_list, epochs):
-        name = f'{model}-{corpus}-{n_epoch}e'
-        name += '-coref' if args.coreference else ''
-        name += '-overt' if args.train_overt else ''
-        name += '-large' if args.use_bert_large else ''
-        name += f'-{args.additional_name}' if args.additional_name is not None else ''
+    for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
+        config_dir = pathlib.Path(model) / corpus / f'{n_epoch}e'
+        base_name = 'large' if args.use_bert_large else 'base'
+        base_name += '-coref' if args.coreference else ''
+        base_name += '-overt' if args.train_overt else ''
+        base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
-        num_train_examples = 0
         glob_pat = '*.' + dataset_config['pickle_ext']
+        num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
             num_train_examples += sum(1 for _ in train_kwdlc_dir.glob(glob_pat))
         if corpus in ('kc', 'all'):
@@ -241,7 +238,7 @@ def main() -> None:
         }
 
         config = Config(
-            name=name,
+            name=str(config_dir / base_name).replace('/', '-'),
             n_gpu=n_gpu,
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
@@ -259,8 +256,7 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config_path = pathlib.Path(args.config) / model / corpus
-        config.dump(config_path)
+        config.dump(args.config / config_dir, base_name)
 
 
 if __name__ == '__main__':

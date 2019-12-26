@@ -1,16 +1,20 @@
 import os
 import socket
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union, Optional, List
 import configparser
 from pathlib import Path
+from datetime import datetime
 
 import torch
 from mojimoji import han_to_zen
 from pyknp import Juman, KNP
 from transformers import BertConfig
+from textformatting import ssplit
+from tqdm import tqdm
 
 import model.model as module_arch
 import data_loader.dataset as module_dataset
+import data_loader.data_loaders as module_loader
 from data_loader.dataset import PASDataset
 from utils import read_json, prepare_device
 from utils.parse_config import ConfigParser
@@ -60,35 +64,49 @@ class Analyzer:
             self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
         self.model.eval()
 
-    def analyze(self, doc: str) -> Tuple[list, PASDataset]:
-        doc = self.sanitize_string(doc)
-        sents = self.split_document(doc)
-        self.logger.info('input: ' + ''.join(sents))
-        knp_out = ''
-        for i, sent in enumerate(sents):
-            knp_out_ = self._apply_knp(sent)
-            knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
-            knp_out += knp_out_
+    def analyze(self, source: Union[Path, str], knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
+        if isinstance(source, Path):
+            self.logger.info(f'read knp files from {source}')
+            save_dir = source
+        else:
+            save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+            save_dir.mkdir(exist_ok=True)
+            sents = [self.sanitize_string(sent) for sent in ssplit(source)]
+            self.logger.info('input: ' + ''.join(sents))
+            knp_out = ''
+            for i, sent in enumerate(sents):
+                knp_out_ = self._apply_knp(sent)
+                knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
+                knp_out += knp_out_
+            with save_dir.joinpath(f'doc.knp').open(mode='wt') as f:
+                f.write(knp_out)
 
-        return self._analysis(knp_out)
+        return self._analysis(save_dir)
 
-    def analyze_from_knp(self, knp_out) -> Tuple[list, PASDataset]:
-        return self._analysis(knp_out)
+    def analyze_from_knp(self, knp_out: str, knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
+        save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir.mkdir(exist_ok=True)
+        with save_dir.joinpath('doc.knp').open(mode='wt') as f:
+            f.write(knp_out)
+        return self._analysis(save_dir)
 
-    def _analysis(self, knp_string) -> Tuple[list, PASDataset]:
+    def _analysis(self, path: Path) -> Tuple[list, PASDataset]:
         dataset_config: dict = self.config['test_kwdlc_dataset']['args']
-        dataset_config['path'] = None
-        dataset_config['knp_string'] = knp_string
+        dataset_config['path'] = str(path)
         dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
+        data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
 
+        arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
-            batch = tuple(torch.tensor(t).to(self.device).unsqueeze(0) for t in dataset[0])
-            input_ids, input_mask, _, ng_token_mask, deps = batch
+            for batch_idx, batch in enumerate(tqdm(data_loader, desc='PAS analysis')):
+                batch = tuple(t.to(self.device) for t in batch)
+                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
-            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (1, seq, case, seq)
-            arguments_set = torch.argmax(output, dim=3)  # (1, seq, case)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_sets += arguments_set.tolist()
 
-        return arguments_set.tolist(), dataset
+        return arguments_sets, dataset
 
     def _apply_jumanpp(self, inp: str) -> Tuple[str, str]:
         jumanpp = Juman(command=self.juman, option=self.juman_option)
@@ -254,7 +272,3 @@ class Analyzer:
         string = ''.join(string.split())  # remove space character
         string = han_to_zen(string)
         return string
-
-    @staticmethod
-    def split_document(doc: str):
-        return [s.strip() + '。' for s in doc.rstrip('。').split('。')]

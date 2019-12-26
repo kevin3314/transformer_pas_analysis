@@ -181,6 +181,8 @@ class Document:
             buff.append(line)
             if line.strip() == 'EOS':
                 sentence = BList('\n'.join(buff) + '\n')
+                if sentence.sid in self.sid2sentence:
+                    logger.warning(f'{sentence.sid:24}duplicated sid found')
                 self.sid2sentence[sentence.sid] = sentence
                 buff = []
 
