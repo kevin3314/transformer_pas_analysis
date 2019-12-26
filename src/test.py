@@ -37,10 +37,12 @@ class Tester:
 
     def test(self):
         log = {}
-        test_log = self._test_epoch(self.kwdlc_data_loader, 'kwdlc')
-        log.update(**{f'{self.target}_kwdlc_{k}': v for k, v in test_log.items()})
-        test_log = self._test_epoch(self.kc_data_loader, 'kc')
-        log.update(**{f'{self.target}_kc_{k}': v for k, v in test_log.items()})
+        if self.kwdlc_data_loader is not None:
+            test_log = self._test_epoch(self.kwdlc_data_loader, 'kwdlc')
+            log.update(**{f'{self.target}_kwdlc_{k}': v for k, v in test_log.items()})
+        if self.kc_data_loader is not None:
+            test_log = self._test_epoch(self.kc_data_loader, 'kc')
+            log.update(**{f'{self.target}_kc_{k}': v for k, v in test_log.items()})
         return log
 
     def _load_model(self):
