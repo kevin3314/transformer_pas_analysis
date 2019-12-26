@@ -20,7 +20,7 @@ class PredictionKNPWriter:
                  logger: Logger,
                  use_gold_overt: bool = True,
                  ) -> None:
-        self.gold_arguments_sets: List[List[Dict[str, Optional[str]]]] = \
+        self.gold_arguments_sets: List[List[Dict[str, List[str]]]] = \
             [example.arguments_set for example in dataset.examples]
         self.all_features: List[InputFeatures] = dataset.features
         self.cases: List[str] = dataset.target_cases
@@ -82,7 +82,7 @@ class PredictionKNPWriter:
                      knp_string: str,
                      features: InputFeatures,
                      arguments_set: List[List[int]],
-                     gold_arguments_set: List[Dict[str, Optional[str]]],
+                     gold_arguments_set: List[Dict[str, List[str]]],
                      document: Document,
                      ) -> List[str]:
         self.dtid2cfid = {}
@@ -157,7 +157,7 @@ class PredictionKNPWriter:
     def _rel_string(self,
                     tag: Tag,
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
-                    gold_arguments_set: List[Dict[str, Optional[str]]],  # (mrph_len, cases)
+                    gold_arguments_set: List[Dict[str, List[str]]],  # (mrph_len, cases)
                     features: InputFeatures,
                     document: Document,
                     overt_dict: Dict[str, int],
@@ -172,16 +172,17 @@ class PredictionKNPWriter:
             token_index = features.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
             # {'ガ': '14', 'ヲ': '23%C', 'ニ': 'NULL', 'ガ２': 'NULL', '=': None}
-            gold_arguments: Dict[str, Optional[str]] = gold_arguments_set[dmid]
+            gold_arguments: Dict[str, List[str]] = gold_arguments_set[dmid]
             assert len(cases) == len(arguments)
             assert len(cases) == len(gold_arguments)
-            for (case, gold_argument), argument in zip(gold_arguments.items(), arguments):
-                # 助詞などの非解析対象形態素については gold_argument が None になっている
-                if gold_argument is None:
+            for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
+                # 助詞などの非解析対象形態素については gold_args が空になっている
+                if not gold_args:
                     continue
                 # overt(train/test)
-                if self.use_gold_overt and gold_argument.endswith('%C'):
-                    prediction_dmid = int(gold_argument[:-2])  # overt の場合のみ正解データをそのまま出力
+                if self.use_gold_overt and any(arg.endswith('%C') for arg in gold_args):
+                    # use gold data for overt case
+                    prediction_dmid = int([arg for arg in gold_args if arg.endswith('%C')][0][:-2])
                 # overt(inference)
                 elif self.use_gold_overt and case in overt_dict:
                     prediction_dmid = int(overt_dict[case])

@@ -3,15 +3,15 @@ import torch.nn.functional as F
 
 
 def cross_entropy_pas_loss(output: torch.Tensor,  # (b, seq, case, seq)
-                           target: torch.Tensor,  # (b, seq, case)
+                           target: torch.Tensor,  # (b, seq, case, seq)
                            *_
                            ) -> torch.Tensor:     # ()
-    sequence_length = output.size(3)
-    return F.cross_entropy(output.view(-1, sequence_length), target.view(-1), ignore_index=-1)
+    log_softmax = torch.log_softmax(output, dim=3)  # (b, seq, case, seq)
+    return torch.sum(-log_softmax * target)
 
 
 def cross_entropy_pas_dep_loss(output: torch.Tensor,  # (b, seq, case+1, seq)
-                               target: torch.Tensor,  # (b, seq, case)
+                               target: torch.Tensor,  # (b, seq, case)  # FIXME
                                dep: torch.Tensor,     # (b, seq, seq)
                                ) -> torch.Tensor:     # ()
     sequence_length = output.size(3)

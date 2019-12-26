@@ -11,7 +11,7 @@ class PasExample:
 
     def __init__(self,
                  words: List[str],
-                 arguments_set: List[Dict[str, Optional[str]]],
+                 arguments_set: List[Dict[str, List[str]]],
                  arg_candidates_set: List[List[int]],
                  ment_candidates_set: List[List[int]],
                  dtids: List[int],
@@ -72,22 +72,22 @@ def read_example(document: Document,
                 words.append(mrph.midasi)
                 dtids.append(document.tag2dtid[tag])
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
-                arguments = OrderedDict((case, None) for case in cases)
+                arguments = OrderedDict((case, []) for case in cases)
                 arg_candidates = ment_candidates = []
                 if '用言' in tag.features \
                         and mrph is target_mrph \
                         and process is True:
                     for case in cases:
                         dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
-                        arguments[case] = _get_arg(dmid, dmid2args, relax_exophors)
+                        arguments[case] = _get_args(dmid, dmid2args, relax_exophors)
                     arg_candidates = [x for x in head_dmids if x != dmid]
 
                 if coreference:
-                    arguments['='] = None
+                    arguments['='] = []
                     if '体言' in tag.features \
                             and mrph is target_mrph \
                             and process is True:
-                        arguments['='] = _get_mention(tag, document, relax_exophors)
+                        arguments['='] = _get_mentions(tag, document, relax_exophors)
                         ment_candidates = [x for x in head_dmids if x < dmid]
 
                 arguments_set.append(arguments)
@@ -98,10 +98,10 @@ def read_example(document: Document,
     return PasExample(words, arguments_set, arg_candidates_set, ment_candidates_set, dtids, ddeps, document.doc_id)
 
 
-def _get_arg(dmid: int,
-             dmid2args: Dict[int, List[BaseArgument]],
-             relax_exophors: Dict[str, str],
-             ) -> Optional[str]:
+def _get_args(dmid: int,
+              dmid2args: Dict[int, List[BaseArgument]],
+              relax_exophors: Dict[str, str],
+              ) -> List[str]:
     # filter out non-target exophors
     args = []
     for arg in dmid2args.get(dmid, []):
@@ -110,43 +110,50 @@ def _get_arg(dmid: int,
                 arg.exophor = relax_exophors[arg.exophor]
                 args.append(arg)
             elif arg.exophor == UNCERTAIN:
-                return None  # don't train uncertain argument
+                return []  # don't train uncertain argument
         else:
             args.append(arg)
     if not args:
-        return 'NULL'
-    arg: BaseArgument = args[0]  # use first argument now
-    if isinstance(arg, Argument):
-        if arg.dep_type == 'overt':
-            return f'{arg.dmid}%C'
+        return ['NULL']
+    arg_strings: List[str] = []
+    for arg in args:
+        if isinstance(arg, Argument):
+            if arg.dep_type == 'overt':
+                string = f'{arg.dmid}%C'
+            else:
+                string = str(arg.dmid)
+        # exophor
         else:
-            return str(arg.dmid)
-    # exophor
-    else:
-        return arg.midasi
+            string = arg.midasi
+        arg_strings.append(string)
+    return arg_strings
 
 
-def _get_mention(tag: Tag,
-                 document: Document,
-                 relax_exophors: Dict[str, str]
-                 ) -> Optional[str]:
+def _get_mentions(tag: Tag,
+                  document: Document,
+                  relax_exophors: Dict[str, str]
+                  ) -> List[str]:
+    ment_strings: List[str] = []
     dtid = document.tag2dtid[tag]
     if dtid in document.mentions:
-        mention = document.mentions[dtid]
-        tgt_mentions = document.get_siblings(mention)
+        src_mention = document.mentions[dtid]
+        tgt_mentions = document.get_siblings(src_mention)
         preceding_mentions = sorted([m for m in tgt_mentions if m.dtid < dtid], key=lambda m: m.dtid)
-        exophors = [document.entities[eid].exophor for eid in mention.eids
+        exophors = [document.entities[eid].exophor for eid in src_mention.eids
                     if document.entities[eid].is_special]
-        if preceding_mentions:
-            return str(preceding_mentions[-1].dmid)  # choose nearest preceding mention
-        elif exophors and exophors[0] in relax_exophors:  # if no preceding mention, use exophor as gold mention
-            return relax_exophors[exophors[0]]  # 不特定:人１ -> 不特定:人
+        for mention in preceding_mentions:
+            ment_strings.append(str(mention.dmid))
+        for exophor in exophors:
+            if exophor in relax_exophors:
+                ment_strings.append(relax_exophors[exophor])  # 不特定:人１ -> 不特定:人
+        if ment_strings:
+            return ment_strings
         elif tgt_mentions:
-            return None  # don't train cataphor
+            return []  # don't train cataphor
         else:
-            return 'NA'
+            return ['NA']
     else:
-        return 'NA'
+        return ['NA']
 
 
 def _get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
