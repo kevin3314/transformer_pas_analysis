@@ -7,7 +7,8 @@ def cross_entropy_pas_loss(output: torch.Tensor,  # (b, seq, case, seq)
                            *_
                            ) -> torch.Tensor:     # ()
     log_softmax = torch.log_softmax(output, dim=3)  # (b, seq, case, seq)
-    return torch.sum(-log_softmax * target)
+    eps = 1e-6
+    return torch.sum(-log_softmax * target) / (torch.sum(target) + eps)
 
 
 def cross_entropy_pas_dep_loss(output: torch.Tensor,  # (b, seq, case+1, seq)

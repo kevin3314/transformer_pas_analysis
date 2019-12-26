@@ -141,12 +141,12 @@ def main() -> None:
         train_kwdlc_dataset['args']['kc'] = False
 
         valid_kwdlc_dataset = copy.deepcopy(dataset)
-        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid')
+        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid') if corpus in ('kwdlc', 'all') else None
         valid_kwdlc_dataset['args']['training'] = False
         valid_kwdlc_dataset['args']['kc'] = False
 
         test_kwdlc_dataset = copy.deepcopy(dataset)
-        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test')
+        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test') if corpus in ('kwdlc', 'all') else None
         test_kwdlc_dataset['args']['training'] = False
         test_kwdlc_dataset['args']['kc'] = False
 
@@ -155,11 +155,11 @@ def main() -> None:
         train_kc_dataset['args']['kc'] = True
 
         valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
-        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid')
+        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid') if corpus in ('kc', 'all') else None
         valid_kc_dataset['args']['kc'] = True
 
         test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
-        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test')
+        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test') if corpus in ('kc', 'all') else None
         test_kc_dataset['args']['kc'] = True
 
         data_loader = {

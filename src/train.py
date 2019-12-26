@@ -33,13 +33,17 @@ def main(config: ConfigParser):
     else:
         train_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
     train_data_loader = config.init_obj('train_data_loader', module_loader, train_dataset)
-    valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
-    valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset)
-    valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
-    valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
+    valid_kwdlc_data_loader = None
+    valid_kc_data_loader = None
+    if config['valid_kwdlc_dataset']['args']['path'] is not None:
+        valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
+        valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
+    if config['valid_kc_dataset']['args']['path'] is not None:
+        valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
+        valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
 
     # build model architecture, then print to console
-    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=valid_kwdlc_dataset.expanded_vocab_size)
+    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=train_dataset.expanded_vocab_size)
     logger.info(model)
 
     # get function handles of loss and metrics
