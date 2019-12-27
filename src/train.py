@@ -16,10 +16,10 @@ from trainer import Trainer
 from base.base_model import BaseModel
 
 
-def main(config: ConfigParser):
-    torch.manual_seed(42)
-    random.seed(42)
-    np.random.seed(42)
+def main(config: ConfigParser, args: argparse.Namespace):
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
 
@@ -90,4 +90,4 @@ if __name__ == '__main__':
         CustomArgs(['--lr', '--learning_rate'], type=float, target='optimizer;args;lr'),
         CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
     ]
-    main(config=ConfigParser.from_parser(parser, options))
+    main(ConfigParser.from_parser(parser, options), parser.parse_args())
