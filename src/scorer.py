@@ -25,7 +25,8 @@ class Scorer:
                  kc: bool = False):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
-        self.cases: List[str] = documents_gold[0].target_cases
+        self.cases: List[str] = [c for c in documents_gold[0].target_cases if c != 'ノ']
+        self.bridging: bool = 'ノ' in documents_gold[0].target_cases
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}

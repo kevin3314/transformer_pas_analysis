@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict
 from collections import OrderedDict
 
 from pyknp import BList, Tag, Morpheme
@@ -41,10 +41,12 @@ def read_example(document: Document,
                  target_exophors: List[str],
                  coreference: bool,
                  kc: bool,
+                 eventive_noun: bool,
                  ) -> PasExample:
     process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
     last_sent = document.sentences[-1] if len(document) > 0 else None
-    cases = document.target_cases
+    cases = document.target_cases + ['='] if coreference else []
+    basic_cases = [c for c in document.target_cases if c != 'ノ']
     relax_exophors = {}
     for exophor in target_exophors:
         relax_exophors[exophor] = exophor
@@ -74,21 +76,23 @@ def read_example(document: Document,
                 ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
                 arguments = OrderedDict((case, []) for case in cases)
                 arg_candidates = ment_candidates = []
-                if '用言' in tag.features \
-                        and mrph is target_mrph \
-                        and process is True:
-                    for case in cases:
-                        dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
-                        arguments[case] = _get_args(dmid, dmid2args, relax_exophors)
-                    arg_candidates = [x for x in head_dmids if x != dmid]
+                if mrph is target_mrph and process is True:
+                    if '用言' in tag.features or (eventive_noun and '非用言格解析' in tag.features):
+                        for case in basic_cases:
+                            dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
+                            arguments[case] = _get_args(dmid, dmid2args, relax_exophors)
+                        arg_candidates = [x for x in head_dmids if x != dmid]
 
-                if coreference:
-                    arguments['='] = []
-                    if '体言' in tag.features \
-                            and mrph is target_mrph \
-                            and process is True:
-                        arguments['='] = _get_mentions(tag, document, relax_exophors)
-                        ment_candidates = [x for x in head_dmids if x < dmid]
+                    if 'ノ' in cases:
+                        if '体言' in tag.features:
+                            dmid2args = {dmid: arguments['ノ'] for dmid, arguments in dmid2arguments.items()}
+                            arguments['ノ'] = _get_args(dmid, dmid2args, relax_exophors)
+                        arg_candidates = [x for x in head_dmids if x != dmid]
+
+                    if coreference:
+                        if '体言' in tag.features:
+                            arguments['='] = _get_mentions(tag, document, relax_exophors)
+                            ment_candidates = [x for x in head_dmids if x < dmid]
 
                 arguments_set.append(arguments)
                 arg_candidates_set.append(arg_candidates)
@@ -102,6 +106,14 @@ def _get_args(dmid: int,
               dmid2args: Dict[int, List[BaseArgument]],
               relax_exophors: Dict[str, str],
               ) -> List[str]:
+    """述語の dmid と その項 dmid2args から、項の文字列を得る
+    返り値が空リストの場合、この項について loss は計算されない
+    overt: {dmid}%C
+    case: {dmid}%N
+    zero: {dmid}%O
+    exophor: {exophor}
+    no arg: NULL
+    """
     # filter out non-target exophors
     args = []
     for arg in dmid2args.get(dmid, []):
@@ -118,10 +130,14 @@ def _get_args(dmid: int,
     arg_strings: List[str] = []
     for arg in args:
         if isinstance(arg, Argument):
+            string = str(arg.dmid)
             if arg.dep_type == 'overt':
-                string = f'{arg.dmid}%C'
+                string += '%C'
+            elif arg.dep_type == 'dep':
+                string += '%N'
             else:
-                string = str(arg.dmid)
+                assert arg.dep_type in ('intra', 'inter')
+                string += '%O'
         # exophor
         else:
             string = arg.midasi

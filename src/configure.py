@@ -42,11 +42,11 @@ def main() -> None:
                         help='path to output directory')
     parser.add_argument('-d', '--dataset', type=str,
                         help='path to dataset directory')
-    parser.add_argument('--model', choices=all_models, default=all_models, nargs='*',
+    parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
-    parser.add_argument('--epoch', '-e', type=int, default=3, nargs='*',
+    parser.add_argument('-e', '--epoch', type=int, default=3, nargs='*',
                         help='number of training epochs')
-    parser.add_argument('--batch-size', '-b', type=int, default=32,
+    parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
@@ -80,8 +80,10 @@ def main() -> None:
                         help='whether to save trained model')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
                         help='corpus to use in training')
-    parser.add_argument('--train-overt', action='store_true', default=False,
-                        help='include overt arguments in training data')
+    parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
+                        help='dependency type to train')
+    parser.add_argument('--eventive-noun', action='store_true', default=False,
+                        help='analyze eventive noun as predicate')
     args = parser.parse_args()
 
     bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
@@ -96,7 +98,9 @@ def main() -> None:
         config_dir = pathlib.Path(model) / corpus / f'{n_epoch}e'
         base_name = 'large' if args.use_bert_large else 'base'
         base_name += '-coref' if args.coreference else ''
-        base_name += '-overt' if args.train_overt else ''
+        base_name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
+        base_name += '-nocase' if 'ノ' in cases else ''
+        base_name += '-noun' if args.eventive_noun else ''
         base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
@@ -130,7 +134,8 @@ def main() -> None:
                 'training': None,
                 'bert_model': bert_model,
                 'kc': None,
-                'train_overt': args.train_overt,
+                'train_target': args.train_target,
+                'eventive_noun': args.eventive_noun,
             },
         }
 

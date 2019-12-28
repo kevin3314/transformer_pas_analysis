@@ -49,9 +49,10 @@ class PASDataset(Dataset):
                  coreference: bool,
                  training: bool,
                  bert_model: str,
-                 kc: bool = False,
+                 kc: bool,
+                 train_target: List[str],
+                 eventive_noun: bool = False,
                  knp_string: Optional[str] = None,
-                 train_overt: bool = False,
                  logger=None,
                  ) -> None:
         if path is not None:
@@ -67,7 +68,10 @@ class PASDataset(Dataset):
         self.target_exophors = exophors
         self.coreference = coreference
         self.kc = kc
-        self.train_overt = train_overt
+        self.train_overt = 'overt' in train_target
+        self.train_case = 'case' in train_target
+        self.train_zero = 'zero' in train_target
+        # self.eventive_noun = eventive_noun
         self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
@@ -79,7 +83,11 @@ class PASDataset(Dataset):
         self.examples = []
         self.features = []
         for document in tqdm(documents, desc='processing documents'):
-            example = read_example(document, exophors, coreference, kc)
+            example = read_example(document,
+                                   target_exophors=exophors,
+                                   coreference=coreference,
+                                   kc=kc,
+                                   eventive_noun=eventive_noun)
             feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:
                 continue
@@ -210,25 +218,35 @@ class PASDataset(Dataset):
                 if not arg_strings:
                     continue
                 for arg_string in arg_strings:
-                    if arg_string in self.special_to_index:
-                        # special token
-                        arguments[i].append(self.special_to_index[arg_string])
-                    else:
-                        if arg_string.endswith('%C'):
-                            # overt
-                            if self.train_overt is False:
-                                continue
-                            arg_string = arg_string[:-2]
-                        if case == '=':
+                    if case == '=':
+                        # coreference (arg_string: 著者, 23, NA, ...)
+                        if arg_string in self.special_to_index:
+                            # special token
+                            arguments[i].append(self.special_to_index[arg_string])
+                        else:
+                            # normal
                             if int(arg_string) not in example.ment_candidates_set[orig_index]:
                                 self.logger.debug(f'mention: {arg_string} of {token} is not in candidates and ignored')
                                 continue
+                            arguments[i].append(orig_to_tok_index[int(arg_string)])
+                    else:
+                        # arg_string: 著者, 8%C, 15%O, NULL, ...
+                        if arg_string in self.special_to_index:
+                            # special token
+                            if self.train_zero is False:
+                                continue
+                            arguments[i].append(self.special_to_index[arg_string])
                         else:
+                            # normal
+                            if (arg_string.endswith('%C') and self.train_overt is False) or \
+                                    (arg_string.endswith('%N') and self.train_case is False) or \
+                                    (arg_string.endswith('%O') and self.train_zero is False):
+                                continue
+                            arg_string = arg_string[:-2]  # strip "%X"
                             if int(arg_string) not in example.arg_candidates_set[orig_index]:
                                 self.logger.debug(f'argument: {arg_string} of {token} is not in candidates and ignored')
                                 continue
-                        # normal
-                        arguments[i].append(orig_to_tok_index[int(arg_string)])
+                            arguments[i].append(orig_to_tok_index[int(arg_string)])
 
             arguments_set.append(arguments)
 
