@@ -130,7 +130,7 @@ class BaseTrainer:
             self.logger.info("Saving current best: model_best.pth ...")
             if best_path.exists():
                 best_path.unlink()
-            best_path.symlink_to(save_path)
+            best_path.resolve().symlink_to(save_path.resolve())
 
     def _resume_checkpoint(self, resume_path):
         """
