@@ -128,6 +128,8 @@ class BaseTrainer:
         if save_best:
             best_path = self.checkpoint_dir / 'model_best.pth'
             self.logger.info("Saving current best: model_best.pth ...")
+            if best_path.exists():
+                best_path.unlink()
             best_path.symlink_to(save_path)
 
     def _resume_checkpoint(self, resume_path):
