@@ -217,7 +217,7 @@ class Scorer:
                 assert len(antecedents_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                 antecedent_pred = antecedents_pred[0]
                 analysis = self.deptype2analysis[antecedent_pred.dep_type]
-                if antecedent_pred in antecedents_gold:
+                if antecedent_pred in antecedents_gold_relaxed:
                     self.comp_result[key] = analysis
                     self.measures['ノ'][analysis].correct += 1
                 else:
@@ -569,6 +569,10 @@ def main():
                         help='Special tokens. Separate by ",".')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
+    parser.add_argument('--coreference', action='store_true', default=False,
+                        help='evaluate coreference resolution')
+    parser.add_argument('--eval-eventive-noun', action='store_true', default=False,
+                        help='include eventive noun as predicate')
     args = parser.parse_args()
 
     reader_gold = KWDLCReader(
@@ -587,7 +591,11 @@ def main():
     documents_pred = list(reader_pred.process_all_documents())
     documents_gold = list(reader_gold.process_all_documents())
 
-    scorer = Scorer(documents_pred, documents_gold, target_exophors=args.exophors.split(','))
+    scorer = Scorer(documents_pred, documents_gold,
+                    target_exophors=args.exophors.split(','),
+                    coreference=args.coreference,
+                    kc=(len(documents_gold[0].doc_id.split('-')[-1]) == 2),
+                    eval_eventive_noun=args.eval_eventive_noun)
     if args.result_html:
         scorer.write_html(Path(args.result_html))
     if args.result_csv:

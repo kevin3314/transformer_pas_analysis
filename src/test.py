@@ -83,7 +83,8 @@ class Tester:
 
         scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
                         coreference=data_loader.dataset.coreference,
-                        kc=data_loader.dataset.kc)
+                        kc=data_loader.dataset.kc,
+                        eval_eventive_noun=False)
         if self.target != 'test':
             scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
         scorer.export_txt(self.config.save_dir / f'result_{self.target}_{label}.txt')
