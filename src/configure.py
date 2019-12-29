@@ -216,6 +216,13 @@ def main() -> None:
         ]
         if args.coreference:
             metrics.append('coreference_f1')
+        if 'ノ' in cases:
+            metrics += [
+                'bridging_anaphora_f1_inter',
+                'bridging_anaphora_f1_intra',
+                'bridging_anaphora_f1_exophora',
+                'bridging_anaphora_f1',
+            ]
 
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
         warmup_steps = t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps

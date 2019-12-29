@@ -52,3 +52,19 @@ def zero_anaphora_f1_exophora(result: dict):
 
 def coreference_f1(result: dict):
     return result['all_case']['coreference'].f1
+
+
+def bridging_anaphora_f1(result: dict):
+    return result['ノ']['zero_all'].f1
+
+
+def bridging_anaphora_f1_inter(result: dict):
+    return result['ノ']['zero_inter_sentential'].f1
+
+
+def bridging_anaphora_f1_intra(result: dict):
+    return result['ノ']['zero_intra_sentential'].f1
+
+
+def bridging_anaphora_f1_exophora(result: dict):
+    return result['ノ']['zero_exophora'].f1

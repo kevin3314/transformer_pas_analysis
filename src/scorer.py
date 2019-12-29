@@ -22,10 +22,11 @@ class Scorer:
                  documents_gold: List[Document],
                  target_exophors: List[str],
                  coreference: bool = True,
-                 kc: bool = False):
+                 kc: bool = False,
+                 eval_eventive_noun: bool = False):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
-        self.cases: List[str] = [c for c in documents_gold[0].target_cases if c != 'ノ']
+        self.cases: List[str] = documents_gold[0].target_cases
         self.bridging: bool = 'ノ' in documents_gold[0].target_cases
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
@@ -51,33 +52,43 @@ class Scorer:
 
         self.did2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.did2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.did2bridgings_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
+        self.did2bridgings_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
         self.did2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
         self.did2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             for predicate_pred in document_pred.get_predicates():
-                if '用言' in predicate_pred.tag.features \
-                        and self._process(predicate_pred.sid, doc_id):
+                if self._process(predicate_pred.sid, doc_id) is False:
+                    continue
+                if '用言' in predicate_pred.tag.features or \
+                        (eval_eventive_noun and '非用言格解析' in predicate_pred.tag.features):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
+                if '体言' in predicate_pred.tag.features:
+                    self.did2bridgings_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
-                if '用言' in predicate_gold.tag.features \
-                        and self._process(predicate_gold.sid, doc_id):
+                if self._process(predicate_gold.sid, doc_id) is False:
+                    continue
+                if '用言' in predicate_gold.tag.features or \
+                        (eval_eventive_noun and '非用言格解析' in predicate_gold.tag.features):
                     self.did2predicates_gold[doc_id].append(predicate_gold)
+                if '体言' in predicate_gold.tag.features:
+                    self.did2bridgings_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
-                if '体言' in mention_pred.tag.features \
-                        and self._process(mention_pred.sid, doc_id):
+                if '体言' in mention_pred.tag.features and self._process(mention_pred.sid, doc_id):
                     self.did2mentions_pred[doc_id].append(mention_pred)
             for mention_gold in document_gold.mentions.values():
-                if '体言' in mention_gold.tag.features \
-                        and self._process(mention_gold.sid, doc_id):
+                if '体言' in mention_gold.tag.features and self._process(mention_gold.sid, doc_id):
                     self.did2mentions_gold[doc_id].append(mention_gold)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             self._evaluate_pas(doc_id, document_pred, document_gold)
+            if self.bridging:
+                self._evaluate_bridging(doc_id, document_pred, document_gold)
             if self.coreference:
                 self._evaluate_coref(doc_id, document_pred, document_gold)
 
@@ -101,7 +112,7 @@ class Scorer:
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
             else:
                 predicate_gold = arguments_gold = None
-            for case in self.cases:
+            for case in [c for c in self.cases if c != 'ノ']:
                 if predicate_gold is not None:
                     args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
                 else:
@@ -131,7 +142,7 @@ class Scorer:
                 arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
             else:
                 arguments_pred = None
-            for case in self.cases:
+            for case in [c for c in self.cases if c != 'ノ']:
                 args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
                 assert len(args_pred) in (0, 1)
                 args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
@@ -174,6 +185,61 @@ class Scorer:
     @staticmethod
     def _is_inter_sentential_cataphor(arg: BaseArgument, predicate: Predicate):
         return isinstance(arg, Argument) and predicate.dtid < arg.dtid and arg.sid != predicate.sid
+
+    def _evaluate_bridging(self, doc_id: str, document_pred: Document, document_gold: Document):
+        dtid2anaphor_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_pred[doc_id]}
+        dtid2anaphor_gold: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_gold[doc_id]}
+
+        for dtid in range(len(document_pred.tag_list())):
+            if dtid in dtid2anaphor_pred:
+                anaphor_pred: Predicate = dtid2anaphor_pred[dtid]
+                antecedents_pred: List[BaseArgument] = self._filter_args(
+                    document_pred.get_arguments(anaphor_pred, relax=False)['ノ'],
+                    anaphor_pred, self.relax_exophors)
+            else:
+                antecedents_pred = []
+
+            if dtid in dtid2anaphor_gold:
+                anaphor_gold: Predicate = dtid2anaphor_gold[dtid]
+                antecedents_gold: List[BaseArgument] = self._filter_args(
+                    document_gold.get_arguments(anaphor_gold, relax=False)['ノ'],
+                    anaphor_gold, self.relax_exophors)
+                antecedents_gold_relaxed: List[BaseArgument] = self._filter_args(
+                    document_gold.get_arguments(anaphor_gold, relax=True)['ノ'],
+                    anaphor_gold, self.relax_exophors)
+            else:
+                antecedents_gold = antecedents_gold_relaxed = []
+
+            key = (doc_id, dtid, 'ノ')
+
+            # calculate precision
+            if antecedents_pred:
+                assert len(antecedents_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
+                antecedent_pred = antecedents_pred[0]
+                analysis = self.deptype2analysis[antecedent_pred.dep_type]
+                if antecedent_pred in antecedents_gold:
+                    self.comp_result[key] = analysis
+                    self.measures['ノ'][analysis].correct += 1
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measures['ノ'][analysis].denom_pred += 1
+
+            # calculate recall
+            if antecedents_gold:
+                correct = False
+                antecedent_gold = antecedents_gold[0]
+                for ant in antecedents_gold_relaxed:
+                    if ant in antecedents_pred:
+                        antecedent_gold = ant  # 予測されている先行詞を優先して正解の先行詞に採用
+                        correct = True
+                analysis = self.deptype2analysis[antecedent_gold.dep_type]
+                if correct is True:
+                    assert self.comp_result[key] == analysis
+                elif antecedents_pred:
+                    assert self.comp_result[key] == 'wrong'
+                else:
+                    self.comp_result[key] = 'wrong'
+                self.measures['ノ'][analysis].denom_gold += 1
 
     def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
         dtid2mention_pred: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_pred[doc_id]}
@@ -244,13 +310,15 @@ class Scorer:
             case_result = OrderedDefaultDict(lambda: Measure())
             for analysis, measure in measures.items():
                 case_result[analysis] = measure
-                all_case_result[analysis] += measure
+                if case != 'ノ':
+                    all_case_result[analysis] += measure
             case_result['zero_all'] = case_result['zero_intra_sentential'] + \
                                       case_result['zero_inter_sentential'] + \
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            all_case_result['zero_all'] += case_result['zero_all']
-            all_case_result['all'] += case_result['all']
+            if case != 'ノ':
+                all_case_result['zero_all'] += case_result['zero_all']
+                all_case_result['all'] += case_result['all']
             result[case] = case_result
         if self.coreference:
             all_case_result['coreference'] = self.measure_coref
