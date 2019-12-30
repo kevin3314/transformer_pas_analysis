@@ -1,8 +1,11 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 from transformers import BertModel
 
 from base import BaseModel
+from model.refinement.refinement_layer import RefinementLayer
 
 
 class BaselineModel(BaseModel):
@@ -52,6 +55,35 @@ class BaselineModel(BaseModel):
         g_logits += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
         return g_logits  # (b, seq, case, seq)
+
+
+class RefinementModel(BaseModel):
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.baseline_model = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
+        self.refinement_layer = RefinementLayer(bert_model, vocab_size, dropout, num_case, coreference)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, seq, case, seq)
+        # (b, seq, case, seq)
+        base_logits = self.baseline_model(input_ids, attention_mask, ng_token_mask, deps)
+        refinement_logits = self.refinement_layer(input_ids,
+                                                  attention_mask,
+                                                  ng_token_mask,
+                                                  base_logits.detach().softmax(dim=3))
+
+        return base_logits, base_logits + refinement_logits  # (b, seq, case, seq), (b, seq, case, seq)
 
 
 class DependencyModel(BaseModel):

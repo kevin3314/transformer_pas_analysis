@@ -36,7 +36,7 @@ class Path:
 
 def main() -> None:
     all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'CaseInteractionModel3']
+                  'CaseInteractionModel', 'CaseInteractionModel2', 'CaseInteractionModel3', 'RefinementModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')

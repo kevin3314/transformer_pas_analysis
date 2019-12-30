@@ -56,8 +56,8 @@ class Trainer(BaseTrainer):
             input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
-            loss = self.loss(output, arguments_ids, deps)
+            base_out, refined_out = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+            loss = self.loss(base_out, arguments_ids, deps) + self.loss(refined_out, arguments_ids, deps)
             loss.backward()
             self.optimizer.step()
 
@@ -109,13 +109,13 @@ class Trainer(BaseTrainer):
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
-                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                base_out, refined_out = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(refined_out, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
                 # computing loss, metrics on valid set
-                loss = self.loss(output, arguments_ids, deps)
+                loss = self.loss(base_out, arguments_ids, deps) + self.loss(refined_out, arguments_ids, deps)
                 total_val_loss += loss.item() * input_ids.size(0)
 
                 self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')

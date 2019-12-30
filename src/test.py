@@ -66,13 +66,13 @@ class Tester:
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
-                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                base_out, refined_out = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(refined_out, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
                 # computing loss on test set
-                loss = self.loss(output, arguments_ids, deps)
+                loss = self.loss(base_out, arguments_ids, deps) + self.loss(refined_out, arguments_ids, deps)
                 total_loss += loss.item() * input_ids.size(0)
 
         prediction_output_dir = self.config.save_dir / f'{self.target}_out_{label}'
