@@ -45,7 +45,7 @@ def read_example(document: Document,
                  ) -> PasExample:
     process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
     last_sent = document.sentences[-1] if len(document) > 0 else None
-    cases = document.target_cases + ['='] if coreference else []
+    cases = document.target_cases + (['='] if coreference else [])
     basic_cases = [c for c in document.target_cases if c != 'ノ']
     relax_exophors = {}
     for exophor in target_exophors:
