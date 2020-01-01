@@ -5,7 +5,57 @@ from transformers import BertModel
 from base import BaseModel
 
 
-class RefinementLayer(BaseModel):
+class RefinementLayer1(BaseModel):
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+        self.hidden_size = 256
+
+        self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
+        self.U_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
+
+        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
+                                         for _ in range(self.num_case)])
+        self.output = nn.Linear(self.hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                base_score: torch.Tensor,      # (b, seq, case, seq)
+                ) -> torch.Tensor:             # (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
+
+        h_p = self.W_prd(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
+        # (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.U_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
+
+        h_pa = h_p.unsqueeze(dim=2) + h_a.unsqueeze(dim=1)  # (b, seq, seq, case, hid)
+        base_score = base_score.transpose(2, 3).contiguous().unsqueeze(dim=3).expand(-1, -1, -1, self.num_case, -1)
+        h = torch.cat([h_pa, base_score], dim=4)  # (b, seq, seq case, hid+case)
+        h = torch.tanh(self.dropout(h))
+        h_mids = [layer(h[:, :, :, i, :]) for i, layer in enumerate(self.mid_layers)]  # [(b, seq, seq, hid)]
+        h_mid = torch.stack(h_mids, dim=3)  # (b, seq, seq, case, hid)
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
+        output = self.output(torch.tanh(self.dropout(h_mid))).squeeze(dim=4)
+
+        return output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+
+
+class RefinementLayer2(BaseModel):
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
@@ -23,45 +73,93 @@ class RefinementLayer(BaseModel):
         bert_hidden_size = self.bert.config.hidden_size
         self.hidden_size = 128
 
-        self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size)
+        self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
         self.U_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
 
-        self.case_layer = nn.Linear(self.hidden_size + self.num_case * self.hidden_size,
-                                    self.num_case * self.hidden_size)
+        # self.mid_layer = nn.Linear(self.num_case * self.hidden_size * (self.num_case + 2), self.hidden_size)
+        self.mid_layer = nn.Linear(self.hidden_size * (self.num_case + 2), self.hidden_size)
         self.output = nn.Linear(self.hidden_size, 1, bias=False)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 base_score: torch.Tensor,      # (b, seq, case, seq)
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
-        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, hid)
-        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        # (b, seq, case*hid) -> (b, seq, case, hid)
+        h_p = self.W_prd(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
+        # (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.U_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
 
-        h_a = h_a.view(batch_size, 1, sequence_len, self.num_case, self.hidden_size)  # (b, 1, seq, case, hid)
-        h_a = h_a.expand(-1, sequence_len, -1, -1, -1)  # (b, seq, seq, case, hid)
-        h_a = h_a.transpose(2, 3).contiguous()  # (b, seq, case, seq, hid)
-        weighted_a = h_a * base_score.unsqueeze(dim=4)  # (b, seq, case, seq, hid)
-        # -> (b, seq, seq, case, hid) -> (b, seq, seq, case*hid)
-        arg_rep = weighted_a.transpose(2, 3).contiguous().view(batch_size, sequence_len, sequence_len, -1)
+        h_a = h_a.unsqueeze(dim=1).expand(-1, sequence_len, -1, -1, -1)  # (b, seq, seq, case, hid)
+        # (b, seq, case, seq, hid) * (b, seq, case, seq, 1) -> (b, seq, case, seq, hid) -> (b, seq, case, hid)
+        weighted_sum = torch.sum(h_a.transpose(2, 3).contiguous() * base_score.unsqueeze(dim=4), dim=3)
+        # (b, seq, 1, 1, case*hid)
+        ref = weighted_sum.view(batch_size, sequence_len, 1, 1, self.num_case * self.hidden_size)
+        ref = ref.expand(-1, -1, sequence_len, self.num_case, -1)  # (b, seq, seq, case, case*hid)
 
-        pred_rep = h_p.unsqueeze(dim=2).expand(-1, -1, sequence_len, -1)  # (b, seq, seq, hid)
+        prd_rep = h_p.unsqueeze(dim=2).expand(-1, -1, sequence_len, -1, -1)  # (b, seq, seq, case, hid)
 
-        pas_rep = torch.cat([pred_rep, arg_rep], dim=3)  # (b, seq, seq, hid + case*hid)
-        h_case = self.case_layer(torch.tanh(self.dropout(pas_rep)))  # (b, seq, seq, case*hid)
-        # (b, seq, seq, case, hid)
-        h_case = h_case.view(batch_size, sequence_len, sequence_len, self.num_case, self.hidden_size)
-        output = self.output(torch.tanh(self.dropout(h_case))).squeeze(dim=4)  # (b, seq, seq, case)
+        h = torch.cat([prd_rep, h_a, ref], dim=4)  # (b, seq, seq, case, hid + hid + hid*case)
+        h_mid = self.mid_layer(torch.tanh(self.dropout(h)))  # (b, seq, seq, case, hid)
+        output = self.output(torch.tanh(self.dropout(h_mid))).squeeze(dim=4)  # (b, seq, seq, case)
 
-        output = output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+        return output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
-        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
 
-        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+class RefinementLayer3(BaseModel):
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
 
-        return output  # (b, seq, case, seq)
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+        self.hidden_size = 256
+
+        self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size)
+        self.U_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
+
+        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size * (self.num_case + 2), self.hidden_size)
+                                         for _ in range(self.num_case)])
+        self.output = nn.Linear(self.hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                base_score: torch.Tensor,      # (b, seq, case, seq)
+                ) -> torch.Tensor:             # (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
+
+        h_p = self.W_prd(self.dropout(sequence_output)).view(batch_size, sequence_len, 1, 1, self.hidden_size)
+        # (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.U_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
+
+        h_a = h_a.unsqueeze(dim=1).expand(-1, sequence_len, -1, -1, -1)  # (b, seq, seq, case, hid)
+        # (b, seq, case, seq, hid) * (b, seq, case, seq, 1) -> (b, seq, case, seq, hid) -> (b, seq, case, hid)
+        weighted_sum = torch.sum(h_a.transpose(2, 3).contiguous() * base_score.unsqueeze(dim=4), dim=3)
+        # (b, seq, 1, 1, case*hid)
+        ref = weighted_sum.view(batch_size, sequence_len, 1, 1, self.num_case * self.hidden_size)
+        ref = ref.expand(-1, -1, sequence_len, self.num_case, -1)  # (b, seq, seq, case, case*hid)
+
+        prd_rep = h_p.expand(-1, -1, sequence_len, self.num_case, -1)  # (b, seq, seq, case, hid)
+
+        h = torch.cat([prd_rep, h_a, ref], dim=4)  # (b, seq, seq, case, hid + hid + hid*case)
+        h = torch.tanh(self.dropout(h))
+        h_mids = [layer(h[:, :, :, i, :]) for i, layer in enumerate(self.mid_layers)]  # [(b, seq, seq, hid)]
+        h_mid = torch.stack(h_mids, dim=3)  # (b, seq, seq, case, hid)
+        output = self.output(torch.tanh(self.dropout(h_mid))).squeeze(dim=4)  # (b, seq, seq, case)
+
+        return output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
