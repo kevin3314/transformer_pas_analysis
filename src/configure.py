@@ -36,7 +36,7 @@ class Path:
 
 def main() -> None:
     all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'CaseInteractionModel3']
+                  'CaseInteractionModel', 'RefinementModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
@@ -76,6 +76,10 @@ def main() -> None:
                         help='number of gpus to use')
     parser.add_argument('--use-bert-large', action='store_true', default=False,
                         help='whether to use BERT_LARGE model')
+    parser.add_argument('--refinement-bert', choices=['base', 'large'], default='base',
+                        help='BERT model type used for refinement model')
+    parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
+                        help='refinement layer type for RefinementModel')
     parser.add_argument('--no-save-model', action='store_true', default=False,
                         help='whether to save trained model')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
@@ -101,6 +105,8 @@ def main() -> None:
         base_name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         base_name += '-nocase' if 'ノ' in cases else ''
         base_name += '-noun' if args.eventive_noun else ''
+        base_name += '-largeref' if args.refinement_bert == 'large' else ''
+        base_name += '-reftype' + str(args.refinement_type)
         base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
@@ -121,6 +127,10 @@ def main() -> None:
                 'coreference': args.coreference,
             },
         }
+        if model.startswith('RefinementModel'):
+            refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
+            arch['args'].update({'refinement_type': args.refinement_type,
+                                 'refinement_bert_model': refinement_bert_model})
 
         dataset = {
             'type': 'PASDataset',
@@ -196,6 +206,8 @@ def main() -> None:
 
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
+        elif model.startswith('RefinementModel'):
+            loss = 'multi_cross_entropy_pas_loss'
         else:
             loss = 'cross_entropy_pas_loss'
 

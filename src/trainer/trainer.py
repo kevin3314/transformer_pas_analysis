@@ -56,7 +56,7 @@ class Trainer(BaseTrainer):
             input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq) or tuple
             loss = self.loss(output, arguments_ids, deps)
             loss.backward()
             self.optimizer.step()
@@ -109,9 +109,10 @@ class Trainer(BaseTrainer):
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
-                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq) or tuple
+                scores = output if isinstance(output, torch.Tensor) else output[-1]
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(scores, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
                 # computing loss, metrics on valid set

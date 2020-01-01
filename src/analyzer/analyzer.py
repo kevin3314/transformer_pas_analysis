@@ -103,7 +103,8 @@ class Analyzer:
                 input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
                 output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                scores = output if isinstance(output, torch.Tensor) else output[-1]
+                arguments_set = torch.argmax(scores, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
         return arguments_sets, dataset
