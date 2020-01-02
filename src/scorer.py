@@ -334,9 +334,9 @@ class Scorer:
                 lines.append(f'{case}')
             for analysis, measure in measures.items():
                 lines.append(f'  {analysis}')
-                lines.append(f'    precision: {measure.precision:.3f} ({measure.correct}/{measure.denom_pred})')
-                lines.append(f'    recall   : {measure.recall:.3f} ({measure.correct}/{measure.denom_gold})')
-                lines.append(f'    F        : {measure.f1:.3f}')
+                lines.append(f'    precision: {measure.precision:.4f} ({measure.correct}/{measure.denom_pred})')
+                lines.append(f'    recall   : {measure.recall:.4f} ({measure.correct}/{measure.denom_gold})')
+                lines.append(f'    F        : {measure.f1:.4f}')
         text = '\n'.join(lines) + '\n'
 
         if isinstance(destination, str) or isinstance(destination, Path):
@@ -352,7 +352,7 @@ class Scorer:
         text += sep.join(result_dict['all_case'].keys()) + '\n'
         for case, measures in result_dict.items():
             text += f'{case}' + sep
-            text += sep.join(f'{measure.f1:.3}' for measure in measures.values())
+            text += sep.join(f'{measure.f1:.4}' for measure in measures.values())
             text += '\n'
 
         if isinstance(destination, str) or isinstance(destination, Path):
