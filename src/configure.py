@@ -105,8 +105,9 @@ def main() -> None:
         base_name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         base_name += '-nocase' if 'ノ' in cases else ''
         base_name += '-noun' if args.eventive_noun else ''
-        base_name += '-largeref' if args.refinement_bert == 'large' else ''
-        base_name += '-reftype' + str(args.refinement_type)
+        if model.startswith('RefinementModel'):
+            base_name += '-largeref' if args.refinement_bert == 'large' else ''
+            base_name += '-reftype' + str(args.refinement_type)
         base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
