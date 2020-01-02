@@ -148,4 +148,4 @@ if __name__ == '__main__':
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
 
-    main(ConfigParser.from_parser(parser, run_id=''), parser.parse_args())
+    main(ConfigParser.from_parser(parser, inherit_save_dir=True), parser.parse_args())

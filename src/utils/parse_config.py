@@ -10,7 +10,7 @@ from utils import read_json, write_json
 
 
 class ConfigParser:
-    def __init__(self, config, resume=None, modification=None, run_id=None):
+    def __init__(self, config, resume=None, modification=None, run_id=None, **kwargs):
         """
         class to parse configuration json file. Handles hyperparameters for training, initializations of modules,
         checkpoint saving and logging module.
@@ -35,7 +35,7 @@ class ConfigParser:
         # self._log_dir = save_dir / exper_name / run_id
 
         # make directory for saving checkpoints and log.
-        exist_ok = (run_id == '')
+        exist_ok = (run_id == '') or kwargs.get('inherit_save_dir', False)
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         # self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
 
@@ -66,6 +66,8 @@ class ConfigParser:
         if args.resume is not None:
             resume = Path(args.resume)
             cfg_fname = resume.parent / 'config.json'
+            if kwargs.get('inherit_save_dir', False):
+                kwargs['run_id'] = str(resume.parent.name)
         else:
             msg_no_cfg = "Configuration file need to be specified. Add '-c config.json', for example."
             assert args.config is not None, msg_no_cfg
