@@ -23,7 +23,7 @@ def main():
         loc: 平均 X bar
         scale: 標準偏差 s
         """
-        upper, lower = stats.t.interval(alpha=0.95,
+        lower, upper = stats.t.interval(alpha=0.95,
                                         df=n - 1,
                                         loc=items.mean(),
                                         scale=math.sqrt(items.var() / n))
