@@ -20,6 +20,7 @@ pyknp = {editable = true,git = "https://github.com/ku-nlp/pyknp.git"}
 torch = "*"
 textformatting = {editable = true,git = "https://github.com/ku-nlp/python-textformatting.git",ref = "master"}
 pandas = "*"
+scipy = "*"
 
 [requires]
 python_version = "3.6"
