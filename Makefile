@@ -1,7 +1,7 @@
 RESULT := # result/BaselineModel-kwdlc-4e-large-coref-cz
 CONFIG := # config/BaselineModel/kwdlc/4e/large-coref-cz.json
 GPUS := # 0,1
-TRAIN_ITER := 1  # number of train iteration with different random seed
+TRAIN_NUM := 1  # number of train iteration with different random seed
 
 CORPUS := kwdlc
 TARGET := test
@@ -10,19 +10,21 @@ CSV_BASENAME := result_$(TARGET)_$(CORPUS).csv
 SHELL = /bin/bash -eu
 PYTHON := $(shell which python)
 
-CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
-RESULT_FILES := $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/$(CSV_BASENAME),$(CHECKPOINTS))
+ifdef CONFIG
+	RESULT := result/$(subst /,-,$(patsubst config/%.json,%,$(CONFIG)))
+endif
+
+CHECKPOINTS = $(wildcard $(RESULT)/*/model_best.pth)
+NUM_TRAINED := $(words $(CHECKPOINTS))
+RESULT_FILES = $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/$(CSV_BASENAME),$(CHECKPOINTS))
 SCORE_FILE := $(RESULT)/scores_$(TARGET)_$(CORPUS).csv
 
 .PHONY: all train test help
 all: train test
 
-ifdef CONFIG
-	RESULT := result/$(subst /,-,$(patsubst config/%.json,%,$(CONFIG)))
-endif
-
+N := $(shell expr $(TRAIN_NUM) - $(NUM_TRAINED))
 train:
-	env n=$(TRAIN_ITER) gpu=$(GPUS) scripts/train.sh $(CONFIG)
+	env n=$(N) gpu=$(GPUS) scripts/train.sh $(CONFIG)
 
 test: $(SCORE_FILE)
 	$(PYTHON) scripts/confidence_interval.py $^
@@ -35,6 +37,6 @@ $(RESULT_FILES): $(RESULT)/%/$(CSV_BASENAME): $(RESULT)/%/model_best.pth
 
 help:
 	@echo example:
-	@echo make train CONFIG=config/BaselineModel/kwdlc/4e/large-coref-cz.json GPUS=0,1 TRAIN_ITER=5
+	@echo make train CONFIG=config/BaselineModel/kwdlc/4e/large-coref-cz.json GPUS=0,1 TRAIN_NUM=5
 	@echo make test RESULT=result/BaselineModel-kwdlc-4e-large-coref-cz GPU=0
-	@echo make all CONFIG=config/BaselineModel/kwdlc/4e/large-coref-cz.json GPUS=0,1 TRAIN_ITER=5
+	@echo make all CONFIG=config/BaselineModel/kwdlc/4e/large-coref-cz.json GPUS=0,1 TRAIN_NUM=5
