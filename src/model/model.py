@@ -123,13 +123,13 @@ class RefinementTwiceModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:  # [(b, seq, case, seq)]
+                ) -> Tuple[torch.Tensor, torch.Tensor]:  # [(b, seq, case, seq)]
         # (b, seq, case, seq)
         base_logits = self.baseline_model(input_ids, attention_mask, ng_token_mask, deps)
         modification = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
-        refined_logits = base_logits + modification
-        modification = self.refinement_layer(input_ids, attention_mask, refined_logits.detach().softmax(dim=3))
-        refined_logits2 = refined_logits + modification
+        refined_logits = base_logits.detach() + modification
+        # modification = self.refinement_layer(input_ids, attention_mask, refined_logits.detach().softmax(dim=3))
+        # refined_logits2 = refined_logits + modification
 
         # refinement_logits を直接出力するときは mask を忘れずに
         # extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
@@ -137,7 +137,7 @@ class RefinementTwiceModel(BaseModel):
         #
         # output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        return base_logits, refined_logits, refined_logits2  # [(b, seq, case, seq)]
+        return base_logits, refined_logits  # [(b, seq, case, seq)]
 
 
 class DependencyModel(BaseModel):
