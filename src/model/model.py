@@ -26,9 +26,9 @@ class BaselineModel(BaseModel):
         bert_hidden_size = self.bert.config.hidden_size
 
         # head selection [Zhang+ 16]
-        self.W_a = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.U_a = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.v_a = nn.Linear(bert_hidden_size, 1, bias=False)
+        self.W_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.U_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.output = nn.Linear(bert_hidden_size, 1, bias=False)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -40,21 +40,21 @@ class BaselineModel(BaseModel):
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
 
-        h_i = self.W_a(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_j = self.U_a(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_i = h_i.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        h_j = h_j.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         # (b, seq, seq, case, hid) -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
-        g_logits = self.v_a(torch.tanh(self.dropout(h_i.unsqueeze(1) + h_j.unsqueeze(2)))).squeeze(-1)
+        output = self.output(torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))).squeeze(-1)
 
-        g_logits = g_logits.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+        output = output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
         extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
         mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
 
-        g_logits += (~mask).float() * -1024.0  # (b, seq, case, seq)
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        return g_logits  # (b, seq, case, seq)
+        return output  # (b, seq, case, seq)
 
 
 class RefinementModel(BaseModel):
@@ -127,7 +127,6 @@ class RefinementTwiceModel(BaseModel):
         # (b, seq, case, seq)
         base_logits = self.baseline_model(input_ids, attention_mask, ng_token_mask, deps)
         modification = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
-        refined_logits = base_logits.detach() + modification
         # modification = self.refinement_layer(input_ids, attention_mask, refined_logits.detach().softmax(dim=3))
         # refined_logits2 = refined_logits + modification
 
@@ -137,7 +136,7 @@ class RefinementTwiceModel(BaseModel):
         #
         # output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        return base_logits, refined_logits  # [(b, seq, case, seq)]
+        return base_logits, base_logits.detach() + modification  # [(b, seq, case, seq)]
 
 
 class DependencyModel(BaseModel):
