@@ -21,7 +21,8 @@ SCORE_FILE := $(RESULT)/scores_$(TARGET)_$(CORPUS).csv
 
 .PHONY: all train test help
 all: train
-	$(MAKE) test
+	$(MAKE) test TARGET=valid
+	$(MAKE) test TARGET=test
 
 N := $(shell expr $(TRAIN_NUM) - $(NUM_TRAINED))
 train:
