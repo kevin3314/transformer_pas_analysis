@@ -6,6 +6,7 @@ from base import BaseModel
 
 
 class RefinementLayer1(BaseModel):
+    """前段の予測のスコアを重みパラメータではなく、素直に与えるモデル"""
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
