@@ -37,13 +37,15 @@ class Tester:
     def test(self):
         log = {}
         if self.kwdlc_data_loader is not None:
-            if 'Refinement' in self.config['name']:
+            if self.config['name'].split('-')[0] in \
+                    ('CaseInteractionModel2', 'RefinementModel', 'RefinementModel2', 'EnsembleModel'):
                 test_log = self._test_epoch_refinement(self.kwdlc_data_loader, 'kwdlc')
             else:
                 test_log = self._test_epoch(self.kwdlc_data_loader, 'kwdlc')
             log.update(**{f'{self.target}_kwdlc_{k}': v for k, v in test_log.items()})
         if self.kc_data_loader is not None:
-            if 'Refinement' in self.config['name']:
+            if self.config['name'].split('-')[0] in \
+                    ('CaseInteractionModel2', 'RefinementModel', 'RefinementModel2', 'EnsembleModel'):
                 test_log = self._test_epoch_refinement(self.kc_data_loader, 'kc')
             else:
                 test_log = self._test_epoch(self.kc_data_loader, 'kc')

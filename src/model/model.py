@@ -86,7 +86,7 @@ class RefinementModel(BaseModel):
                 ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, seq, case, seq)
         # (b, seq, case, seq)
         base_logits = self.baseline_model(input_ids, attention_mask, ng_token_mask, deps)
-        refinement_logits = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
+        modification = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
 
         # refinement_logits を直接出力するときは mask を忘れずに
         # extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
@@ -94,10 +94,10 @@ class RefinementModel(BaseModel):
         #
         # output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        return base_logits, base_logits + refinement_logits  # (b, seq, case, seq), (b, seq, case, seq)
+        return base_logits, base_logits + modification  # (b, seq, case, seq), (b, seq, case, seq)
 
 
-class RefinementTwiceModel(BaseModel):
+class RefinementModel2(BaseModel):
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
@@ -127,14 +127,35 @@ class RefinementTwiceModel(BaseModel):
         # (b, seq, case, seq)
         base_logits = self.baseline_model(input_ids, attention_mask, ng_token_mask, deps)
         modification = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
-        # modification = self.refinement_layer(input_ids, attention_mask, refined_logits.detach().softmax(dim=3))
-        # refined_logits2 = refined_logits + modification
 
-        # refinement_logits を直接出力するときは mask を忘れずに
-        # extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        # mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
-        #
-        # output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+        return base_logits, base_logits.detach() + modification  # [(b, seq, case, seq)]
+
+
+RefinementTwiceModel = RefinementModel2
+
+
+class EnsembleModel(BaseModel):
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.baseline_model1 = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
+        self.baseline_model2 = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                ) -> Tuple[torch.Tensor, torch.Tensor]:  # [(b, seq, case, seq)]
+        # (b, seq, case, seq)
+        base_logits = self.baseline_model1(input_ids, attention_mask, ng_token_mask, deps)
+        modification = self.baseline_model2(input_ids, attention_mask, ng_token_mask, deps)
 
         return base_logits, base_logits.detach() + modification  # [(b, seq, case, seq)]
 
@@ -367,3 +388,69 @@ class CaseInteractionModel(BaseModel):
         g_logits += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
         return g_logits  # (b, seq, case, seq)
+
+
+class CaseInteractionModel2(BaseModel):
+    """CaseInteractionModel で reference ベクトルについても loss を計算する"""
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+        self.hidden_size = 512
+
+        # head selection [Zhang+ 16]
+        self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
+        self.U_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
+
+        self.ref = nn.Linear(self.hidden_size, 1)
+
+        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
+                                         for _ in range(self.num_case)])
+        self.output = nn.Linear(self.hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        # (b, seq, bhid)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask)
+
+        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        h_pa = h_pa.transpose(2, 3).contiguous()  # (b, seq, case, seq, hid)
+        # -> (b, seq, case, seq, 1) -> (b, seq, case, seq)
+        output_base = self.ref(h_pa).squeeze(-1)
+        #  -> (b, seq, 1, case, seq) -> (b, seq, case, case, seq) -> (b, seq, case, seq, case)
+        ref = output_base.detach().unsqueeze(2).expand(-1, -1, self.num_case, -1, -1).transpose(3, 4).contiguous()
+        # (b, seq, case, seq, hid+case)
+        h = torch.tanh(self.dropout(torch.cat([h_pa, ref], dim=4)))
+        h_mids = [layer(h[:, :, i, :, :]) for i, layer in enumerate(self.mid_layers)]  # [(b, seq, seq, hid)]
+        h_mid = torch.stack(h_mids, dim=2)  # (b, seq, case, seq, hid)
+        # -> (b, seq, case, seq, 1) -> (b, seq, case, seq)
+        output = self.output(torch.tanh(self.dropout(h_mid))).squeeze(dim=4)
+
+        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
+
+        output_base += (~mask).float() * -1024.0  # (b, seq, case, seq)
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        return output_base, output  # (b, seq, case, seq)
