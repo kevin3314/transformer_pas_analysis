@@ -122,6 +122,13 @@ class Trainer(BaseTrainer):
                 self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')
                 self.writer.add_scalar(f'loss_{label}', loss.item())
 
+                if batch_idx % self.log_step == 0:
+                    self.logger.debug('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
+                        batch_idx * valid_data_loader.batch_size,
+                        valid_data_loader.n_samples,
+                        100.0 * batch_idx / len(valid_data_loader),
+                        datetime.datetime.now().strftime('%H:%M:%S')))
+
         # prediction_output_dir = self.config.save_dir / 'valid_out_knp'
         prediction_writer = PredictionKNPWriter(valid_data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, None)
