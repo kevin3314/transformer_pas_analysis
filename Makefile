@@ -14,13 +14,14 @@ ifdef CONFIG
 	RESULT := result/$(subst /,-,$(patsubst config/%.json,%,$(CONFIG)))
 endif
 
-CHECKPOINTS = $(wildcard $(RESULT)/*/model_best.pth)
+CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
 NUM_TRAINED := $(words $(CHECKPOINTS))
-RESULT_FILES = $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/$(CSV_BASENAME),$(CHECKPOINTS))
+RESULT_FILES := $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/$(CSV_BASENAME),$(CHECKPOINTS))
 SCORE_FILE := $(RESULT)/scores_$(TARGET)_$(CORPUS).csv
 
 .PHONY: all train test help
-all: train test
+all: train
+	$(MAKE) test
 
 N := $(shell expr $(TRAIN_NUM) - $(NUM_TRAINED))
 train:
