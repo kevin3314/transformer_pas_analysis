@@ -28,10 +28,12 @@ def main(config: ConfigParser, args: argparse.Namespace):
     # setup data_loader instances
     if config['train_kwdlc_dataset']['args']['path'] is not None:
         train_dataset = config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger)
+        expanded_vocab_size = train_dataset.expanded_vocab_size
         if config['train_kc_dataset']['args']['path'] is not None:
             train_dataset += config.init_obj('train_kc_dataset', module_dataset, logger=logger)
     else:
         train_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
+        expanded_vocab_size = train_dataset.expanded_vocab_size
     train_data_loader = config.init_obj('train_data_loader', module_loader, train_dataset)
     valid_kwdlc_data_loader = None
     valid_kc_data_loader = None
@@ -43,7 +45,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
         valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
 
     # build model architecture, then print to console
-    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=train_dataset.expanded_vocab_size)
+    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
     logger.info(model)
 
     # get function handles of loss and metrics
