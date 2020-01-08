@@ -390,6 +390,7 @@ class Scorer:
                     self._draw_tree(sid,
                                     self.did2predicates_gold[doc_id],
                                     self.did2mentions_gold[doc_id],
+                                    self.did2bridgings_gold[doc_id],
                                     document_gold,
                                     fh=writer)
                     writer.write('\n')
@@ -400,6 +401,7 @@ class Scorer:
                     self._draw_tree(sid,
                                     self.did2predicates_pred[doc_id],
                                     self.did2mentions_pred[doc_id],
+                                    self.did2bridgings_pred[doc_id],
                                     document_pred,
                                     fh=writer)
                     writer.write('\n')
@@ -440,6 +442,7 @@ class Scorer:
                    sid: str,
                    predicates: List[Predicate],
                    mentions: List[Mention],
+                   anaphors: List[Predicate],
                    document: Document,
                    fh: Optional[TextIO] = None,
                    html: bool = True
@@ -459,7 +462,7 @@ class Scorer:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(sentence.tag_list())
-        for predicate in filter(lambda p: p.sid == sid, predicates):
+        for predicate in filter(lambda p: p.sid == sid, predicates + anaphors):
             idx = predicate.tid
             tree_strings[idx] += '  '
             arguments = document.get_arguments(predicate)
