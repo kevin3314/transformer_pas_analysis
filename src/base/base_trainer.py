@@ -103,7 +103,7 @@ class BaseTrainer:
                                      "Training stops.".format(self.early_stop))
                     break
 
-            if self.save_model and epoch % self.save_period == 0:
+            if self.save_model and epoch % self.save_period == 0 and epoch > 2:
                 self._save_checkpoint(epoch, save_best=best)
 
     def _save_checkpoint(self, epoch, save_best=False):
@@ -130,7 +130,7 @@ class BaseTrainer:
             self.logger.info("Saving current best: model_best.pth ...")
             if best_path.exists():
                 best_path.unlink()
-            best_path.resolve().symlink_to(save_path.resolve())
+            best_path.resolve().symlink_to(save_path.name)
 
     def _resume_checkpoint(self, resume_path):
         """
