@@ -462,7 +462,7 @@ class Scorer:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(sentence.tag_list())
-        for predicate in filter(lambda p: p.sid == sid, predicates + anaphors):
+        for predicate in filter(lambda p: p.sid == sid, set(predicates + anaphors)):
             idx = predicate.tid
             tree_strings[idx] += '  '
             arguments = document.get_arguments(predicate)
