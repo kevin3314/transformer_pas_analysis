@@ -1,5 +1,6 @@
 import argparse
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Callable
+from pathlib import Path
 
 import torch
 import numpy as np
@@ -18,8 +19,9 @@ from base.base_model import BaseModel
 
 class Tester:
     def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger, predict_overt):
-        self.loss = loss
-        self.metrics = metrics
+        self.model: BaseModel = model
+        self.loss: Callable = loss
+        self.metrics: List[Callable] = metrics
         self.config: ConfigParser = config
         self.kwdlc_data_loader = kwdlc_data_loader
         self.kc_data_loader = kc_data_loader
@@ -27,42 +29,50 @@ class Tester:
         self.logger = logger
         self.predict_overt: bool = predict_overt
 
-        self.device, device_ids = prepare_device(config['n_gpu'], self.logger)
-        self._load_model(model)
-        self.model: BaseModel = model.to(self.device)
-        self.model.eval()
-        if len(device_ids) > 1:
-            self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
+        self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
+        self.checkpoints: List[Path] = list(config.save_dir.glob('**/model_best.pth'))
 
     def test(self):
+        def _test(data_loader, label: str):
+            _log = {}
+            total_output = (np.array(0), np.array(0))
+            total_loss = 0.0
+            for checkpoint in self.checkpoints:
+                model = self._prepare_model(checkpoint)
+                output, loss = self._test_epoch(model, data_loader)
+                total_output = tuple(t + o for t, o in zip(total_output, output))
+                total_loss += loss
+            if len(total_output) == 2:
+                output_base, output = total_output
+                arguments_sets_base = np.argmax(output_base, axis=3).tolist()
+                result_base = self._eval(arguments_sets_base, data_loader, suffix=f'{label}_base')
+                _log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
+            else:
+                assert len(total_output) == 1
+                output = total_output[0]
+            arguments_sets = np.argmax(output, axis=3).tolist()
+            result = self._eval(arguments_sets, data_loader, suffix=label)
+            result['loss'] = total_loss / self.kwdlc_data_loader.n_samples
+            _log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
+            return _log
+
         log = {}
         if self.kwdlc_data_loader is not None:
-            output, loss = self._test_epoch(self.model, self.kwdlc_data_loader)
-            if isinstance(output, tuple):
-                output_base, output = output
-                arguments_sets_base = np.argmax(output_base, axis=3)
-                kwdlc_log_base = self._eval(arguments_sets_base, loss, self.kwdlc_data_loader, suffix='kwdlc_base')
-                log.update({f'{self.target}_kwdlc_{k}_base': v for k, v in kwdlc_log_base.items()})
-            arguments_sets = np.argmax(output, axis=3)
-            kwdlc_log = self._eval(arguments_sets, loss, self.kwdlc_data_loader, suffix='kwdlc')
-            log.update({f'{self.target}_kwdlc_{k}': v for k, v in kwdlc_log.items()})
+            log.update(_test(self.kwdlc_data_loader, 'kwdlc'))
         if self.kc_data_loader is not None:
-            output, loss = self._test_epoch(self.model, self.kwdlc_data_loader)
-            if isinstance(output, tuple):
-                output_base, output = output
-                arguments_sets_base = np.argmax(output_base, axis=3)
-                kc_log_base = self._eval(arguments_sets_base, loss, self.kwdlc_data_loader, suffix='kc_base')
-                log.update({f'{self.target}_kc_{k}_base': v for k, v in kc_log_base.items()})
-            arguments_sets = np.argmax(output, axis=3)
-            kc_log = self._eval(arguments_sets, loss, self.kwdlc_data_loader, suffix='kc')
-            log.update({f'{self.target}_kwdlc_{k}': v for k, v in kc_log.items()})
+            log.update(_test(self.kc_data_loader, 'kc'))
         return log
 
-    def _load_model(self, model: BaseModel):
+    def _prepare_model(self, checkpoint: Path):
         # prepare model for testing
-        self.logger.info(f'Loading checkpoint: {self.config.resume} ...')
-        state_dict = torch.load(self.config.resume, map_location=self.device)['state_dict']
-        model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
+        self.logger.info(f'Loading checkpoint: {checkpoint} ...')
+        state_dict = torch.load(checkpoint, map_location=self.device)['state_dict']
+        self.model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
+        self.model.eval()
+        model = self.model.to(self.device)
+        if len(self.device_ids) > 1:
+            model = torch.nn.DataParallel(model, device_ids=self.device_ids)
+        return model
 
     def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple, np.ndarray], float]:
         total_loss = 0.0
@@ -89,9 +99,9 @@ class Tester:
         if outputs_base:
             return (np.concatenate(outputs_base, axis=0), np.concatenate(outputs, axis=0)), avg_loss
         else:
-            return np.concatenate(outputs, axis=0), avg_loss
+            return (np.concatenate(outputs, axis=0), ), avg_loss
 
-    def _eval(self, arguments_sets, loss, data_loader, suffix=''):
+    def _eval(self, arguments_sets, data_loader, suffix: str = ''):
         prediction_output_dir = self.config.save_dir / f'{self.target}_out_{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
@@ -108,12 +118,8 @@ class Tester:
         scorer.export_csv(self.config.save_dir / f'result_{self.target}_{suffix}.csv')
 
         metrics = self._eval_metrics(scorer.result_dict())
-        log = {'loss': loss / data_loader.n_samples}
-        log.update({
-            met.__name__: metrics[i] for i, met in enumerate(self.metrics)
-        })
 
-        return log
+        return {met.__name__: val for met, val in zip(self.metrics, metrics)}
 
     def _eval_metrics(self, result: dict):
         f1_metrics = np.zeros(len(self.metrics))
@@ -159,8 +165,10 @@ def main(config, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-r', '--resume', required=True, type=str,
+    parser.add_argument('-r', '--resume', default=None, type=str,
                         help='path to checkpoint to test')
+    parser.add_argument('--ens', default=None, type=str,
+                        help='path to directory where checkpoints to ensemble exist')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('-c', '--config', default=None, type=str,
@@ -169,5 +177,8 @@ if __name__ == '__main__':
                         help='evaluation target')
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
+    parser.add_help = True
 
-    main(ConfigParser.from_parser(parser, inherit_save_dir=True), parser.parse_args())
+    parsed_args = parser.parse_args()
+    config_args = {'run_id': ''} if parsed_args.resume is None else {'inherit_save_dir': True}
+    main(ConfigParser.from_parser(parser, **config_args), parsed_args)

@@ -131,11 +131,11 @@ class ConfigParser:
         return self._config
 
     @property
-    def save_dir(self):
+    def save_dir(self) -> Path:
         return self._save_dir
 
     @property
-    def log_dir(self):
+    def log_dir(self) -> Path:
         return self._save_dir
 
 
