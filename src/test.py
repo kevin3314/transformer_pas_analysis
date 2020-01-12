@@ -1,5 +1,5 @@
 import argparse
-from typing import List
+from typing import List, Union, Tuple
 
 import torch
 import numpy as np
@@ -37,19 +37,25 @@ class Tester:
     def test(self):
         log = {}
         if self.kwdlc_data_loader is not None:
-            if self.config['name'].split('-')[0] in \
-                    ('CaseInteractionModel2', 'RefinementModel', 'RefinementModel2', 'EnsembleModel'):
-                test_log = self._test_epoch_refinement(self.kwdlc_data_loader, 'kwdlc')
-            else:
-                test_log = self._test_epoch(self.kwdlc_data_loader, 'kwdlc')
-            log.update(**{f'{self.target}_kwdlc_{k}': v for k, v in test_log.items()})
+            output, loss = self._test_epoch(self.model, self.kwdlc_data_loader)
+            if isinstance(output, tuple):
+                output_base, output = output
+                arguments_sets_base = np.argmax(output_base, axis=3)
+                kwdlc_log_base = self._eval(arguments_sets_base, loss, self.kwdlc_data_loader, suffix='kwdlc_base')
+                log.update({f'{self.target}_kwdlc_{k}_base': v for k, v in kwdlc_log_base.items()})
+            arguments_sets = np.argmax(output, axis=3)
+            kwdlc_log = self._eval(arguments_sets, loss, self.kwdlc_data_loader, suffix='kwdlc')
+            log.update({f'{self.target}_kwdlc_{k}': v for k, v in kwdlc_log.items()})
         if self.kc_data_loader is not None:
-            if self.config['name'].split('-')[0] in \
-                    ('CaseInteractionModel2', 'RefinementModel', 'RefinementModel2', 'EnsembleModel'):
-                test_log = self._test_epoch_refinement(self.kc_data_loader, 'kc')
-            else:
-                test_log = self._test_epoch(self.kc_data_loader, 'kc')
-            log.update(**{f'{self.target}_kc_{k}': v for k, v in test_log.items()})
+            output, loss = self._test_epoch(self.model, self.kwdlc_data_loader)
+            if isinstance(output, tuple):
+                output_base, output = output
+                arguments_sets_base = np.argmax(output_base, axis=3)
+                kc_log_base = self._eval(arguments_sets_base, loss, self.kwdlc_data_loader, suffix='kc_base')
+                log.update({f'{self.target}_kc_{k}_base': v for k, v in kc_log_base.items()})
+            arguments_sets = np.argmax(output, axis=3)
+            kc_log = self._eval(arguments_sets, loss, self.kwdlc_data_loader, suffix='kc')
+            log.update({f'{self.target}_kwdlc_{k}': v for k, v in kc_log.items()})
         return log
 
     def _load_model(self, model: BaseModel):
@@ -58,110 +64,62 @@ class Tester:
         state_dict = torch.load(self.config.resume, map_location=self.device)['state_dict']
         model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
 
+    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple, np.ndarray], float]:
+        total_loss = 0.0
+        outputs_base = []
+        outputs = []
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(data_loader):
+                batch = tuple(t.to(self.device) for t in batch)
+                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
+
+                output_ = model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                if isinstance(output_, tuple):
+                    output_base, output = output_
+                    outputs_base.append(output_base.cpu().numpy())
+                else:
+                    output = output_
+                output = output[:, :, :arguments_ids.size(2), :]
+                outputs.append(output.cpu().numpy())
+
+                # computing loss on test set
+                loss = self.loss(output_, arguments_ids, deps)
+                total_loss += loss.item() * input_ids.size(0)
+        avg_loss = total_loss / data_loader.n_samples
+        if outputs_base:
+            return (np.concatenate(outputs_base, axis=0), np.concatenate(outputs, axis=0)), avg_loss
+        else:
+            return np.concatenate(outputs, axis=0), avg_loss
+
+    def _eval(self, arguments_sets, loss, data_loader, suffix=''):
+        prediction_output_dir = self.config.save_dir / f'{self.target}_out_{suffix}'
+        prediction_writer = PredictionKNPWriter(data_loader.dataset,
+                                                self.logger,
+                                                use_gold_overt=(not self.predict_overt))
+        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
+
+        scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
+                        coreference=data_loader.dataset.coreference,
+                        kc=data_loader.dataset.kc,
+                        eval_eventive_noun=False)
+        if self.target != 'test':
+            scorer.write_html(self.config.save_dir / f'result_{self.target}_{suffix}.html')
+        scorer.export_txt(self.config.save_dir / f'result_{self.target}_{suffix}.txt')
+        scorer.export_csv(self.config.save_dir / f'result_{self.target}_{suffix}.csv')
+
+        metrics = self._eval_metrics(scorer.result_dict())
+        log = {'loss': loss / data_loader.n_samples}
+        log.update({
+            met.__name__: metrics[i] for i, met in enumerate(self.metrics)
+        })
+
+        return log
+
     def _eval_metrics(self, result: dict):
         f1_metrics = np.zeros(len(self.metrics))
         for i, metric in enumerate(self.metrics):
             f1_metrics[i] += metric(result)
         return f1_metrics
-
-    def _test_epoch(self, data_loader, label):
-        total_loss = 0.0
-        arguments_sets: List[List[List[int]]] = []
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(data_loader):
-                batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
-
-                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
-
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
-                arguments_sets += arguments_set.tolist()
-
-                # computing loss on test set
-                loss = self.loss(output, arguments_ids, deps)
-                total_loss += loss.item() * input_ids.size(0)
-
-        prediction_output_dir = self.config.save_dir / f'{self.target}_out_{label}'
-        prediction_writer = PredictionKNPWriter(data_loader.dataset,
-                                                self.logger,
-                                                use_gold_overt=(not self.predict_overt))
-        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
-
-        scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
-                        coreference=data_loader.dataset.coreference,
-                        kc=data_loader.dataset.kc,
-                        eval_eventive_noun=False)
-        if self.target != 'test':
-            scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
-        scorer.export_txt(self.config.save_dir / f'result_{self.target}_{label}.txt')
-        scorer.export_csv(self.config.save_dir / f'result_{self.target}_{label}.csv')
-
-        metrics = self._eval_metrics(scorer.result_dict())
-        log = {'loss': total_loss / data_loader.n_samples}
-        log.update({
-            met.__name__: metrics[i] for i, met in enumerate(self.metrics)
-        })
-
-        return log
-
-    def _test_epoch_refinement(self, data_loader, label):
-        total_loss = 0.0
-        arguments_sets_base: List[List[List[int]]] = []
-        arguments_sets: List[List[List[int]]] = []
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(data_loader):
-                batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
-
-                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
-
-                arguments_set = torch.argmax(output[0], dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
-                arguments_sets_base += arguments_set.tolist()
-                arguments_set = torch.argmax(output[1], dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
-                arguments_sets += arguments_set.tolist()
-
-                # computing loss on test set
-                loss = self.loss(output, arguments_ids, deps)
-                total_loss += loss.item() * input_ids.size(0)
-        log = {'loss': total_loss / data_loader.n_samples}
-
-        prediction_output_dir = self.config.save_dir / f'{self.target}_out_{label}'
-        prediction_output_dir_base = self.config.save_dir / f'{self.target}_out_{label}_base'
-        prediction_writer = PredictionKNPWriter(data_loader.dataset,
-                                                self.logger,
-                                                use_gold_overt=(not self.predict_overt))
-        documents_pred_base = prediction_writer.write(arguments_sets_base, prediction_output_dir_base)
-        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
-
-        scorer_base = Scorer(documents_pred_base, data_loader.dataset.documents, data_loader.dataset.target_exophors,
-                             coreference=data_loader.dataset.coreference,
-                             kc=data_loader.dataset.kc,
-                             eval_eventive_noun=False)
-        if self.target != 'test':
-            scorer_base.write_html(self.config.save_dir / f'result_{self.target}_{label}_base.html')
-        scorer_base.export_txt(self.config.save_dir / f'result_{self.target}_{label}_base.txt')
-        scorer_base.export_csv(self.config.save_dir / f'result_{self.target}_{label}_base.csv')
-
-        metrics = self._eval_metrics(scorer_base.result_dict())
-        log.update({
-            met.__name__ + '_base': metrics[i] for i, met in enumerate(self.metrics)
-        })
-
-        scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
-                        coreference=data_loader.dataset.coreference,
-                        kc=data_loader.dataset.kc,
-                        eval_eventive_noun=False)
-        if self.target != 'test':
-            scorer.write_html(self.config.save_dir / f'result_{self.target}_{label}.html')
-        scorer.export_txt(self.config.save_dir / f'result_{self.target}_{label}.txt')
-        scorer.export_csv(self.config.save_dir / f'result_{self.target}_{label}.csv')
-
-        metrics = self._eval_metrics(scorer.result_dict())
-        log.update({
-            met.__name__: metrics[i] for i, met in enumerate(self.metrics)
-        })
-
-        return log
 
 
 def main(config, args):
