@@ -22,7 +22,6 @@ class Tester:
         self.model: BaseModel = model
         self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
-        self.config: ConfigParser = config
         self.kwdlc_data_loader = kwdlc_data_loader
         self.kc_data_loader = kc_data_loader
         self.target: str = target
@@ -31,36 +30,38 @@ class Tester:
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
         self.checkpoints: List[Path] = list(config.save_dir.glob('**/model_best.pth'))
+        self.save_dir: Path = config.save_dir / f'eval_{target}'
+        self.save_dir.mkdir(exist_ok=True)
 
     def test(self):
-        def _test(data_loader, label: str):
-            _log = {}
-            total_output = (np.array(0), np.array(0))
-            total_loss = 0.0
-            for checkpoint in self.checkpoints:
-                model = self._prepare_model(checkpoint)
-                output, loss = self._test_epoch(model, data_loader)
-                total_output = tuple(t + o for t, o in zip(total_output, output))
-                total_loss += loss
-            if len(total_output) == 2:
-                output_base, output = total_output
-                arguments_sets_base = np.argmax(output_base, axis=3).tolist()
-                result_base = self._eval(arguments_sets_base, data_loader, suffix=f'{label}_base')
-                _log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
-            else:
-                assert len(total_output) == 1
-                output = total_output[0]
-            arguments_sets = np.argmax(output, axis=3).tolist()
-            result = self._eval(arguments_sets, data_loader, suffix=label)
-            result['loss'] = total_loss / self.kwdlc_data_loader.n_samples
-            _log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
-            return _log
-
         log = {}
         if self.kwdlc_data_loader is not None:
-            log.update(_test(self.kwdlc_data_loader, 'kwdlc'))
+            log.update(self._test(self.kwdlc_data_loader, 'kwdlc'))
         if self.kc_data_loader is not None:
-            log.update(_test(self.kc_data_loader, 'kc'))
+            log.update(self._test(self.kc_data_loader, 'kc'))
+        return log
+
+    def _test(self, data_loader, label: str):
+        log = {}
+        total_output = (np.array(0), np.array(0))
+        total_loss = 0.0
+        for checkpoint in self.checkpoints:
+            model = self._prepare_model(checkpoint)
+            output, loss = self._test_epoch(model, data_loader)
+            total_output = tuple(t + o for t, o in zip(total_output, output))
+            total_loss += loss
+        if len(total_output) == 2:
+            output_base, output = total_output
+            arguments_sets_base = np.argmax(output_base, axis=3).tolist()
+            result_base = self._eval(arguments_sets_base, data_loader, corpus=label, suffix='_base')
+            log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
+        else:
+            assert len(total_output) == 1
+            output = total_output[0]
+        arguments_sets = np.argmax(output, axis=3).tolist()
+        result = self._eval(arguments_sets, data_loader, corpus=label)
+        result['loss'] = total_loss / self.kwdlc_data_loader.n_samples
+        log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
         return log
 
     def _prepare_model(self, checkpoint: Path):
@@ -101,25 +102,28 @@ class Tester:
         else:
             return (np.concatenate(outputs, axis=0), ), avg_loss
 
-    def _eval(self, arguments_sets, data_loader, suffix: str = ''):
-        prediction_output_dir = self.config.save_dir / f'{self.target}_out_{suffix}'
+    def _eval(self, arguments_sets, data_loader, corpus: str, suffix: str = ''):
+        # prediction_output_dir = self.config.save_dir / f'{self.target}_out_{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
-        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
+        documents_pred = prediction_writer.write(arguments_sets, None)
 
-        scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
-                        coreference=data_loader.dataset.coreference,
-                        kc=data_loader.dataset.kc,
-                        eval_eventive_noun=False)
-        if self.target != 'test':
-            scorer.write_html(self.config.save_dir / f'result_{self.target}_{suffix}.html')
-        scorer.export_txt(self.config.save_dir / f'result_{self.target}_{suffix}.txt')
-        scorer.export_csv(self.config.save_dir / f'result_{self.target}_{suffix}.csv')
+        result = {}
+        for pas_target in ('pred', 'noun', 'all'):
+            scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
+                            coreference=data_loader.dataset.coreference,
+                            kc=data_loader.dataset.kc,
+                            pas_target=pas_target)
+            if self.target != 'test':
+                scorer.write_html(self.save_dir / f'{corpus}_{pas_target}{suffix}.html')
+            scorer.export_txt(self.save_dir / f'{corpus}_{pas_target}{suffix}.txt')
+            scorer.export_csv(self.save_dir / f'{corpus}_{pas_target}{suffix}.csv')
 
-        metrics = self._eval_metrics(scorer.result_dict())
+            metrics = self._eval_metrics(scorer.result_dict())
+            result.update({f'{pas_target}_{met.__name__}': val for met, val in zip(self.metrics, metrics)})
 
-        return {met.__name__: val for met, val in zip(self.metrics, metrics)}
+        return result
 
     def _eval_metrics(self, result: dict):
         f1_metrics = np.zeros(len(self.metrics))

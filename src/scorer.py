@@ -23,7 +23,7 @@ class Scorer:
                  target_exophors: List[str],
                  coreference: bool = True,
                  kc: bool = False,
-                 eval_eventive_noun: bool = False):
+                 pas_target: str = 'pred'):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
         self.cases: List[str] = documents_gold[0].target_cases
@@ -62,18 +62,18 @@ class Scorer:
             for predicate_pred in document_pred.get_predicates():
                 if self._process(predicate_pred.sid, doc_id) is False:
                     continue
-                if '用言' in predicate_pred.tag.features or \
-                        (eval_eventive_noun and '非用言格解析' in predicate_pred.tag.features):
+                features = predicate_pred.tag.features
+                if '用言' in features or (pas_target in ('noun', 'all') and '非用言格解析' in features):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
-                if '体言' in predicate_pred.tag.features:
+                if '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
                 if self._process(predicate_gold.sid, doc_id) is False:
                     continue
-                if '用言' in predicate_gold.tag.features or \
-                        (eval_eventive_noun and '非用言格解析' in predicate_gold.tag.features):
+                features = predicate_gold.tag.features
+                if '用言' in features or (pas_target in ('noun', 'all') and '非用言格解析' in features):
                     self.did2predicates_gold[doc_id].append(predicate_gold)
-                if '体言' in predicate_gold.tag.features:
+                if '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
@@ -574,8 +574,8 @@ def main():
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
     parser.add_argument('--coreference', action='store_true', default=False,
                         help='evaluate coreference resolution')
-    parser.add_argument('--eval-eventive-noun', action='store_true', default=False,
-                        help='include eventive noun as predicate')
+    parser.add_argument('--pas-target', choices=['pred', 'noun', 'all'], default='pred',
+                        help='PAS analysis evaluation target (pred: predicates, noun: eventive noun)')
     args = parser.parse_args()
 
     reader_gold = KWDLCReader(
@@ -598,7 +598,7 @@ def main():
                     target_exophors=args.exophors.split(','),
                     coreference=args.coreference,
                     kc=(len(documents_gold[0].doc_id.split('-')[-1]) == 2),
-                    eval_eventive_noun=args.eval_eventive_noun)
+                    pas_target=args.pas_target)
     if args.result_html:
         scorer.write_html(Path(args.result_html))
     if args.result_csv:

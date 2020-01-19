@@ -64,17 +64,17 @@ class PredictionKNPWriter:
                                      use_pas_tag=False)
             documents_pred.append(document_pred)
 
+            if destination is None:
+                continue
+
             output_knp_lines = self._add_pas_analysis(output_knp_lines, document_pred)
             output_string = '\n'.join(output_knp_lines) + '\n'
-
             if isinstance(destination, Path):
                 output_basename = document.doc_id + '.knp'
                 with destination.joinpath(output_basename).open('w') as writer:
                     writer.write(output_string)
             elif isinstance(destination, io.TextIOBase):
                 destination.write(output_string)
-            else:
-                pass
 
         return documents_pred
 
