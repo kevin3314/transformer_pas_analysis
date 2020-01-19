@@ -63,7 +63,8 @@ class Scorer:
                 if self._process(predicate_pred.sid, doc_id) is False:
                     continue
                 features = predicate_pred.tag.features
-                if '用言' in features or (pas_target in ('noun', 'all') and '非用言格解析' in features):
+                if (pas_target in ('pred', 'all') and '用言' in features) or \
+                        (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
                 if '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_pred[doc_id].append(predicate_pred)
@@ -71,7 +72,8 @@ class Scorer:
                 if self._process(predicate_gold.sid, doc_id) is False:
                     continue
                 features = predicate_gold.tag.features
-                if '用言' in features or (pas_target in ('noun', 'all') and '非用言格解析' in features):
+                if (pas_target in ('pred', 'all') and '用言' in features) or \
+                        (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
                     self.did2predicates_gold[doc_id].append(predicate_gold)
                 if '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_gold[doc_id].append(predicate_gold)
