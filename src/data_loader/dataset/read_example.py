@@ -84,7 +84,7 @@ def read_example(document: Document,
                         arg_candidates = [x for x in head_dmids if x != dmid]
 
                     if 'ノ' in cases:
-                        if '体言' in tag.features:
+                        if '体言' in tag.features and '非用言格解析' not in tag.features:
                             dmid2args = {dmid: arguments['ノ'] for dmid, arguments in dmid2arguments.items()}
                             arguments['ノ'] = _get_args(dmid, dmid2args, relax_exophors)
                         arg_candidates = [x for x in head_dmids if x != dmid]
