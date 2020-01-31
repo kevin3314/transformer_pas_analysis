@@ -66,10 +66,8 @@ and split into documents.
 Next, specify the document directory when you run `inference.py`
 
 ```zsh
-MODEL=/mnt/hinoki/ueda/bert/pas_analysis/result/BaselineModel-all-4e-large-coref-ocz-nocase-noun/0110_144947/model_best.pth
-
 python src/inference.py \
---model $MODEL \
+--model /mnt/hinoki/ueda/bert/pas_analysis/result/model_best.pth \
 --knp-dir <path-to-parsed-document-directory>
 --export-dir <path-to-export-directory>
 ```

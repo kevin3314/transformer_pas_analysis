@@ -97,6 +97,9 @@ class RefinementModel(BaseModel):
         return base_logits, base_logits.detach() + modification  # (b, seq, case, seq), (b, seq, case, seq)
 
 
+RefinementModel2 = RefinementModel
+
+
 class EnsembleModel(BaseModel):
     """RefinementModel の前段の logits を後段に与えないモデル"""
     def __init__(self,

@@ -101,7 +101,7 @@ def main() -> None:
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         name = f'{model}-{corpus}-{n_epoch}e'
-        name += 'large' if args.use_bert_large else 'base'
+        name += '-large' if args.use_bert_large else '-base'
         name += '-coref' if args.coreference else ''
         name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         name += '-nocase' if 'ノ' in cases else ''
