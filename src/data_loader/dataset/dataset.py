@@ -71,7 +71,6 @@ class PASDataset(Dataset):
         self.train_overt = 'overt' in train_target
         self.train_case = 'case' in train_target
         self.train_zero = 'zero' in train_target
-        # self.eventive_noun = eventive_noun
         self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
@@ -99,29 +98,33 @@ class PASDataset(Dataset):
         n_args = defaultdict(int)
         pas_overt = pas_exo = pas_null = pas_normal = 0
         coref_exo = coref_na = coref_normal = 0
+        zero = defaultdict(int)
 
         for example in self.examples:
             for arguments in example.arguments_set:
                 for case, argument in arguments.items():
-                    if argument is None:
+                    if not argument:
                         continue
+                    arg: str = argument[0]
                     if case == '=':
-                        if argument in self.target_exophors:
+                        if arg in self.target_exophors:
                             coref_exo += 1
-                        elif argument == 'NA':
+                        elif arg == 'NA':
                             coref_na += 1
                         else:
                             coref_normal += 1
                     else:
-                        if '%C' in argument:
+                        if '%C' in arg:
                             pas_overt += 1
-                        elif argument in self.target_exophors:
+                        elif arg in self.target_exophors:
                             pas_exo += 1
-                        elif argument == 'NULL':
+                        elif arg == 'NULL':
                             pas_null += 1
                             continue
                         else:
                             pas_normal += 1
+                        if '%O' in arg or arg in self.target_exophors:
+                            zero[case] += 1
                         n_args[case] += 1
                 if self.coreference:
                     if arguments['='] is not None:
@@ -162,6 +165,7 @@ class PASDataset(Dataset):
                 'n_all_tokens': n_all_tokens,
                 'n_input_tokens': n_input_tokens,
                 'n_unk_tokens': n_unk_tokens,
+                'zero': zero
                 }
 
     def __len__(self) -> int:
