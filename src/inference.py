@@ -29,9 +29,9 @@ def main(args):
     else:
         documents_pred: List[Document] = prediction_writer.write(arguments_set, destination)
         for document_pred in documents_pred:
+            print()
             for sid in document_pred.sid2sentence.keys():
                 document_pred.draw_tree(sid, dataset.coreference, sys.stdout)
-            print()
 
 
 if __name__ == '__main__':

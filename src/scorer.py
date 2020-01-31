@@ -347,14 +347,14 @@ class Scorer:
         elif isinstance(destination, io.TextIOBase):
             destination.write(text)
 
-    def export_csv(self, destination: Union[str, Path, TextIO], sep: str = ', '):
+    def export_csv(self, destination: Union[str, Path, TextIO], sep: str = ','):
         text = ''
         result_dict = self.result_dict()
         text += 'case' + sep
         text += sep.join(result_dict['all_case'].keys()) + '\n'
         for case, measures in result_dict.items():
             text += f'{case}' + sep
-            text += sep.join(f'{measure.f1:.4}' for measure in measures.values())
+            text += sep.join(f'{measure.f1:.5}' for measure in measures.values())
             text += '\n'
 
         if isinstance(destination, str) or isinstance(destination, Path):
