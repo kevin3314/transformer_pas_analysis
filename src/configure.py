@@ -13,9 +13,9 @@ class Config:
         for key, value in kwargs.items():
             self.config.update({key: value})
 
-    def dump(self, config_dir: pathlib.Path, base_name: str) -> None:
-        config_dir.mkdir(exist_ok=True, parents=True)
-        config_path = config_dir / f'{base_name}.json'
+    def dump(self, config_dir: pathlib.Path) -> None:
+        config_dir.mkdir(exist_ok=True)
+        config_path = config_dir / f'{self.config["name"]}.json'
         with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(config_path)
@@ -36,17 +36,17 @@ class Path:
 
 def main() -> None:
     all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'CaseInteractionModel3']
+                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'EnsembleModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
     parser.add_argument('-d', '--dataset', type=str,
                         help='path to dataset directory')
-    parser.add_argument('--model', choices=all_models, default=all_models, nargs='*',
+    parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
-    parser.add_argument('--epoch', '-e', type=int, default=3, nargs='*',
+    parser.add_argument('-e', '--epoch', type=int, default=3, nargs='*',
                         help='number of training epochs')
-    parser.add_argument('--batch-size', '-b', type=int, default=32,
+    parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
@@ -76,14 +76,21 @@ def main() -> None:
                         help='number of gpus to use')
     parser.add_argument('--use-bert-large', action='store_true', default=False,
                         help='whether to use BERT_LARGE model')
-    parser.add_argument('--no-save-model', action='store_true', default=False,
-                        help='whether to save trained model')
+    parser.add_argument('--refinement-bert', choices=['base', 'large'], default='base',
+                        help='BERT model type used for refinement model')
+    parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
+                        help='refinement layer type for RefinementModel')
+    parser.add_argument('--save-start-epoch', type=int, default=1,
+                        help='you can skip saving of initial checkpoints, which reduces writing overhead')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
                         help='corpus to use in training')
-    parser.add_argument('--train-overt', action='store_true', default=False,
-                        help='include overt arguments in training data')
+    parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
+                        help='dependency type to train')
+    parser.add_argument('--eventive-noun', action='store_true', default=False,
+                        help='analyze eventive noun as predicate')
     args = parser.parse_args()
 
+    config_dir = pathlib.Path(args.config)
     bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
     n_gpu: int = args.gpus
     data_root = pathlib.Path(args.dataset).resolve()
@@ -93,11 +100,16 @@ def main() -> None:
     corefs: List[str] = dataset_config['target_corefs']
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
-        config_dir = pathlib.Path(model) / corpus / f'{n_epoch}e'
-        base_name = 'large' if args.use_bert_large else 'base'
-        base_name += '-coref' if args.coreference else ''
-        base_name += '-overt' if args.train_overt else ''
-        base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
+        name = f'{model}-{corpus}-{n_epoch}e'
+        name += '-large' if args.use_bert_large else '-base'
+        name += '-coref' if args.coreference else ''
+        name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
+        name += '-nocase' if 'ノ' in cases else ''
+        name += '-noun' if args.eventive_noun else ''
+        if model == 'RefinementModel':
+            name += '-largeref' if args.refinement_bert == 'large' else ''
+            name += '-reftype' + str(args.refinement_type)
+        name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
@@ -117,6 +129,10 @@ def main() -> None:
                 'coreference': args.coreference,
             },
         }
+        if model == 'RefinementModel':
+            refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
+            arch['args'].update({'refinement_type': args.refinement_type,
+                                 'refinement_bert_model': refinement_bert_model})
 
         dataset = {
             'type': 'PASDataset',
@@ -130,7 +146,8 @@ def main() -> None:
                 'training': None,
                 'bert_model': bert_model,
                 'kc': None,
-                'train_overt': args.train_overt,
+                'train_target': args.train_target,
+                'eventive_noun': args.eventive_noun,
             },
         }
 
@@ -141,12 +158,12 @@ def main() -> None:
         train_kwdlc_dataset['args']['kc'] = False
 
         valid_kwdlc_dataset = copy.deepcopy(dataset)
-        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid')
+        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid') if corpus in ('kwdlc', 'all') else None
         valid_kwdlc_dataset['args']['training'] = False
         valid_kwdlc_dataset['args']['kc'] = False
 
         test_kwdlc_dataset = copy.deepcopy(dataset)
-        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test')
+        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test') if corpus in ('kwdlc', 'all') else None
         test_kwdlc_dataset['args']['training'] = False
         test_kwdlc_dataset['args']['kc'] = False
 
@@ -155,11 +172,11 @@ def main() -> None:
         train_kc_dataset['args']['kc'] = True
 
         valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
-        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid')
+        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid') if corpus in ('kc', 'all') else None
         valid_kc_dataset['args']['kc'] = True
 
         test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
-        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test')
+        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test') if corpus in ('kc', 'all') else None
         test_kc_dataset['args']['kc'] = True
 
         data_loader = {
@@ -191,6 +208,8 @@ def main() -> None:
 
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
+        elif model in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
+            loss = 'multi_cross_entropy_pas_loss'
         else:
             loss = 'cross_entropy_pas_loss'
 
@@ -211,6 +230,13 @@ def main() -> None:
         ]
         if args.coreference:
             metrics.append('coreference_f1')
+        if 'ノ' in cases:
+            metrics += [
+                'bridging_anaphora_f1_inter',
+                'bridging_anaphora_f1_intra',
+                'bridging_anaphora_f1_exophora',
+                'bridging_anaphora_f1',
+            ]
 
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
         warmup_steps = t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps
@@ -229,8 +255,7 @@ def main() -> None:
         trainer = {
             'epochs': n_epoch,
             'save_dir': 'result/',
-            'save_period': 1,
-            'save_model': not args.no_save_model,
+            'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,
             'monitor': 'max val_kwdlc_zero_anaphora_f1',
             'early_stop': 10,
@@ -238,7 +263,7 @@ def main() -> None:
         }
 
         config = Config(
-            name=str(config_dir / base_name).replace('/', '-'),
+            name=name,
             n_gpu=n_gpu,
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
@@ -256,7 +281,7 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(args.config / config_dir, base_name)
+        config.dump(config_dir)
 
 
 if __name__ == '__main__':

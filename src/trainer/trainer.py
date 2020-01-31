@@ -56,7 +56,7 @@ class Trainer(BaseTrainer):
             input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+            output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq) or tuple
             loss = self.loss(output, arguments_ids, deps)
             loss.backward()
             self.optimizer.step()
@@ -109,9 +109,10 @@ class Trainer(BaseTrainer):
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
-                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                output = self.model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq) or tuple
+                scores = output if isinstance(output, torch.Tensor) else output[-1]
 
-                arguments_set = torch.argmax(output, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
+                arguments_set = torch.argmax(scores, dim=3)[:, :, :arguments_ids.size(2)]  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
                 # computing loss, metrics on valid set
@@ -121,15 +122,21 @@ class Trainer(BaseTrainer):
                 self.writer.set_step((epoch - 1) * len(valid_data_loader) + batch_idx, 'valid')
                 self.writer.add_scalar(f'loss_{label}', loss.item())
 
+                if batch_idx % self.log_step == 0:
+                    self.logger.debug('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
+                        batch_idx * valid_data_loader.batch_size,
+                        valid_data_loader.n_samples,
+                        100.0 * batch_idx / len(valid_data_loader),
+                        datetime.datetime.now().strftime('%H:%M:%S')))
+
         # prediction_output_dir = self.config.save_dir / 'valid_out_knp'
         prediction_writer = PredictionKNPWriter(valid_data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, None)
 
-        scorer = Scorer(documents_pred, valid_data_loader.dataset.documents, valid_data_loader.dataset.target_exophors,
+        scorer = Scorer(documents_pred, valid_data_loader.dataset.documents,
+                        valid_data_loader.dataset.target_exophors,
                         coreference=valid_data_loader.dataset.coreference,
                         kc=valid_data_loader.dataset.kc)
-        scorer.write_html(self.config.save_dir / f'result_{label}.html')
-        scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
 
         val_metrics = self._eval_metrics(scorer.result_dict(), label)
 

@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from logger import TensorboardWriter
+from pathlib import Path
 
 import torch
 from numpy import inf
@@ -25,10 +26,9 @@ class BaseTrainer:
         self.metrics = metrics
         self.optimizer = optimizer
 
-        cfg_trainer = config['trainer']
+        cfg_trainer: dict = config['trainer']
         self.epochs: int = cfg_trainer['epochs']
-        self.save_period: int = cfg_trainer['save_period']
-        self.save_model: bool = cfg_trainer['save_model']
+        self.save_start_epoch: int = cfg_trainer.get('save_start_epoch', 1)
         self.monitor: str = cfg_trainer.get('monitor', 'off')
 
         # configuration to monitor model performance and save best
@@ -44,7 +44,7 @@ class BaseTrainer:
 
         self.start_epoch = 1
 
-        self.checkpoint_dir = config.save_dir
+        self.checkpoint_dir: Path = config.save_dir
 
         # setup visualization writer instance
         self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
@@ -69,13 +69,13 @@ class BaseTrainer:
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)
 
-            # save logged informations into log dict
+            # save logged information into log dict
             log = {'epoch': epoch}
             log.update(result)
 
             # print logged information to the screen
             for key, value in log.items():
-                self.logger.info('{:36s}: {:.4f}'.format(str(key), value))
+                self.logger.info('{:40s}: {:.4f}'.format(str(key), value))
 
             # evaluate model performance according to configured metric, save best checkpoint as model_best
             best = False
@@ -102,7 +102,7 @@ class BaseTrainer:
                                      "Training stops.".format(self.early_stop))
                     break
 
-            if self.save_model and epoch % self.save_period == 0:
+            if epoch >= self.save_start_epoch:
                 self._save_checkpoint(epoch, save_best=best)
 
     def _save_checkpoint(self, epoch, save_best=False):
@@ -121,13 +121,15 @@ class BaseTrainer:
             'monitor_best': self.mnt_best,
             'config': self.config
         }
-        # filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
-        # self.logger.info("Saving checkpoint: {} ...".format(filename))
-        # torch.save(state, filename)
+        save_path = self.checkpoint_dir / f'checkpoint-epoch{epoch}.pth'
+        self.logger.info("Saving checkpoint: {} ...".format(save_path))
+        torch.save(state, str(save_path))
         if save_best:
-            best_path = str(self.checkpoint_dir / 'model_best.pth')
+            best_path = self.checkpoint_dir / 'model_best.pth'
             self.logger.info("Saving current best: model_best.pth ...")
-            torch.save(state, best_path)
+            if best_path.exists():
+                best_path.unlink()
+            best_path.resolve().symlink_to(save_path.name)
 
     def _resume_checkpoint(self, resume_path):
         """

@@ -16,10 +16,10 @@ from trainer import Trainer
 from base.base_model import BaseModel
 
 
-def main(config: ConfigParser):
-    torch.manual_seed(42)
-    random.seed(42)
-    np.random.seed(42)
+def main(config: ConfigParser, args: argparse.Namespace):
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     # torch.backends.cudnn.deterministic = True
     # torch.backends.cudnn.benchmark = False
 
@@ -28,18 +28,24 @@ def main(config: ConfigParser):
     # setup data_loader instances
     if config['train_kwdlc_dataset']['args']['path'] is not None:
         train_dataset = config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger)
+        expanded_vocab_size = train_dataset.expanded_vocab_size
         if config['train_kc_dataset']['args']['path'] is not None:
             train_dataset += config.init_obj('train_kc_dataset', module_dataset, logger=logger)
     else:
         train_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
+        expanded_vocab_size = train_dataset.expanded_vocab_size
     train_data_loader = config.init_obj('train_data_loader', module_loader, train_dataset)
-    valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
-    valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset)
-    valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
-    valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
+    valid_kwdlc_data_loader = None
+    valid_kc_data_loader = None
+    if config['valid_kwdlc_dataset']['args']['path'] is not None:
+        valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
+        valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
+    if config['valid_kc_dataset']['args']['path'] is not None:
+        valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
+        valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
 
     # build model architecture, then print to console
-    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=valid_kwdlc_dataset.expanded_vocab_size)
+    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
     logger.info(model)
 
     # get function handles of loss and metrics
@@ -86,4 +92,4 @@ if __name__ == '__main__':
         CustomArgs(['--lr', '--learning_rate'], type=float, target='optimizer;args;lr'),
         CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
     ]
-    main(config=ConfigParser.from_parser(parser, options))
+    main(ConfigParser.from_parser(parser, options), parser.parse_args())
