@@ -176,6 +176,12 @@ This command executes above two commands all at once.
 make all GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=10
 ```
 
+Ensemble test is also available.
+
+```zsh
+make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
+```
+
 ## Dataset
 
 - /mnt/hinoki/ueda/kwdlc/new

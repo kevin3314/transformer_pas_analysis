@@ -27,7 +27,7 @@ class Scorer:
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
         self.cases: List[str] = documents_gold[0].target_cases
-        self.bridging: bool = 'ノ' in documents_gold[0].target_cases
+        self.bridging: bool = 'ノ' in self.cases
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
@@ -348,12 +348,13 @@ class Scorer:
             destination.write(text)
 
     def export_csv(self, destination: Union[str, Path, TextIO], sep: str = ','):
+        case_ja2en = {'ガ': 'ga', 'ヲ': 'wo', 'ニ': 'ni', 'ガ２': 'ga2', 'ノ': 'no', 'all_case': 'all_case'}
         text = ''
         result_dict = self.result_dict()
         text += 'case' + sep
         text += sep.join(result_dict['all_case'].keys()) + '\n'
         for case, measures in result_dict.items():
-            text += f'{case}' + sep
+            text += case_ja2en[case] + sep
             text += sep.join(f'{measure.f1:.5}' for measure in measures.values())
             text += '\n'
 

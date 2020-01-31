@@ -32,6 +32,9 @@ class Tester:
         self.checkpoints: List[Path] = list(config.save_dir.glob('**/model_best.pth'))
         self.save_dir: Path = config.save_dir / f'eval_{target}'
         self.save_dir.mkdir(exist_ok=True)
+        eventive_noun = (kwdlc_data_loader and config[f'{target}_kwdlc_dataset']['args']['eventive_noun']) or \
+                        (kc_data_loader and config[f'{target}_kc_dataset']['args']['eventive_noun'])
+        self.pas_targets = ('pred', 'noun', 'all') if eventive_noun else ('pred',)
 
     def test(self):
         log = {}
@@ -110,7 +113,7 @@ class Tester:
         documents_pred = prediction_writer.write(arguments_sets, None)
 
         result = {}
-        for pas_target in ('pred', 'noun', 'all'):
+        for pas_target in self.pas_targets:
             scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
                             kc=data_loader.dataset.kc,

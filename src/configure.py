@@ -81,8 +81,8 @@ def main() -> None:
                         help='BERT model type used for refinement model')
     parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
                         help='refinement layer type for RefinementModel')
-    parser.add_argument('--no-save-model', action='store_true', default=False,
-                        help='whether to save trained model')
+    parser.add_argument('--save-start-epoch', type=int, default=1,
+                        help='you can skip saving of initial checkpoints, which reduces writing overhead')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
                         help='corpus to use in training')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
@@ -255,8 +255,7 @@ def main() -> None:
         trainer = {
             'epochs': n_epoch,
             'save_dir': 'result/',
-            'save_period': 1,
-            'save_model': not args.no_save_model,
+            'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,
             'monitor': 'max val_kwdlc_zero_anaphora_f1',
             'early_stop': 10,

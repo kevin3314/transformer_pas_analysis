@@ -136,10 +136,7 @@ class Trainer(BaseTrainer):
         scorer = Scorer(documents_pred, valid_data_loader.dataset.documents,
                         valid_data_loader.dataset.target_exophors,
                         coreference=valid_data_loader.dataset.coreference,
-                        kc=valid_data_loader.dataset.kc,
-                        eval_eventive_noun=False)
-        # scorer.write_html(self.config.save_dir / f'result_{label}.html')
-        # scorer.export_txt(self.config.save_dir / f'result_{label}.txt')
+                        kc=valid_data_loader.dataset.kc)
 
         val_metrics = self._eval_metrics(scorer.result_dict(), label)
 

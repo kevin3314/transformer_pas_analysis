@@ -26,10 +26,9 @@ class BaseTrainer:
         self.metrics = metrics
         self.optimizer = optimizer
 
-        cfg_trainer = config['trainer']
+        cfg_trainer: dict = config['trainer']
         self.epochs: int = cfg_trainer['epochs']
-        self.save_period: int = cfg_trainer['save_period']
-        self.save_model: bool = cfg_trainer['save_model']
+        self.save_start_epoch: int = cfg_trainer.get('save_start_epoch', 1)
         self.monitor: str = cfg_trainer.get('monitor', 'off')
 
         # configuration to monitor model performance and save best
@@ -70,7 +69,7 @@ class BaseTrainer:
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)
 
-            # save logged informations into log dict
+            # save logged information into log dict
             log = {'epoch': epoch}
             log.update(result)
 
@@ -103,7 +102,7 @@ class BaseTrainer:
                                      "Training stops.".format(self.early_stop))
                     break
 
-            if self.save_model and epoch % self.save_period == 0 and epoch > 2:
+            if epoch >= self.save_start_epoch:
                 self._save_checkpoint(epoch, save_best=best)
 
     def _save_checkpoint(self, epoch, save_best=False):
