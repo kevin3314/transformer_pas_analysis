@@ -35,7 +35,7 @@ PAS analysis process is as follows:
 ## Quick Start
 
 ```zsh
-MODEL=/mnt/hinoki/ueda/bert/pas_analysis/result/BaselineModel-all-4e-large-coref-ocz-nocase-noun/0110_144947/model_best.pth
+MODEL=/mnt/hinoki/ueda/bert/pas_analysis/result/model_best.pth
 
 python src/inference.py \
 --model $MODEL \
