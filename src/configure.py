@@ -13,9 +13,9 @@ class Config:
         for key, value in kwargs.items():
             self.config.update({key: value})
 
-    def dump(self, config_dir: pathlib.Path, base_name: str) -> None:
-        config_dir.mkdir(exist_ok=True, parents=True)
-        config_path = config_dir / f'{base_name}.json'
+    def dump(self, config_dir: pathlib.Path) -> None:
+        config_dir.mkdir(exist_ok=True)
+        config_path = config_dir / f'{self.config["name"]}.json'
         with config_path.open('w') as f:
             json.dump(self.config, f, indent=2, ensure_ascii=False)
         print(config_path)
@@ -91,6 +91,7 @@ def main() -> None:
                         help='analyze eventive noun as predicate')
     args = parser.parse_args()
 
+    config_dir = pathlib.Path(args.config)
     bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
     n_gpu: int = args.gpus
     data_root = pathlib.Path(args.dataset).resolve()
@@ -100,16 +101,16 @@ def main() -> None:
     corefs: List[str] = dataset_config['target_corefs']
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
-        config_dir = pathlib.Path(model) / corpus / f'{n_epoch}e'
-        base_name = 'large' if args.use_bert_large else 'base'
-        base_name += '-coref' if args.coreference else ''
-        base_name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
-        base_name += '-nocase' if 'ノ' in cases else ''
-        base_name += '-noun' if args.eventive_noun else ''
-        if model in ('RefinementModel', 'RefinementModel2'):
-            base_name += '-largeref' if args.refinement_bert == 'large' else ''
-            base_name += '-reftype' + str(args.refinement_type)
-        base_name += f'-{args.additional_name}' if args.additional_name is not None else ''
+        name = f'{model}-{corpus}-{n_epoch}e'
+        name += 'large' if args.use_bert_large else 'base'
+        name += '-coref' if args.coreference else ''
+        name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
+        name += '-nocase' if 'ノ' in cases else ''
+        name += '-noun' if args.eventive_noun else ''
+        if model == 'RefinementModel2':
+            name += '-largeref' if args.refinement_bert == 'large' else ''
+            name += '-reftype' + str(args.refinement_type)
+        name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
         train_kwdlc_dir = data_root / 'kwdlc' / 'train'
         train_kc_dir = data_root / 'kc' / 'train'
@@ -263,7 +264,7 @@ def main() -> None:
         }
 
         config = Config(
-            name=str(config_dir / base_name).replace('/', '-'),
+            name=name,
             n_gpu=n_gpu,
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
@@ -281,7 +282,7 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(args.config / config_dir, base_name)
+        config.dump(config_dir)
 
 
 if __name__ == '__main__':
