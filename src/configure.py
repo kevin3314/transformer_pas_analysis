@@ -36,8 +36,7 @@ class Path:
 
 def main() -> None:
     all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'RefinementModel2',
-                  'EnsembleModel']
+                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'EnsembleModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
@@ -107,7 +106,7 @@ def main() -> None:
         name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         name += '-nocase' if 'ノ' in cases else ''
         name += '-noun' if args.eventive_noun else ''
-        if model == 'RefinementModel2':
+        if model == 'RefinementModel':
             name += '-largeref' if args.refinement_bert == 'large' else ''
             name += '-reftype' + str(args.refinement_type)
         name += f'-{args.additional_name}' if args.additional_name is not None else ''
@@ -130,7 +129,7 @@ def main() -> None:
                 'coreference': args.coreference,
             },
         }
-        if model in ('RefinementModel', 'RefinementModel2'):
+        if model == 'RefinementModel':
             refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': refinement_bert_model})
@@ -209,7 +208,7 @@ def main() -> None:
 
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
-        elif model in ('CaseInteractionModel2', 'RefinementModel', 'RefinementModel2', 'EnsembleModel'):
+        elif model in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
             loss = 'multi_cross_entropy_pas_loss'
         else:
             loss = 'cross_entropy_pas_loss'
