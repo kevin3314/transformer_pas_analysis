@@ -59,7 +59,7 @@ Options:
 - `-tab`: output is KNP tab format
 - `--use-bertknp`: use BERTKNP instead of KNP
 
-## Analyze a large number of documents
+## Analyze a Large Number of Documents
 
 Given raw sentences, first you need to apply (BERT)KNP to them
 and split into documents.
@@ -74,7 +74,7 @@ python src/inference.py \
 
 For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/master/scripts/knp_and_pas/Makefile)
 
-## Training your own model
+## Training Your Own Model
 
 ### Preprocess Documents
 
@@ -161,7 +161,7 @@ python src/scorer.py \
 --read-prediction-from-pas-tag
 ```
 
-## Perform training process with make
+## Perform Training Process with Make
 
 You can also perform training and testing via make command.
 
@@ -188,6 +188,11 @@ Ensemble test is also available.
 ```zsh
 make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 ```
+
+## Environment Variables
+
+- `BPA_CACHE_DIR`: A directory where processed document is cached. Default is `/data/$USER/bpa_cache`.
+- `BPA_DISABLE_CACHE`: If set, bert_pas_analysis doesn't load or save cache.
 
 ## Dataset
 
