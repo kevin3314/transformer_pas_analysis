@@ -57,7 +57,7 @@ Options:
 - `--device, -d`: GPU IDs separated by "," (if not specified, use CPU)
 - `--input, -i`: input sentence or document separated by "。"
 - `-tab`: output is KNP tab format
-- `use-bertknp`: use BERTKNP instead of KNP
+- `--use-bertknp`: use BERTKNP instead of KNP
 
 ## Analyze a large number of documents
 
@@ -87,6 +87,15 @@ python src/preprocess.py \
 --out <path-to-output-directory>
 ```
 
+example:
+
+```zsh
+python src/preprocess.py \
+--kwdlc /mnt/hinoki/ueda/kwdlc/new \
+--kc /mnt/hinoki/ueda/kc/split \
+--out data/dataset
+```
+
 ### Configuring Settings
 
 Before starting model training, prepare the configuration files.
@@ -105,7 +114,7 @@ python src/configure.py \
 example:
 
 ```zsh
-python src/configure.py -c config -e 4 8 -b 8 --model BaselineModel --corpus kwdlc all
+python src/configure.py -c config -d data/dataset -e 4 8 -b 8 --model BaselineModel --corpus kwdlc all
 ```
 
 ### Training Models
