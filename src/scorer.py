@@ -17,6 +17,12 @@ logger.setLevel(logging.WARNING)
 
 
 class Scorer:
+    DEPTYPE2ANALYSIS = OrderedDict([('overt', 'overt'),
+                                    ('dep', 'case_analysis'),
+                                    ('intra', 'zero_intra_sentential'),
+                                    ('inter', 'zero_inter_sentential'),
+                                    ('exo', 'zero_exophora')])
+
     def __init__(self,
                  documents_pred: List[Document],
                  documents_gold: List[Document],
@@ -35,13 +41,8 @@ class Scorer:
         self.coreference = coreference
         self.kc = kc
         self.comp_result: Dict[tuple, str] = {}
-        self.deptype2analysis = OrderedDict([('overt', 'overt'),
-                                             ('dep', 'case_analysis'),
-                                             ('intra', 'zero_intra_sentential'),
-                                             ('inter', 'zero_inter_sentential'),
-                                             ('exo', 'zero_exophora')])
         self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
-            (case, OrderedDict((anal, Measure()) for anal in self.deptype2analysis.values()))
+            (case, OrderedDict((anal, Measure()) for anal in Scorer.DEPTYPE2ANALYSIS.values()))
             for case in self.cases_w_no)
         self.measure_coref: Measure = Measure()
         self.relax_exophors: Dict[str, str] = {}
@@ -126,7 +127,7 @@ class Scorer:
                 assert len(args_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                 arg = args_pred[0]
                 key = (doc_id, dtid, case)
-                analysis = self.deptype2analysis[arg.dep_type]
+                analysis = Scorer.DEPTYPE2ANALYSIS[arg.dep_type]
                 if arg in args_gold:
                     self.comp_result[key] = analysis
                     self.measures[case][analysis].correct += 1
@@ -159,7 +160,7 @@ class Scorer:
                         arg = arg_  # 予測されている項を優先して正解の項に採用
                         correct = True
                 key = (doc_id, dtid, case)
-                analysis = self.deptype2analysis[arg.dep_type]
+                analysis = Scorer.DEPTYPE2ANALYSIS[arg.dep_type]
                 if correct is True:
                     assert self.comp_result[key] == analysis
                 elif args_pred:
@@ -219,7 +220,7 @@ class Scorer:
             if antecedents_pred:
                 assert len(antecedents_pred) == 1  # in bert_pas_analysis, predict one argument for one predicate
                 antecedent_pred = antecedents_pred[0]
-                analysis = self.deptype2analysis[antecedent_pred.dep_type]
+                analysis = Scorer.DEPTYPE2ANALYSIS[antecedent_pred.dep_type]
                 if antecedent_pred in antecedents_gold_relaxed:
                     self.comp_result[key] = analysis
                     self.measures['ノ'][analysis].correct += 1
@@ -235,7 +236,7 @@ class Scorer:
                     if ant in antecedents_pred:
                         antecedent_gold = ant  # 予測されている先行詞を優先して正解の先行詞に採用
                         correct = True
-                analysis = self.deptype2analysis[antecedent_gold.dep_type]
+                analysis = Scorer.DEPTYPE2ANALYSIS[antecedent_gold.dep_type]
                 if correct is True:
                     assert self.comp_result[key] == analysis
                 elif antecedents_pred:
@@ -482,7 +483,7 @@ class Scorer:
                     result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
                     if result == 'overt':
                         color = 'green'
-                    elif result in self.deptype2analysis.values():
+                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
                         color = 'blue'
                     elif result == 'wrong':
                         if isinstance(args[0], SpecialArgument) and arg not in self.relax_exophors:
