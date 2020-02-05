@@ -1,10 +1,7 @@
-import os
 import logging
 from typing import List, Dict, Optional
 from pathlib import Path
-import _pickle as cPickle
 from collections import defaultdict
-import hashlib
 
 from tqdm import tqdm
 import numpy as np
@@ -86,35 +83,16 @@ class PASDataset(Dataset):
         self.features = []
 
         for document in tqdm(documents, desc='processing documents'):
-            bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-            bpa_cache_dir.mkdir(exist_ok=True, parents=True)
-            example_hash = self._hash(document, bert_model, eventive_noun)
-            cache_path = bpa_cache_dir / example_hash / (document.doc_id + self.reader.pickle_ext)
-            if cache_path.exists():
-                with cache_path.open('rb') as f:
-                    example = cPickle.load(f)
-            else:
-                example = read_example(document,
-                                       target_exophors=exophors,
-                                       coreference=coreference,
-                                       kc=kc,
-                                       eventive_noun=eventive_noun)
-                cache_path.parent.mkdir(exist_ok=True)
-                with cache_path.open('wb') as f:
-                    cPickle.dump(example, f)
+            example = read_example(document,
+                                   target_exophors=exophors,
+                                   coreference=coreference,
+                                   kc=kc,
+                                   eventive_noun=eventive_noun)
             feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:
                 continue
             self.examples.append(example)
             self.features.append(feature)
-
-    def _hash(self, document, *args) -> str:
-        attrs_dataset = ('target_cases', 'target_exophors', 'coreference', 'train_overt', 'train_case', 'train_zero')
-        attrs_document = ('target_cases', 'target_corefs', 'relax_cases', 'relax_corefs', 'extract_nes', 'use_pas_tag')
-        vars_dataset = {k: v for k, v in vars(self).items() if k in attrs_dataset}
-        vars_document = {k: v for k, v in vars(document).items() if k in attrs_document}
-        string = repr(sorted(vars_dataset)) + repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
-        return hashlib.md5(string.encode()).hexdigest()
 
     def _convert_example_to_feature(self,
                                     example: PasExample,
