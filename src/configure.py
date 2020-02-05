@@ -77,7 +77,7 @@ def main() -> None:
     parser.add_argument('--use-bert-large', action='store_true', default=False,
                         help='whether to use BERT_LARGE model')
     parser.add_argument('--refinement-bert', choices=['base', 'large'], default='base',
-                        help='BERT model type used for refinement model')
+                        help='BERT model type used for RefinementModel')
     parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,

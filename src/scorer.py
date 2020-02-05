@@ -26,8 +26,9 @@ class Scorer:
                  pas_target: str = 'pred'):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
-        self.cases: List[str] = documents_gold[0].target_cases
-        self.bridging: bool = 'ノ' in self.cases
+        self.cases_w_no: List[str] = documents_gold[0].target_cases
+        self.cases: List[str] = [c for c in self.cases_w_no if c != 'ノ']
+        self.bridging: bool = 'ノ' in self.cases_w_no
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
@@ -41,7 +42,7 @@ class Scorer:
                                              ('exo', 'zero_exophora')])
         self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
             (case, OrderedDict((anal, Measure()) for anal in self.deptype2analysis.values()))
-            for case in self.cases)
+            for case in self.cases_w_no)
         self.measure_coref: Measure = Measure()
         self.relax_exophors: Dict[str, str] = {}
         for exophor in target_exophors:
@@ -66,7 +67,7 @@ class Scorer:
                 if (pas_target in ('pred', 'all') and '用言' in features) or \
                         (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
-                if '体言' in features and '非用言格解析' not in features:
+                if self.bridging and '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
                 if self._process(predicate_gold.sid, doc_id) is False:
@@ -75,7 +76,7 @@ class Scorer:
                 if (pas_target in ('pred', 'all') and '用言' in features) or \
                         (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
                     self.did2predicates_gold[doc_id].append(predicate_gold)
-                if '体言' in features and '非用言格解析' not in features:
+                if self.bridging and '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
@@ -114,7 +115,7 @@ class Scorer:
                 arguments_gold = document_gold.get_arguments(predicate_gold, relax=True)
             else:
                 predicate_gold = arguments_gold = None
-            for case in [c for c in self.cases if c != 'ノ']:
+            for case in self.cases:
                 if predicate_gold is not None:
                     args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
                 else:
@@ -144,7 +145,7 @@ class Scorer:
                 arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
             else:
                 arguments_pred = None
-            for case in [c for c in self.cases if c != 'ノ']:
+            for case in self.cases:
                 args_pred: List[BaseArgument] = arguments_pred[case] if arguments_pred is not None else []
                 assert len(args_pred) in (0, 1)
                 args_gold = self._filter_args(arguments_gold[case], predicate_gold, self.relax_exophors)
@@ -330,7 +331,7 @@ class Scorer:
     def export_txt(self, destination: Union[str, Path, TextIO]):
         lines = []
         for case, measures in self.result_dict().items():
-            if case in self.cases:
+            if case in self.cases_w_no:
                 lines.append(f'{case}格')
             else:
                 lines.append(f'{case}')
@@ -466,10 +467,15 @@ class Scorer:
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(sentence.tag_list())
         for predicate in filter(lambda p: p.sid == sid, set(predicates + anaphors)):
+            cases = []
+            if predicate in predicates:
+                cases += self.cases
+            if predicate in anaphors:
+                cases += 'ノ'
             idx = predicate.tid
             tree_strings[idx] += '  '
             arguments = document.get_arguments(predicate)
-            for case in self.cases:
+            for case in cases:
                 args = arguments[case]
                 if args:
                     arg = args[0].midasi
