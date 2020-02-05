@@ -678,6 +678,9 @@ class Document:
     def __iter__(self):
         return iter(self.sid2sentence.values())
 
+    def __str__(self):
+        return '\n'.join(''.join(tag.midasi for tag in sent.tag_list()) for sent in self)
+
 
 def main():
     reader = KWDLCReader(sys.argv[1],
