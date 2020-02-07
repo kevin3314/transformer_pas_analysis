@@ -261,6 +261,7 @@ class Scorer:
 
             if dtid in dtid2mention_gold:
                 src_mention_gold = dtid2mention_gold[dtid]
+                # TODO: gold_relaxed を作る
                 tgt_mentions_gold = \
                     self._filter_mentions(document_gold.get_siblings(src_mention_gold), src_mention_gold)
                 exophors_gold = [document_gold.entities[eid].exophor for eid in src_mention_gold.eids
@@ -511,7 +512,7 @@ class Scorer:
                     if not target:
                         target = tgt_mention.midasi
                     targets.add(target + str(tgt_mention.dtid))
-                for eid in src_mention.eids:
+                for eid in src_mention.eids:  # FIXME: もし pred が relaxed された mention を指していたらどうする？
                     entity = document.entities[eid]
                     if entity.exophor in self.relax_exophors.values():
                         targets.add(entity.exophor)
@@ -578,6 +579,8 @@ def main():
                         help='path to csv file which prediction result is exported (default: None)')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='Case strings. Separate by ","')
+    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
+                        help='Coreference strings. Separate by ","')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
@@ -591,7 +594,7 @@ def main():
     reader_gold = KWDLCReader(
         Path(args.gold_dir),
         target_cases=args.case_string.split(','),
-        target_corefs=['=', '=構', '=≒'],
+        target_corefs=args.coref_string.split(','),
         extract_nes=False
     )
     reader_pred = KWDLCReader(

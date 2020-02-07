@@ -25,7 +25,7 @@ def main():
                         help='path to directory where Kyoto Corpus data exists')
     parser.add_argument('--out', type=str, required=True,
                         help='path to directory where dataset to be located')
-    parser.add_argument('--coref-string', type=str, default='=,=構,=≒',
+    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
                         help='Coreference strings. Separate by ","')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='Case strings. Separate by ","')
