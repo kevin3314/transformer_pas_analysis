@@ -29,18 +29,6 @@ class Mention(BasePhrase):
     def all_eids(self) -> Set[int]:
         return self.eids | self.eids_unc
 
-    def add_eid(self, eid: int, uncertain: bool) -> None:
-        if uncertain:
-            self.eids_unc.add(eid)
-        else:
-            self.eids.add(eid)
-
-    def remove_eid(self, eid) -> None:
-        if eid in self.eids:
-            self.eids.remove(eid)
-        if eid in self.eids_unc:
-            self.eids_unc.remove(eid)
-
     def is_uncertain_to(self, entity: 'Entity') -> bool:
         if entity.eid in self.eids:
             return False
@@ -57,6 +45,7 @@ class Mention(BasePhrase):
 
 class Entity:
     """ 共参照における entity を扱うクラス
+    自身を参照している mention の eids の管理も行う
 
     Args:
         eid (int): entity id
@@ -100,15 +89,32 @@ class Entity:
     def add_mention(self, mention: Mention, uncertain: bool) -> None:
         """この entity を参照する mention を追加する
 
+        uncertain でない mention が add された時、
+        その mention がすでに uncertain な mention として登録されていれば
+        uncertain でないものとして上書きする
+
         Args:
             mention (Mention): メンション
             uncertain (bool): mention が =≒ などの不確実なものか
         """
-        mention.add_eid(self.eid, uncertain)
         if uncertain:
+            if mention in self.all_mentions:
+                return
+            mention.eids_unc.add(self.eid)
             self.mentions_unc.add(mention)
         else:
+            if mention in self.mentions_unc:
+                self.remove_mention(mention)
+            mention.eids.add(self.eid)
             self.mentions.add(mention)
         # 全ての mention の品詞が一致した場合のみ entity に品詞を設定
         self.yougen = (self.yougen is not False) and ('用言' in mention.tag.features)
         self.taigen = (self.taigen is not False) and ('体言' in mention.tag.features)
+
+    def remove_mention(self, mention: Mention) -> None:
+        if mention in self.mentions:
+            self.mentions.remove(mention)
+            mention.eids.remove(self.eid)
+        if mention in self.mentions_unc:
+            self.mentions_unc.remove(mention)
+            mention.eids_unc.remove(self.eid)

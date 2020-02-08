@@ -321,6 +321,9 @@ class Document:
         uncertain: bool = rel.atype.endswith('≒')
         source_mention = self._create_mention(source_bp)
         for eid in source_mention.all_eids:
+            # _merge_entities によって source_mention の eid が削除されているかもしれない
+            if eid not in self.entities:
+                continue
             source_entity = self.entities[eid]
             if rel.sid is not None:
                 target_mention = self._create_mention(target_bp)
@@ -408,10 +411,16 @@ class Document:
             te (Entity): 参照先エンティティ
             uncertain (bool): source_mention と target_mention のアノテーションが ≒ かどうか
         """
-        if se is te:
-            return
         uncertain_tgt = (target_mention is not None) and target_mention.is_uncertain_to(te)
         uncertain_src = source_mention.is_uncertain_to(se)
+        if se is te:
+            if not uncertain:
+                # se(te), source_mention, target_mention の三角形のうち2辺が certain ならもう1辺も certain
+                if (not uncertain_src) and uncertain_tgt:
+                    se.add_mention(target_mention, uncertain=False)
+                if uncertain_src and (not uncertain_tgt):
+                    se.add_mention(source_mention, uncertain=False)
+            return
         if target_mention is not None:
             se.add_mention(target_mention, uncertain=(uncertain or uncertain_src))
         te.add_mention(source_mention, uncertain=(uncertain or uncertain_tgt))
@@ -451,7 +460,7 @@ class Document:
         entity = self.entities[eid]
         logger.info(f'{sid:24}delete entity: {eid} ({entity.midasi})')
         for mention in entity.all_mentions:
-            mention.remove_eid(eid)
+            entity.remove_mention(mention)
         self.entities.pop(eid)
 
     def _get_bp(self,
