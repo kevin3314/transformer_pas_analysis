@@ -4,7 +4,7 @@ import copy
 import _pickle as cPickle
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Iterator, Union, TextIO
+from typing import List, Dict, Set, Optional, Iterator, Union, TextIO
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
@@ -18,14 +18,6 @@ from kwdlc_reader.base_phrase import BasePhrase
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
-
-"""
-# TODO
-
-# MEMO
-- corefタグは用言に対しても振られる
-- 用言かつ体言の基本句もある
-"""
 
 
 class KWDLCReader:
@@ -581,22 +573,18 @@ class Document:
 
         return pas.arguments
 
-    def get_siblings(self, mention: Mention, relax: bool = False) -> List[Mention]:
+    def get_siblings(self, mention: Mention, relax: bool = False) -> Set[Mention]:
         """mention と共参照関係にある他の全ての mention を返す"""
-        mentions = []
+        mentions = set()
         for eid in mention.eids:
             entity = self.entities[eid]
-            for mention_ in entity.mentions:
-                if mention_ == mention or mention_ in mentions:
-                    continue
-                mentions.append(mention_)
+            mentions.update(entity.mentions)
         if relax is True:
             for eid in mention.eids_unc:
                 entity = self.entities[eid]
-                for mention_ in entity.all_mentions:
-                    if mention_ == mention or mention_ in mentions:
-                        continue
-                    mentions.append(mention_)
+                mentions.update(entity.all_mentions)
+        if mention in mentions:
+            mentions.remove(mention)
         return mentions
 
     def draw_tree(self,
@@ -659,7 +647,7 @@ class Document:
 
         num_mention = num_taigen = num_yougen = 0
         for src_mention in self.mentions.values():
-            tgt_mentions: List[Mention] = self.get_siblings(src_mention)
+            tgt_mentions: Set[Mention] = self.get_siblings(src_mention)
             if tgt_mentions:
                 num_mention += 1
             for tgt_mention in tgt_mentions:
