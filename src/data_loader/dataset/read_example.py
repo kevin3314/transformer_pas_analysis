@@ -16,24 +16,20 @@ def read_example(document: Document,
                  kc: bool,
                  eventive_noun: bool,
                  ) -> 'PasExample':
-    is_cache_enabled: bool = ('BPA_DISABLE_CACHE' not in os.environ)
-    if is_cache_enabled:
-        bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-        example_hash = _hash(document, target_exophors, coreference, eventive_noun)
-        cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
-        if cache_path.exists():
-            with cache_path.open('rb') as f:
-                return cPickle.load(f)
+    overwrite_cache: bool = ('BPA_OVERWRITE_CACHE' in os.environ)
+    bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
+    example_hash = _hash(document, target_exophors, coreference, eventive_noun)
+    cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
+    if cache_path.exists() and not overwrite_cache:
+        with cache_path.open('rb') as f:
+            example = cPickle.load(f)
     else:
-        cache_path = None
-
-    example = PasExample()
-    example.load(document,
-                 target_exophors=target_exophors,
-                 coreference=coreference,
-                 kc=kc,
-                 eventive_noun=eventive_noun)
-    if is_cache_enabled:
+        example = PasExample()
+        example.load(document,
+                     target_exophors=target_exophors,
+                     coreference=coreference,
+                     kc=kc,
+                     eventive_noun=eventive_noun)
         cache_path.parent.mkdir(exist_ok=True, parents=True)
         with cache_path.open('wb') as f:
             cPickle.dump(example, f)
