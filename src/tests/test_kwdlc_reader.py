@@ -326,6 +326,48 @@ def test_coref2(fixture_kwdlc_reader: KWDLCReader):
     assert (mentions[3].midasi, mentions[3].dtid, mentions[3].eids) == ('皆様', 17, {14})
 
 
+def test_coref_link1(fixture_kwdlc_reader: KWDLCReader):
+    document = fixture_kwdlc_reader.process_document('w201106-0000060050')
+    for entity in document.entities.values():
+        for mention in entity.mentions:
+            assert entity.eid in mention.eids
+        for mention in entity.mentions_unc:
+            assert entity.eid in mention.eids_unc
+    for mention in document.mentions.values():
+        for eid in mention.eids:
+            assert mention in document.entities[eid].mentions
+        for eid in mention.eids_unc:
+            assert mention in document.entities[eid].mentions_unc
+
+
+def test_coref_link2(fixture_kwdlc_reader: KWDLCReader):
+    document = fixture_kwdlc_reader.process_document('w201106-0000060560')
+    for entity in document.entities.values():
+        for mention in entity.mentions:
+            assert entity.eid in mention.eids
+        for mention in entity.mentions_unc:
+            assert entity.eid in mention.eids_unc
+    for mention in document.mentions.values():
+        for eid in mention.eids:
+            assert mention in document.entities[eid].mentions
+        for eid in mention.eids_unc:
+            assert mention in document.entities[eid].mentions_unc
+
+
+def test_coref_link3(fixture_kwdlc_reader: KWDLCReader):
+    document = fixture_kwdlc_reader.process_document('w201106-0000060877')
+    for entity in document.entities.values():
+        for mention in entity.mentions:
+            assert entity.eid in mention.eids
+        for mention in entity.mentions_unc:
+            assert entity.eid in mention.eids_unc
+    for mention in document.mentions.values():
+        for eid in mention.eids:
+            assert mention in document.entities[eid].mentions
+        for eid in mention.eids_unc:
+            assert mention in document.entities[eid].mentions_unc
+
+
 def test_ne(fixture_kwdlc_reader: KWDLCReader):
     document = fixture_kwdlc_reader.process_document('w201106-0000060877')
     nes = document.named_entities
