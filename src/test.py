@@ -114,7 +114,9 @@ class Tester:
 
         result = {}
         for pas_target in self.pas_targets:
-            scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
+            scorer = Scorer(documents_pred, data_loader.dataset.documents,
+                            target_cases=data_loader.dataset.target_cases,
+                            target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
                             kc=data_loader.dataset.kc,
                             pas_target=pas_target)

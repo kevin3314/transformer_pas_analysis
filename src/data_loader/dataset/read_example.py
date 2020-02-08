@@ -11,6 +11,7 @@ from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, UNCE
 
 
 def read_example(document: Document,
+                 target_cases: List[str],
                  target_exophors: List[str],
                  coreference: bool,
                  kc: bool,
@@ -26,6 +27,7 @@ def read_example(document: Document,
     else:
         example = PasExample()
         example.load(document,
+                     target_cases=target_cases,
                      target_exophors=target_exophors,
                      coreference=coreference,
                      kc=kc,
@@ -57,6 +59,7 @@ class PasExample:
 
     def load(self,
              document: Document,
+             target_cases: List[str],
              target_exophors: List[str],
              coreference: bool,
              kc: bool,
@@ -65,8 +68,8 @@ class PasExample:
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
         last_sent = document.sentences[-1] if len(document) > 0 else None
-        cases = document.target_cases + (['='] if coreference else [])
-        basic_cases = [c for c in document.target_cases if c != 'ノ']
+        cases = target_cases + (['='] if coreference else [])
+        basic_cases = [c for c in target_cases if c != 'ノ']
         relax_exophors = {}
         for exophor in target_exophors:
             relax_exophors[exophor] = exophor

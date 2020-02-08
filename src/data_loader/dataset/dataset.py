@@ -44,9 +44,9 @@ class PASDataset(Dataset):
                  path: Optional[str],
                  max_seq_length: int,
                  cases: List[str],
-                 corefs: List[str],
                  exophors: List[str],
                  coreference: bool,
+                 dataset_config: dict,
                  training: bool,
                  bert_model: str,
                  kc: bool,
@@ -61,10 +61,10 @@ class PASDataset(Dataset):
             assert knp_string is not None
             source = knp_string
         self.reader = KWDLCReader(source,
-                                  target_cases=cases,
-                                  target_corefs=corefs,
+                                  target_cases=dataset_config['target_cases'],
+                                  target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
-        self.target_cases = self.reader.target_cases
+        self.target_cases = cases
         self.target_exophors = exophors
         self.coreference = coreference
         self.kc = kc
@@ -84,6 +84,7 @@ class PASDataset(Dataset):
 
         for document in tqdm(documents, desc='processing documents'):
             example = read_example(document,
+                                   target_cases=cases,
                                    target_exophors=exophors,
                                    coreference=coreference,
                                    kc=kc,

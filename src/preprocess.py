@@ -27,7 +27,7 @@ def main():
                         help='path to directory where dataset to be located')
     parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
                         help='Coreference strings. Separate by ","')
-    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
+    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ',
                         help='Case strings. Separate by ","')
     args = parser.parse_args()
 
@@ -49,11 +49,6 @@ def main():
         process(kwdlc_dir / 'train', output_dir / 'train', target_cases, target_corefs)
         process(kwdlc_dir / 'valid', output_dir / 'valid', target_cases, target_corefs)
         process(kwdlc_dir / 'test', output_dir / 'test', target_cases, target_corefs)
-        # config['kwdlc'] = {
-        #     'train': str(kwdlc_dir / 'train'),
-        #     'valid': str(kwdlc_dir / 'valid'),
-        #     'test': str(kwdlc_dir / 'test'),
-        # }
 
     if args.kc is not None:
         kc_dir = Path(args.kc).resolve()
@@ -62,11 +57,6 @@ def main():
         process(kc_dir / 'train', output_dir / 'train', target_cases, target_corefs)
         process(kc_dir / 'valid', output_dir / 'valid', target_cases, target_corefs)
         process(kc_dir / 'test', output_dir / 'test', target_cases, target_corefs)
-        # config['kc'] = {
-        #     'train': str(kc_dir / 'train'),
-        #     'valid': str(kc_dir / 'valid'),
-        #     'test': str(kc_dir / 'test'),
-        # }
 
     with Path(args.out).joinpath('config.json').open(mode='wt') as f:
         json.dump(config, f, indent=2, ensure_ascii=False)

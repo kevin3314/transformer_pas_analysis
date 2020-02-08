@@ -26,13 +26,14 @@ class Scorer:
     def __init__(self,
                  documents_pred: List[Document],
                  documents_gold: List[Document],
+                 target_cases: List[str],
                  target_exophors: List[str],
                  coreference: bool = True,
                  kc: bool = False,
                  pas_target: str = 'pred'):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
-        self.cases_w_no: List[str] = documents_gold[0].target_cases
+        self.cases_w_no: List[str] = target_cases
         self.cases: List[str] = [c for c in self.cases_w_no if c != 'ノ']
         self.bridging: bool = 'ノ' in self.cases_w_no
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
@@ -127,7 +128,9 @@ class Scorer:
                 assert len(args_pred) in (0, 1)  # in bert_pas_analysis, predict one argument for one predicate
                 if predicate_gold is not None:
                     args_gold = self._filter_args(arguments_gold[case], predicate_gold)
-                    args_gold_relaxed = self._filter_args(arguments_gold_relaxed[case], predicate_gold)
+                    args_gold_relaxed = self._filter_args(
+                        arguments_gold_relaxed[case] + (arguments_gold_relaxed['判ガ'] if case == 'ガ' else []),
+                        predicate_gold)
                 else:
                     args_gold = args_gold_relaxed = []
 
@@ -203,7 +206,8 @@ class Scorer:
                 antecedents_gold: List[BaseArgument] = \
                     self._filter_args(document_gold.get_arguments(anaphor_gold, relax=False)['ノ'], anaphor_gold)
                 antecedents_gold_relaxed: List[BaseArgument] = \
-                    self._filter_args(document_gold.get_arguments(anaphor_gold, relax=True)['ノ'], anaphor_gold)
+                    self._filter_args(document_gold.get_arguments(anaphor_gold, relax=True)['ノ'] +
+                                      document_gold.get_arguments(anaphor_gold, relax=True)['ノ？'], anaphor_gold)
             else:
                 antecedents_gold = antecedents_gold_relaxed = []
 
@@ -456,15 +460,15 @@ class Scorer:
             if predicate in predicates:
                 cases += self.cases
             if predicate in anaphors:
-                cases += 'ノ'
+                cases += ['ノ', 'ノ？']
             idx = predicate.tid
             tree_strings[idx] += '  '
             arguments = document.get_arguments(predicate)
             for case in cases:
-                args = arguments[case]
+                args = arguments[case] + (arguments['判ガ'] if case == 'ガ' else [])
                 if args:
                     arg = args[0].midasi
-                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case.rstrip('？')), None)
                     if result == 'overt':
                         color = 'green'
                     elif result in Scorer.DEPTYPE2ANALYSIS.values():
@@ -576,7 +580,7 @@ def main():
 
     reader_gold = KWDLCReader(
         Path(args.gold_dir),
-        target_cases=args.case_string.split(','),
+        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？'.split(','),
         target_corefs=args.coref_string.split(','),
         extract_nes=False
     )
@@ -591,6 +595,7 @@ def main():
     documents_gold = list(reader_gold.process_all_documents())
 
     scorer = Scorer(documents_pred, documents_gold,
+                    target_cases=args.case_string.split(','),
                     target_exophors=args.exophors.split(','),
                     coreference=args.coreference,
                     kc=(len(documents_gold[0].doc_id.split('-')[-1]) == 2),

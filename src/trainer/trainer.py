@@ -134,7 +134,8 @@ class Trainer(BaseTrainer):
         documents_pred = prediction_writer.write(arguments_sets, None)
 
         scorer = Scorer(documents_pred, valid_data_loader.dataset.documents,
-                        valid_data_loader.dataset.target_exophors,
+                        target_cases=valid_data_loader.dataset.target_cases,
+                        target_exophors=valid_data_loader.dataset.target_exophors,
                         coreference=valid_data_loader.dataset.coreference,
                         kc=valid_data_loader.dataset.kc)
 

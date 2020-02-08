@@ -165,7 +165,7 @@ class PredictionKNPWriter:
         dmid2tag = {document.mrph2dmid[mrph]: tag for tag in document.tag_list() for mrph in tag.mrph_list()}
         tag2sid = {tag: sentence.sid for sentence in document for tag in sentence.tag_list()}
         assert len(gold_arguments_set) == len(dmid2tag)
-        cases: List[str] = document.target_cases + (['='] if self.coreference else [])
+        cases: List[str] = self.cases + (['='] if self.coreference else [])
         for mrph in tag.mrph_list():
             dmid = document.mrph2dmid[mrph]
             token_index = features.orig_to_tok_index[dmid]
