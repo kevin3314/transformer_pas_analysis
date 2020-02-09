@@ -152,12 +152,13 @@ class Document:
                  extract_nes: bool,
                  use_pas_tag: bool,
                  ) -> None:
-        self.knp_string = knp_string
-        self.doc_id = doc_id
+        self.knp_string: str = knp_string
+        self.doc_id: str = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
         self.relax_cases: bool = relax_cases
         self.extract_nes: bool = extract_nes
+        self.use_pas_tag: bool = use_pas_tag
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
         buff = []
@@ -179,9 +180,9 @@ class Document:
         self.mentions: Dict[int, Mention] = OrderedDict()
         self.entities: Dict[int, Entity] = OrderedDict()
         if use_pas_tag:
-            self._extract_pas()
+            self._analyze_pas()
         else:
-            self._extract_relations()
+            self._analyze_rel()
 
         if extract_nes:
             self.named_entities: List[NamedEntity] = []
@@ -201,7 +202,7 @@ class Document:
                 self.bnst2dbid[bnst] = dbid
                 dbid += 1
 
-    def _extract_pas(self) -> None:
+    def _analyze_pas(self) -> None:
         """extract predicate argument structure from <述語項構造:> tag in knp string"""
         sid2idx = {sid: idx for idx, sid in enumerate(self.sid2sentence.keys())}
         for tag in self.tag_list():
@@ -226,7 +227,7 @@ class Document:
             if pas.arguments:
                 self._pas[pas.dtid] = pas
 
-    def _extract_relations(self) -> None:
+    def _analyze_rel(self) -> None:
         """extract predicate argument structure and coreference relation from <rel> tag in knp string"""
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
