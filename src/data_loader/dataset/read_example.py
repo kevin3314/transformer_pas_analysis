@@ -11,15 +11,15 @@ from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, UNCE
 
 
 def read_example(document: Document,
-                 target_cases: List[str],
-                 target_exophors: List[str],
+                 cases: List[str],
+                 exophors: List[str],
                  coreference: bool,
                  kc: bool,
                  eventive_noun: bool,
                  ) -> 'PasExample':
     overwrite_cache: bool = ('BPA_OVERWRITE_CACHE' in os.environ)
     bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, target_exophors, coreference, eventive_noun)
+    example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun)
     cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
     if cache_path.exists() and not overwrite_cache:
         with cache_path.open('rb') as f:
@@ -27,8 +27,8 @@ def read_example(document: Document,
     else:
         example = PasExample()
         example.load(document,
-                     target_cases=target_cases,
-                     target_exophors=target_exophors,
+                     target_cases=cases,
+                     target_exophors=exophors,
                      coreference=coreference,
                      kc=kc,
                      eventive_noun=eventive_noun)
@@ -40,6 +40,7 @@ def read_example(document: Document,
 
 def _hash(document, *args) -> str:
     attrs = ('target_cases', 'target_corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
+    assert set(attrs) <= set(vars(document).keys())
     vars_document = {k: v for k, v in vars(document).items() if k in attrs}
     string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
     return hashlib.md5(string.encode()).hexdigest()

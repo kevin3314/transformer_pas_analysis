@@ -84,8 +84,8 @@ class PASDataset(Dataset):
 
         for document in tqdm(documents, desc='processing documents'):
             example = read_example(document,
-                                   target_cases=cases,
-                                   target_exophors=exophors,
+                                   cases=cases,
+                                   exophors=exophors,
                                    coreference=coreference,
                                    kc=kc,
                                    eventive_noun=eventive_noun)
