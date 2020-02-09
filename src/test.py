@@ -106,11 +106,11 @@ class Tester:
             return (np.concatenate(outputs, axis=0), ), avg_loss
 
     def _eval(self, arguments_sets, data_loader, corpus: str, suffix: str = ''):
-        # prediction_output_dir = self.config.save_dir / f'{self.target}_out_{suffix}'
+        prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
-        documents_pred = prediction_writer.write(arguments_sets, None)
+        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
         result = {}
         for pas_target in self.pas_targets:
