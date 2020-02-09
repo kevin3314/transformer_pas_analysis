@@ -1,7 +1,6 @@
 from typing import Tuple
 
 import torch
-import torch.nn.functional as F
 
 
 def cross_entropy_pas_loss(output: torch.Tensor,  # (b, seq, case, seq)

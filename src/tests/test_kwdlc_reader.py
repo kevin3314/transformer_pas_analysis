@@ -134,7 +134,6 @@ def test_pas_relax(fixture_kwdlc_reader: KWDLCReader):
     document = fixture_kwdlc_reader.process_document('w201106-0000060560')
     predicates: List[Predicate] = document.get_predicates()
     arguments = document.get_arguments(predicates[9], relax=True)
-    sid1 = 'w201106-0000060560-1'
     sid2 = 'w201106-0000060560-2'
     sid3 = 'w201106-0000060560-3'
     assert predicates[9].midasi == 'ご協力の'
