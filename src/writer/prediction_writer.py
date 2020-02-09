@@ -165,15 +165,15 @@ class PredictionKNPWriter:
         dmid2tag = {document.mrph2dmid[mrph]: tag for tag in document.tag_list() for mrph in tag.mrph_list()}
         tag2sid = {tag: sentence.sid for sentence in document for tag in sentence.tag_list()}
         assert len(gold_arguments_set) == len(dmid2tag)
-        cases: List[str] = self.cases + (['='] if self.coreference else [])
+        cases_w_coref: List[str] = self.cases + (['='] if self.coreference else [])
         for mrph in tag.mrph_list():
             dmid = document.mrph2dmid[mrph]
             token_index = features.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
-            # {'ガ': '14', 'ヲ': '23%C', 'ニ': 'NULL', 'ガ２': 'NULL', '=': None}
+            # {'ガ': ['14%O', '著者'], 'ヲ': ['23%C'], 'ニ': ['NULL'], 'ガ２': ['NULL'], '=': []}
             gold_arguments: Dict[str, List[str]] = gold_arguments_set[dmid]
-            assert len(cases) == len(arguments)
-            assert len(cases) == len(gold_arguments)
+            assert len(cases_w_coref) == len(arguments)
+            assert cases_w_coref == list(gold_arguments.keys())
             for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
                 # 助詞などの非解析対象形態素については gold_args が空になっている
                 if not gold_args:
@@ -239,9 +239,9 @@ class PredictionKNPWriter:
         for case in self.cases:
             items = ['-'] * 6
             items[0] = case
-            argument = pas.arguments[case]
-            if argument:
-                arg: BaseArgument = argument[0]
+            args = pas.arguments[case]
+            if args:
+                arg: BaseArgument = args[0]
                 items[1] = dtype2caseflag[arg.dep_type]  # フラグ (C/N/O/D/E/U)
                 items[2] = arg.midasi  # 見出し
                 if isinstance(arg, Argument):

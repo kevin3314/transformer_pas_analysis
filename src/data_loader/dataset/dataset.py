@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, NamedTuple
 from pathlib import Path
 from collections import defaultdict
 
@@ -12,31 +12,17 @@ from kwdlc_reader import KWDLCReader
 from data_loader.dataset.read_example import read_example, PasExample
 
 
-class InputFeatures:
-    """A single set of features of data."""
-
-    def __init__(self,
-                 tokens: List[str],
-                 orig_to_tok_index: List[int],  # use for output
-                 tok_to_orig_index: List[Optional[int]],  # use for output
-                 input_ids: List[int],  # use for model
-                 input_mask: List[int],  # use for model
-                 segment_ids: List[int],  # use for model
-                 arguments_set: List[List[List[int]]],  # use for model
-                 ng_arg_mask: List[List[int]],  # use for model
-                 ng_ment_mask: List[List[int]],  # use for model
-                 deps: List[List[int]],
-                 ):
-        self.tokens = tokens
-        self.orig_to_tok_index = orig_to_tok_index
-        self.tok_to_orig_index = tok_to_orig_index
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-        self.arguments_set = arguments_set
-        self.ng_arg_mask = ng_arg_mask
-        self.ng_ment_mask = ng_ment_mask
-        self.deps = deps
+class InputFeatures(NamedTuple):
+    tokens: List[str]  # for debug
+    orig_to_tok_index: List[int]  # for output
+    tok_to_orig_index: List[Optional[int]]  # for output
+    input_ids: List[int]  # for training
+    input_mask: List[int]  # for training
+    segment_ids: List[int]  # for training
+    arguments_set: List[List[List[int]]]  # for training
+    ng_arg_mask: List[List[int]]  # for training
+    ng_ment_mask: List[List[int]]  # for training
+    deps: List[List[int]]  # for training
 
 
 class PASDataset(Dataset):

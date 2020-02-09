@@ -96,6 +96,9 @@ python src/preprocess.py \
 --out data/dataset
 ```
 
+Don't care if many "sentence not found" messages are shown when processing kc.
+It is a natural result of splitting document.
+
 ### Configuring Settings
 
 Before starting model training, prepare the configuration files.
