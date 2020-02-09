@@ -39,7 +39,7 @@ def read_example(document: Document,
 
 
 def _hash(document, *args) -> str:
-    attrs = ('target_cases', 'target_corefs', 'relax_cases', 'relax_corefs', 'extract_nes', 'use_pas_tag')
+    attrs = ('target_cases', 'target_corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
     vars_document = {k: v for k, v in vars(document).items() if k in attrs}
     string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
     return hashlib.md5(string.encode()).hexdigest()
