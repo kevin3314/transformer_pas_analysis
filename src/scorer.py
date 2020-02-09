@@ -34,7 +34,7 @@ class Scorer:
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
         self.cases_w_no: List[str] = target_cases
-        self.cases: List[str] = [c for c in self.cases_w_no if c != 'ノ']
+        self.cases: List[str] = [c for c in target_cases if c != 'ノ']
         self.bridging: bool = 'ノ' in self.cases_w_no
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
@@ -252,8 +252,8 @@ class Scorer:
                 src_mention_pred = dtid2mention_pred[dtid]
                 tgt_mentions_pred = \
                     self._filter_mentions(document_pred.get_siblings(src_mention_pred), src_mention_pred)
-                exophors_pred = [document_pred.entities[eid].exophor for eid in src_mention_pred.eids
-                                 if document_pred.entities[eid].is_special]
+                exophors_pred = [e.exophor for e in map(document_pred.entities.get, src_mention_pred.eids)
+                                 if e.is_special]
             else:
                 tgt_mentions_pred = exophors_pred = []
 
@@ -263,10 +263,10 @@ class Scorer:
                     self._filter_mentions(document_gold.get_siblings(src_mention_gold, relax=False), src_mention_gold)
                 tgt_mentions_gold_relaxed = \
                     self._filter_mentions(document_gold.get_siblings(src_mention_gold, relax=True), src_mention_gold)
-                exophors_gold = [entity for entity in map(document_gold.entities.get, src_mention_gold.eids)
-                                 if entity.is_special and entity.exophor in self.relax_exophors.values()]
-                exophors_gold_relaxed = [entity for entity in map(document_gold.entities.get, src_mention_gold.eids_unc)
-                                         if entity.is_special and entity.exophor in self.relax_exophors.values()]
+                exophors_gold = [e.exophor for e in map(document_gold.entities.get, src_mention_gold.eids)
+                                 if e.is_special and e.exophor in self.relax_exophors.values()]
+                exophors_gold_relaxed = [e.exophor for e in map(document_gold.entities.get, src_mention_gold.all_eids)
+                                         if e.is_special and e.exophor in self.relax_exophors.values()]
             else:
                 tgt_mentions_gold = tgt_mentions_gold_relaxed = exophors_gold = exophors_gold_relaxed = []
 
@@ -444,8 +444,9 @@ class Scorer:
 
         Args:
             sid (str): 出力対象の文ID
-            predicates (Predicate): document に含まれる全ての述語
-            mentions (Mention): document に含まれる全ての mention
+            predicates (List[Predicate]): document に含まれる全ての述語
+            mentions (List[Mention]): document に含まれる全ての mention
+            anaphors (List[Predicate]): document に含まれる全ての橋渡し照応詞
             document (Document): sid が含まれる文書
             fh (Optional[TextIO]): 出力ストリーム
             html (bool): html 形式で出力するかどうか
