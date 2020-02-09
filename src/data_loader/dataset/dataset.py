@@ -8,7 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 
-from kwdlc_reader import KWDLCReader
+from kwdlc_reader import KWDLCReader, Document
 from data_loader.dataset.read_example import read_example, PasExample
 
 
@@ -50,23 +50,23 @@ class PASDataset(Dataset):
                                   target_cases=dataset_config['target_cases'],
                                   target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
-        self.target_cases = cases
-        self.target_exophors = exophors
-        self.coreference = coreference
-        self.kc = kc
-        self.train_overt = 'overt' in train_target
-        self.train_case = 'case' in train_target
-        self.train_zero = 'zero' in train_target
+        self.target_cases: List[str] = cases
+        self.target_exophors: List[str] = exophors
+        self.coreference: bool = coreference
+        self.kc: bool = kc
+        self.train_overt: bool = 'overt' in train_target
+        self.train_case: bool = 'case' in train_target
+        self.train_zero: bool = 'zero' in train_target
         self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
-        self.expanded_vocab_size = self.tokenizer.vocab_size + len(special_tokens)
+        self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
         documents = list(self.reader.process_all_documents())
-        self.documents = documents if not training else None
-        self.examples = []
-        self.features = []
+        self.documents: Optional[List[Document]] = documents if not training else None
+        self.examples: List[PasExample] = []
+        self.features: List[InputFeatures] = []
 
         for document in tqdm(documents, desc='processing documents'):
             example = read_example(document,
