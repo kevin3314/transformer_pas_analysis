@@ -155,8 +155,7 @@ class Scorer:
                     for arg in args_gold_relaxed:
                         if arg in args_pred:
                             arg_gold = arg  # 予測されている項を優先して正解の項に採用
-                            if arg in args_gold:
-                                break
+                            break
                     if arg_gold is not None:
                         analysis = Scorer.DEPTYPE2ANALYSIS[arg_gold.dep_type]
                         assert self.comp_result[key] == analysis
@@ -230,8 +229,7 @@ class Scorer:
                 for ant in antecedents_gold_relaxed:
                     if ant in antecedents_pred:
                         antecedent_gold = ant  # 予測されている先行詞を優先して正解の先行詞に採用
-                        if ant in antecedents_gold:
-                            break
+                        break
                 if antecedent_gold is not None:
                     analysis = Scorer.DEPTYPE2ANALYSIS[antecedent_gold.dep_type]
                     assert self.comp_result[key] == analysis
