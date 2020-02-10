@@ -126,7 +126,11 @@ class Tester:
             scorer.export_csv(self.save_dir / f'{corpus}_{pas_target}{suffix}.csv')
 
             metrics = self._eval_metrics(scorer.result_dict())
-            result.update({f'{pas_target}_{met.__name__}': val for met, val in zip(self.metrics, metrics)})
+            for met, value in zip(self.metrics, metrics):
+                met_name = met.__name__
+                if 'case_analysis' in met_name or 'zero_anaphora' in met_name:
+                    met_name = f'{pas_target}_{met_name}'
+                result[met_name] = value
 
         return result
 
