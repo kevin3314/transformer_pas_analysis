@@ -491,9 +491,11 @@ class Scorer:
                     tree_strings[idx] += f'{arg}:{case} '
         if self.coreference:
             for src_mention in filter(lambda m: m.sid == sid, mentions):
-                tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
+                # tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
+                tgt_mentions_relaxed = self._filter_mentions(
+                    document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
-                for tgt_mention in tgt_mentions:
+                for tgt_mention in tgt_mentions_relaxed:
                     target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
                     if not target:
                         target = tgt_mention.midasi
