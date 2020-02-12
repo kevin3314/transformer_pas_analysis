@@ -53,6 +53,8 @@ def main() -> None:
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
     parser.add_argument('--coreference', action='store_true', default=False,
                         help='Perform coreference resolution.')
+    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
+                        help='Case strings. Separate by ","')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
     parser.add_argument('--dropout', type=float, default=0.0,
@@ -96,8 +98,7 @@ def main() -> None:
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
-    cases: List[str] = dataset_config['target_cases']
-    corefs: List[str] = dataset_config['target_corefs']
+    cases: List[str] = args.case_string.split(',')
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         name = f'{model}-{corpus}-{n_epoch}e'
@@ -140,9 +141,9 @@ def main() -> None:
                 'path': None,
                 'max_seq_length': args.max_seq_length,
                 'cases': cases,
-                'corefs': corefs,
-                'coreference': args.coreference,
                 'exophors': args.exophors.split(','),
+                'coreference': args.coreference,
+                'dataset_config': dataset_config,
                 'training': None,
                 'bert_model': bert_model,
                 'kc': None,

@@ -12,7 +12,7 @@ class TensorboardWriter:
 
             # Retrieve visualization writer.
             for module in ["torch.utils.tensorboard", "tensorboardX"]:
-            # for module in ["tensorboardX"]:
+                # for module in ["tensorboardX"]:
                 try:
                     self.writer = importlib.import_module(module).SummaryWriter(log_dir)
                     succeeded = True

@@ -4,7 +4,7 @@ import copy
 import _pickle as cPickle
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Iterator, Union, TextIO
+from typing import List, Dict, Set, Optional, Iterator, Union, TextIO
 from collections import OrderedDict
 
 from pyknp import BList, Bunsetsu, Tag, Morpheme, Rel
@@ -16,17 +16,8 @@ from kwdlc_reader.ne import NamedEntity
 from kwdlc_reader.constants import ALL_CASES, CORE_CASES, ALL_EXOPHORS, ALL_COREFS, CORE_COREFS, NE_CATEGORIES
 from kwdlc_reader.base_phrase import BasePhrase
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
-
-"""
-# TODO
-
-# MEMO
-- corefタグは用言に対しても振られる
-- 用言かつ体言の基本句もある
-"""
 
 
 class KWDLCReader:
@@ -37,7 +28,6 @@ class KWDLCReader:
         target_cases (Optional[List[str]]): 抽出の対象とする格
         target_corefs (Optional[List[str]]): 抽出の対象とする共参照関係(=など)
         relax_cases (bool): ガ≒格などをガ格として扱うか
-        relax_corefs (bool): 共参照関係 =≒ などを = として扱うか
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         knp_ext (str): KWDLC または KC ファイルの拡張子
         pickle_ext (str): Document を pickle 形式で読む場合の拡張子
@@ -48,7 +38,6 @@ class KWDLCReader:
                  target_cases: Optional[List[str]],
                  target_corefs: Optional[List[str]],
                  relax_cases: bool = False,
-                 relax_corefs: bool = False,
                  extract_nes: bool = True,
                  use_pas_tag: bool = False,
                  knp_ext: str = '.knp',
@@ -71,7 +60,6 @@ class KWDLCReader:
         self.target_cases: List[str] = self._get_target(target_cases, ALL_CASES, CORE_CASES, 'case')
         self.target_corefs: List[str] = self._get_target(target_corefs, ALL_COREFS, CORE_COREFS, 'coref')
         self.relax_cases: bool = relax_cases
-        self.relax_corefs: bool = relax_corefs
         self.extract_nes: bool = extract_nes
         self.use_pas_tag: bool = use_pas_tag
         self.knp_ext: str = knp_ext
@@ -117,7 +105,6 @@ class KWDLCReader:
                         self.target_cases,
                         self.target_corefs,
                         self.relax_cases,
-                        self.relax_corefs,
                         self.extract_nes,
                         self.use_pas_tag)
 
@@ -139,7 +126,6 @@ class Document:
         target_cases (list): 抽出の対象とする格
         target_corefs (list): 抽出の対象とする共参照関係(=など)
         relax_cases (bool): ガ≒格などをガ格として扱うか
-        relax_corefs (bool): 共参照関係 =≒ などを = として扱うか
         extract_nes (bool): 固有表現をコーパスから抽出するかどうか
         use_pas_tag (bool): <rel>タグからではなく、<述語項構造:>タグから PAS を読むかどうか
 
@@ -163,17 +149,16 @@ class Document:
                  target_cases: List[str],
                  target_corefs: List[str],
                  relax_cases: bool,
-                 relax_corefs: bool,
                  extract_nes: bool,
                  use_pas_tag: bool,
                  ) -> None:
-        self.knp_string = knp_string
-        self.doc_id = doc_id
+        self.knp_string: str = knp_string
+        self.doc_id: str = doc_id
         self.target_cases: List[str] = target_cases
         self.target_corefs: List[str] = target_corefs
         self.relax_cases: bool = relax_cases
-        self.relax_corefs: bool = relax_corefs
         self.extract_nes: bool = extract_nes
+        self.use_pas_tag: bool = use_pas_tag
 
         self.sid2sentence: Dict[str, BList] = OrderedDict()
         buff = []
@@ -195,9 +180,9 @@ class Document:
         self.mentions: Dict[int, Mention] = OrderedDict()
         self.entities: Dict[int, Entity] = OrderedDict()
         if use_pas_tag:
-            self._extract_pas()
+            self._analyze_pas()
         else:
-            self._extract_relations()
+            self._analyze_rel()
 
         if extract_nes:
             self.named_entities: List[NamedEntity] = []
@@ -217,7 +202,7 @@ class Document:
                 self.bnst2dbid[bnst] = dbid
                 dbid += 1
 
-    def _extract_pas(self) -> None:
+    def _analyze_pas(self) -> None:
         """extract predicate argument structure from <述語項構造:> tag in knp string"""
         sid2idx = {sid: idx for idx, sid in enumerate(self.sid2sentence.keys())}
         for tag in self.tag_list():
@@ -242,7 +227,7 @@ class Document:
             if pas.arguments:
                 self._pas[pas.dtid] = pas
 
-    def _extract_relations(self) -> None:
+    def _analyze_rel(self) -> None:
         """extract predicate argument structure and coreference relation from <rel> tag in knp string"""
         tag2sid = {tag: sentence.sid for sentence in self.sentences for tag in sentence.tag_list()}
         for tag in self.tag_list():
@@ -251,9 +236,6 @@ class Document:
                 if self.relax_cases:
                     if rel.atype in ALL_CASES and rel.atype.endswith('≒'):
                         rel.atype = rel.atype.rstrip('≒')  # ガ≒ -> ガ
-                if self.relax_corefs:
-                    if rel.atype in ALL_COREFS and rel.atype.endswith('≒'):
-                        rel.atype = rel.atype.rstrip('≒')  # =構≒ -> =構
                 valid = True
                 if rel.sid is not None and rel.sid not in self.sid2sentence:
                     logger.warning(f'{tag2sid[tag]:24}sentence: {rel.sid} not found in {self.doc_id}')
@@ -276,7 +258,8 @@ class Document:
                         arg_bp = self._get_bp(rel.sid, rel.tid)
                         if arg_bp is None:
                             continue
-                        mention = self._create_mention(arg_bp)  # 項を発見したら同時に mention と entity を作成
+                        # 項を発見したら同時に mention と entity を作成
+                        mention = self._create_mention(arg_bp)
                         pas.add_argument(rel.atype, mention, rel.target, rel.mode, self.mrph2dmid)
                     # exophora
                     else:
@@ -336,17 +319,21 @@ class Document:
                 logger.warning(f'{source_bp.sid:24}unknown exophor: {rel.target}')
                 return
 
+        uncertain: bool = rel.atype.endswith('≒')
         source_mention = self._create_mention(source_bp)
-        for eid in list(source_mention.eids):
+        for eid in source_mention.all_eids:
+            # _merge_entities によって source_mention の eid が削除されているかもしれない
+            if eid not in self.entities:
+                continue
             source_entity = self.entities[eid]
             if rel.sid is not None:
                 target_mention = self._create_mention(target_bp)
-                for target_eid in list(target_mention.eids):
+                for target_eid in target_mention.all_eids:
                     target_entity = self.entities[target_eid]
-                    self._merge_entities(source_mention, target_mention, source_entity, target_entity)
+                    self._merge_entities(source_mention, target_mention, source_entity, target_entity, uncertain)
             else:
                 target_entity = self._create_entity(exophor=rel.target)
-                self._merge_entities(source_mention, None, source_entity, target_entity)
+                self._merge_entities(source_mention, None, source_entity, target_entity, uncertain)
 
     def _create_mention(self, bp: BasePhrase) -> Mention:
         """メンションを作成
@@ -364,7 +351,7 @@ class Document:
             mention = Mention(bp, self.mrph2dmid)
             self.mentions[bp.dtid] = mention
             entity = self._create_entity()
-            entity.add_mention(mention)
+            entity.add_mention(mention, uncertain=False)
         else:
             mention = self.mentions[bp.dtid]
         return mention
@@ -410,34 +397,50 @@ class Document:
                         target_mention: Optional[Mention],
                         se: Entity,
                         te: Entity,
+                        uncertain: bool,
                         ) -> None:
         """2つのエンティティをマージする
 
-        片方だけが exophor だった場合、se を exophor になるようにして te を削除
-        両方が同じ exophor だった場合、te を削除
-        両方が違う exophor だった場合、互いに mention を張り、どちらも残す
+        source_mention と se, target_mention と te の間には mention が張られているが、
+        source と target 間には張られていないので、add_mention する
+        se と te が同一のエンティティであり、exophor も同じか片方が None ならば te の方を削除する
 
         Args:
             source_mention (Mention): 参照元メンション
             target_mention (Mention?): 参照先メンション
-            se: 参照元エンティティ
-            te: 参照先エンティティ
+            se (Entity): 参照元エンティティ
+            te (Entity): 参照先エンティティ
+            uncertain (bool): source_mention と target_mention のアノテーションが ≒ かどうか
         """
+        uncertain_tgt = (target_mention is not None) and target_mention.is_uncertain_to(te)
+        uncertain_src = source_mention.is_uncertain_to(se)
         if se is te:
+            if not uncertain:
+                # se(te), source_mention, target_mention の三角形のうち2辺が certain ならもう1辺も certain
+                if (not uncertain_src) and uncertain_tgt:
+                    se.add_mention(target_mention, uncertain=False)
+                if uncertain_src and (not uncertain_tgt):
+                    se.add_mention(source_mention, uncertain=False)
             return
+        if target_mention is not None:
+            se.add_mention(target_mention, uncertain=(uncertain or uncertain_src))
+        te.add_mention(source_mention, uncertain=(uncertain or uncertain_tgt))
+        # se と te が同一でない可能性が拭えない場合、te は削除しない
+        if uncertain_src or uncertain or uncertain_tgt:
+            return
+        # se と te が同一でも exophor が異なれば te は削除しない
         if se.exophor is not None and te.exophor is not None and se.exophor != te.exophor:
-            if target_mention is not None:
-                se.add_mention(target_mention)
-            te.add_mention(source_mention)
             return
+        # 以下 te を削除する準備
         if se.exophor is None:
             se.exophor = te.exophor
-        for tm in te.mentions:
-            se.add_mention(tm)
+        for tm in te.all_mentions:
+            se.add_mention(tm, uncertain=tm.is_uncertain_to(te))
+        # argument も eid を持っているので eid が変わった場合はこちらも更新
         for arg in [arg for pas in self._pas.values() for args in pas.arguments.values() for arg in args]:
             if isinstance(arg, SpecialArgument) and arg.eid == te.eid:
                 arg.eid = se.eid
-        self._delete_entity(te.eid, source_mention.sid)
+        self._delete_entity(te.eid, source_mention.sid)  # delete target entity
 
     def _delete_entity(self,
                        eid: int,
@@ -457,8 +460,8 @@ class Document:
             return
         entity = self.entities[eid]
         logger.info(f'{sid:24}delete entity: {eid} ({entity.midasi})')
-        for mention in entity.mentions:
-            mention.eids.remove(eid)
+        for mention in entity.all_mentions:
+            entity.remove_mention(mention)
         self.entities.pop(eid)
 
     def _get_bp(self,
@@ -535,7 +538,7 @@ class Document:
         return [mrph for sentence in self.sentences for mrph in sentence.mrph_list()]
 
     def get_entities(self, tag: Tag) -> List[Entity]:
-        return [e for e in self.entities.values() for m in e.mentions if m.dtid == self.tag2dtid[tag]]
+        return [e for e in self.entities.values() if any(m.dtid == self.tag2dtid[tag] for m in e.mentions)]
 
     def pas_list(self) -> List[Pas]:
         return list(self._pas.values())
@@ -580,15 +583,18 @@ class Document:
 
         return pas.arguments
 
-    def get_siblings(self, mention: Mention) -> List[Mention]:
+    def get_siblings(self, mention: Mention, relax: bool = False) -> Set[Mention]:
         """mention と共参照関係にある他の全ての mention を返す"""
-        mentions = []
+        mentions = set()
         for eid in mention.eids:
             entity = self.entities[eid]
-            for mention_ in entity.mentions:
-                if mention_ == mention or mention_ in mentions:
-                    continue
-                mentions.append(mention_)
+            mentions.update(entity.mentions)
+        if relax is True:
+            for eid in mention.eids_unc:
+                entity = self.entities[eid]
+                mentions.update(entity.all_mentions)
+        if mention in mentions:
+            mentions.remove(mention)
         return mentions
 
     def draw_tree(self,
@@ -651,7 +657,7 @@ class Document:
 
         num_mention = num_taigen = num_yougen = 0
         for src_mention in self.mentions.values():
-            tgt_mentions: List[Mention] = self.get_siblings(src_mention)
+            tgt_mentions: Set[Mention] = self.get_siblings(src_mention)
             if tgt_mentions:
                 num_mention += 1
             for tgt_mention in tgt_mentions:
@@ -683,7 +689,7 @@ class Document:
 
 
 def main():
-    reader = KWDLCReader(sys.argv[1],
+    reader = KWDLCReader(Path(sys.argv[1]),
                          target_cases=ALL_CASES,
                          target_corefs=ALL_COREFS,
                          extract_nes=True)

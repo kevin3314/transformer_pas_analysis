@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, NamedTuple
 from pathlib import Path
 from collections import defaultdict
 
@@ -8,35 +8,21 @@ import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 
-from kwdlc_reader import KWDLCReader
+from kwdlc_reader import KWDLCReader, Document
 from data_loader.dataset.read_example import read_example, PasExample
 
 
-class InputFeatures:
-    """A single set of features of data."""
-
-    def __init__(self,
-                 tokens: List[str],
-                 orig_to_tok_index: List[int],  # use for output
-                 tok_to_orig_index: List[Optional[int]],  # use for output
-                 input_ids: List[int],  # use for model
-                 input_mask: List[int],  # use for model
-                 segment_ids: List[int],  # use for model
-                 arguments_set: List[List[List[int]]],  # use for model
-                 ng_arg_mask: List[List[int]],  # use for model
-                 ng_ment_mask: List[List[int]],  # use for model
-                 deps: List[List[int]],
-                 ):
-        self.tokens = tokens
-        self.orig_to_tok_index = orig_to_tok_index
-        self.tok_to_orig_index = tok_to_orig_index
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-        self.arguments_set = arguments_set
-        self.ng_arg_mask = ng_arg_mask
-        self.ng_ment_mask = ng_ment_mask
-        self.deps = deps
+class InputFeatures(NamedTuple):
+    tokens: List[str]  # for debug
+    orig_to_tok_index: List[int]  # for output
+    tok_to_orig_index: List[Optional[int]]  # for output
+    input_ids: List[int]  # for training
+    input_mask: List[int]  # for training
+    segment_ids: List[int]  # for training
+    arguments_set: List[List[List[int]]]  # for training
+    ng_arg_mask: List[List[int]]  # for training
+    ng_ment_mask: List[List[int]]  # for training
+    deps: List[List[int]]  # for training
 
 
 class PASDataset(Dataset):
@@ -44,9 +30,9 @@ class PASDataset(Dataset):
                  path: Optional[str],
                  max_seq_length: int,
                  cases: List[str],
-                 corefs: List[str],
                  exophors: List[str],
                  coreference: bool,
+                 dataset_config: dict,
                  training: bool,
                  bert_model: str,
                  kc: bool,
@@ -61,30 +47,31 @@ class PASDataset(Dataset):
             assert knp_string is not None
             source = knp_string
         self.reader = KWDLCReader(source,
-                                  target_cases=cases,
-                                  target_corefs=corefs,
+                                  target_cases=dataset_config['target_cases'],
+                                  target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
-        self.target_cases = self.reader.target_cases
-        self.target_exophors = exophors
-        self.coreference = coreference
-        self.kc = kc
-        self.train_overt = 'overt' in train_target
-        self.train_case = 'case' in train_target
-        self.train_zero = 'zero' in train_target
+        self.target_cases: List[str] = cases
+        self.target_exophors: List[str] = exophors
+        self.coreference: bool = coreference
+        self.kc: bool = kc
+        self.train_overt: bool = 'overt' in train_target
+        self.train_case: bool = 'case' in train_target
+        self.train_zero: bool = 'zero' in train_target
         self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
-        self.expanded_vocab_size = self.tokenizer.vocab_size + len(special_tokens)
+        self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
         documents = list(self.reader.process_all_documents())
-        self.documents = documents if not training else None
-        self.examples = []
-        self.features = []
+        self.documents: Optional[List[Document]] = documents if not training else None
+        self.examples: List[PasExample] = []
+        self.features: List[InputFeatures] = []
 
         for document in tqdm(documents, desc='processing documents'):
             example = read_example(document,
-                                   target_exophors=exophors,
+                                   cases=cases,
+                                   exophors=exophors,
                                    coreference=coreference,
                                    kc=kc,
                                    eventive_noun=eventive_noun)

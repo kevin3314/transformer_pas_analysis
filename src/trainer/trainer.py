@@ -23,7 +23,6 @@ class Trainer(BaseTrainer):
         self.data_loader = data_loader
         self.valid_kwdlc_data_loader = valid_kwdlc_data_loader
         self.valid_kc_data_loader = valid_kc_data_loader
-        # self.do_validation = (self.valid_kwdlc_data_loader is not None) or (self.valid_kc_data_loader is not None)
         self.lr_scheduler = lr_scheduler
         self.log_step = math.ceil(data_loader.n_samples / np.sqrt(data_loader.batch_size) / 200)
 
@@ -129,20 +128,20 @@ class Trainer(BaseTrainer):
                         100.0 * batch_idx / len(valid_data_loader),
                         datetime.datetime.now().strftime('%H:%M:%S')))
 
-        # prediction_output_dir = self.config.save_dir / 'valid_out_knp'
         prediction_writer = PredictionKNPWriter(valid_data_loader.dataset, self.logger)
         documents_pred = prediction_writer.write(arguments_sets, None)
 
         scorer = Scorer(documents_pred, valid_data_loader.dataset.documents,
-                        valid_data_loader.dataset.target_exophors,
+                        target_cases=valid_data_loader.dataset.target_cases,
+                        target_exophors=valid_data_loader.dataset.target_exophors,
                         coreference=valid_data_loader.dataset.coreference,
                         kc=valid_data_loader.dataset.kc)
 
         val_metrics = self._eval_metrics(scorer.result_dict(), label)
 
         # add histogram of model parameters to the tensorboard
-        for name, p in self.model.named_parameters():
-            self.writer.add_histogram(name, p, bins='auto')
+        # for name, p in self.model.named_parameters():
+        #     self.writer.add_histogram(name, p, bins='auto')
 
         log = {f'loss_{label}': total_val_loss / valid_data_loader.n_samples}
         log.update(dict(zip([met.__name__ for met in self.metrics], val_metrics)))

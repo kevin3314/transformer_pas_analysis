@@ -25,7 +25,11 @@ endif
 CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
 NUM_TRAINED := $(words $(CHECKPOINTS))
 RESULT_FILES := $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/eval_$(TARGET)/$(CSV_BASENAME),$(CHECKPOINTS))
-AGGR_SCORE_FILE := $(RESULT)/eval_aggr_$(TARGET)/$(CSV_BASENAME)
+ifeq ($(AGGR_CASE),all_case)
+	AGGR_SCORE_FILE := $(RESULT)/eval_aggr_$(TARGET)/$(CSV_BASENAME)
+else
+	AGGR_SCORE_FILE := $(RESULT)/eval_aggr_$(TARGET)/$(basename $(CSV_BASENAME))_$(AGGR_CASE).csv
+endif
 ENS_RESULT_FILE := $(RESULT)/eval_$(TARGET)/$(CSV_BASENAME)
 
 # train and test

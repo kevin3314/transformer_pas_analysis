@@ -96,6 +96,9 @@ python src/preprocess.py \
 --out data/dataset
 ```
 
+Don't care if many "sentence not found" messages are shown when processing kc.
+It is a natural result of splitting document.
+
 ### Configuring Settings
 
 Before starting model training, prepare the configuration files.
@@ -192,7 +195,7 @@ make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 ## Environment Variables
 
 - `BPA_CACHE_DIR`: A directory where processed document is cached. Default is `/data/$USER/bpa_cache`.
-- `BPA_DISABLE_CACHE`: If set, bert_pas_analysis doesn't load or save cache.
+- `BPA_OVERWRITE_CACHE`: If set, bert_pas_analysis doesn't load cache even if it exists.
 
 ## Dataset
 

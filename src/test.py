@@ -106,15 +106,17 @@ class Tester:
             return (np.concatenate(outputs, axis=0), ), avg_loss
 
     def _eval(self, arguments_sets, data_loader, corpus: str, suffix: str = ''):
-        # prediction_output_dir = self.config.save_dir / f'{self.target}_out_{suffix}'
+        prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
-        documents_pred = prediction_writer.write(arguments_sets, None)
+        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
 
         result = {}
         for pas_target in self.pas_targets:
-            scorer = Scorer(documents_pred, data_loader.dataset.documents, data_loader.dataset.target_exophors,
+            scorer = Scorer(documents_pred, data_loader.dataset.documents,
+                            target_cases=data_loader.dataset.target_cases,
+                            target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
                             kc=data_loader.dataset.kc,
                             pas_target=pas_target)
@@ -124,7 +126,11 @@ class Tester:
             scorer.export_csv(self.save_dir / f'{corpus}_{pas_target}{suffix}.csv')
 
             metrics = self._eval_metrics(scorer.result_dict())
-            result.update({f'{pas_target}_{met.__name__}': val for met, val in zip(self.metrics, metrics)})
+            for met, value in zip(self.metrics, metrics):
+                met_name = met.__name__
+                if 'case_analysis' in met_name or 'zero_anaphora' in met_name:
+                    met_name = f'{pas_target}_{met_name}'
+                result[met_name] = value
 
         return result
 
@@ -166,7 +172,7 @@ def main(config, args):
 
     # print logged information to the screen
     for key, value in log.items():
-        logger.info('{:41s}: {:.4f}'.format(str(key), value))
+        logger.info('{:42s}: {:.4f}'.format(str(key), value))
 
 
 if __name__ == '__main__':
