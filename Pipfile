@@ -7,6 +7,7 @@ verify_ssl = true
 ipython = "*"
 ipdb = "*"
 pytest = "*"
+pdbpp = "*"
 
 [packages]
 numpy = "*"
@@ -15,12 +16,12 @@ mojimoji = "*"
 flask = "*"
 tensorboard = "*"
 future = "*"
-transformers = "==2.1.1"
-pyknp = {editable = true,git = "https://github.com/ku-nlp/pyknp.git"}
+pyknp = {editable = true,git = "https://github.com/ku-nlp/pyknp.git",ref = "master"}
 torch = "*"
 textformatting = {editable = true,git = "https://github.com/ku-nlp/python-textformatting.git",ref = "master"}
 pandas = "*"
 scipy = "*"
+transformers = "*"
 
 [requires]
 python_version = "3.6"

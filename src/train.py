@@ -55,10 +55,9 @@ def main(config: ConfigParser, args: argparse.Namespace):
     # build optimizer, learning rate scheduler
     trainable_named_params = filter(lambda x: x[1].requires_grad, model.named_parameters())
     no_decay = ('bias', 'LayerNorm.weight')
-    weight_decay = config['optimizer']['args']['weight_decay']
     optimizer_grouped_parameters = [
         {'params': [p for n, p in trainable_named_params if not any(nd in n for nd in no_decay)],
-         'weight_decay': weight_decay},
+         'weight_decay': config['optimizer']['args']['weight_decay']},
         {'params': [p for n, p in trainable_named_params if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     optimizer = config.init_obj('optimizer', module_optim, optimizer_grouped_parameters)

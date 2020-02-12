@@ -61,9 +61,9 @@ def main() -> None:
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
-    parser.add_argument('--lr-schedule', type=str, default='WarmupLinearSchedule',
-                        choices=['ConstantLRSchedule', 'WarmupConstantSchedule', 'WarmupLinearSchedule',
-                                 'WarmupCosineSchedule', 'WarmupCosineWithHardRestartsSchedule'],
+    parser.add_argument('--lr-schedule', type=str, default='linear_schedule_with_warmup',
+                        choices=['constant_schedule', 'constant_schedule_with_warmup', 'linear_schedule_with_warmup',
+                                 'cosine_schedule_with_warmup', 'cosine_with_hard_restarts_schedule_with_warmup'],
                         help='lr scheduler')
     parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
@@ -181,7 +181,7 @@ def main() -> None:
         test_kc_dataset['args']['kc'] = True
 
         data_loader = {
-            'type': 'ConllDataLoader',
+            'type': 'PASDataLoader',
             'args': {
                 'batch_size': args.batch_size,
                 'shuffle': None,
@@ -203,6 +203,7 @@ def main() -> None:
             'type': 'AdamW',
             'args': {
                 'lr': args.lr,
+                'eps': 1e-8,
                 'weight_decay': 0.01,
             },
         }
@@ -240,16 +241,16 @@ def main() -> None:
             ]
 
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
-        warmup_steps = t_total * args.warmup_proportion if args.warmup_steps is None else args.warmup_steps
-        lr_scheduler = {'type': args.lr_schedule}
-        if args.lr_schedule == 'ConstantLRSchedule':
+        warmup_steps = args.warmup_steps if args.warmup_steps is not None else t_total * args.warmup_proportion
+        lr_scheduler = {'type': 'get_' + args.lr_schedule}
+        if args.lr_schedule == 'constant_schedule':
             lr_scheduler['args'] = {}
-        elif args.lr_schedule == 'WarmupConstantSchedule':
-            lr_scheduler['args'] = {'warmup_steps': warmup_steps}
-        elif args.lr_schedule in ('WarmupLinearSchedule',
-                                  'WarmupCosineSchedule',
-                                  'WarmupCosineWithHardRestartsSchedule'):
-            lr_scheduler['args'] = {'warmup_steps': warmup_steps, 't_total': t_total}
+        elif args.lr_schedule == 'constant_schedule_with_warmup':
+            lr_scheduler['args'] = {'num_warmup_steps': warmup_steps}
+        elif args.lr_schedule in ('linear_schedule_with_warmup',
+                                  'cosine_schedule_with_warmup',
+                                  'cosine_with_hard_restarts_schedule_with_warmup'):
+            lr_scheduler['args'] = {'num_warmup_steps': warmup_steps, 'num_training_steps': t_total}
         else:
             raise ValueError(f'unknown lr schedule: {args.lr_schedule}')
 
