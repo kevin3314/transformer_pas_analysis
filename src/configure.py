@@ -1,3 +1,4 @@
+import os
 import json
 import math
 import copy
@@ -24,12 +25,12 @@ class Config:
 class Path:
     bert_model = {
         'local': {
-            'base': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'large': None
+            'base': f'{os.environ["HOME"]}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
         },
         'server': {
             'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE'
+            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
+            'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
         }
     }
 
@@ -76,8 +77,8 @@ def main() -> None:
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
-    parser.add_argument('--use-bert-large', action='store_true', default=False,
-                        help='whether to use BERT_LARGE model')
+    parser.add_argument('--bert', choices=['base', 'large', 'large-wwm'], default='base',
+                        help='BERT model')
     parser.add_argument('--refinement-bert', choices=['base', 'large'], default='base',
                         help='BERT model type used for RefinementModel')
     parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
@@ -93,7 +94,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config_dir = pathlib.Path(args.config)
-    bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
+    bert_model = Path.bert_model[args.env][args.bert]
     n_gpu: int = args.gpus
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
@@ -101,8 +102,7 @@ def main() -> None:
     cases: List[str] = args.case_string.split(',')
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
-        name = f'{model}-{corpus}-{n_epoch}e'
-        name += '-large' if args.use_bert_large else '-base'
+        name = f'{model}-{corpus}-{n_epoch}e-{args.bert}'
         name += '-coref' if args.coreference else ''
         name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         name += '-nocase' if 'ノ' in cases else ''
