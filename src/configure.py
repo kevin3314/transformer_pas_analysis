@@ -95,7 +95,6 @@ def main() -> None:
 
     config_dir = pathlib.Path(args.config)
     bert_model = Path.bert_model[args.env][args.bert]
-    n_gpu: int = args.gpus
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
@@ -266,7 +265,7 @@ def main() -> None:
 
         config = Config(
             name=name,
-            n_gpu=n_gpu,
+            n_gpu=args.gpus,
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
             train_kc_dataset=train_kc_dataset,
