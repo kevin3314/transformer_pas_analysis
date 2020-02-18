@@ -8,7 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 
-from kwdlc_reader import KWDLCReader, Document
+from kwdlc_reader import KWDLCReader, Document, ALL_EXOPHORS
 from data_loader.dataset.read_example import read_example, PasExample
 
 
@@ -37,7 +37,7 @@ class PASDataset(Dataset):
                  bert_model: str,
                  kc: bool,
                  train_target: List[str],
-                 eventive_noun: bool = False,
+                 eventive_noun: bool,
                  knp_string: Optional[str] = None,
                  logger=None,
                  ) -> None:
@@ -50,8 +50,8 @@ class PASDataset(Dataset):
                                   target_cases=dataset_config['target_cases'],
                                   target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
-        self.target_cases: List[str] = cases
-        self.target_exophors: List[str] = exophors
+        self.target_cases: List[str] = [c for c in cases if c in self.reader.target_cases]
+        self.target_exophors: List[str] = [e for e in exophors if e in ALL_EXOPHORS]
         self.coreference: bool = coreference
         self.kc: bool = kc
         self.train_overt: bool = 'overt' in train_target
