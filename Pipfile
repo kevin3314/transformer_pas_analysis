@@ -22,6 +22,7 @@ textformatting = {editable = true,git = "https://github.com/ku-nlp/python-textfo
 pandas = "*"
 scipy = "*"
 transformers = "*"
+scikit-learn = "*"
 
 [requires]
 python_version = "3.6"
