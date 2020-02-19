@@ -10,6 +10,7 @@ from transformers import BertTokenizer
 
 from kwdlc_reader import KWDLCReader, Document, ALL_EXOPHORS
 from data_loader.dataset.read_example import read_example, PasExample
+from utils.constants import TASK_ID
 
 
 class InputFeatures(NamedTuple):
@@ -17,11 +18,11 @@ class InputFeatures(NamedTuple):
     orig_to_tok_index: List[int]  # for output
     tok_to_orig_index: List[Optional[int]]  # for output
     input_ids: List[int]  # for training
-    input_mask: List[int]  # for training
+    input_mask: List[bool]  # for training
     segment_ids: List[int]  # for training
     arguments_set: List[List[List[int]]]  # for training
-    ng_arg_mask: List[List[int]]  # for training
-    ng_ment_mask: List[List[int]]  # for training
+    ng_arg_mask: List[List[bool]]  # for training
+    ng_ment_mask: List[List[bool]]  # for training
     deps: List[List[int]]  # for training
 
 
@@ -206,7 +207,7 @@ class PASDataset(Dataset):
             input_ids=input_ids,
             input_mask=input_mask,
             segment_ids=segment_ids,
-            arguments_set=[[[(x in args) for x in range(max_seq_length)] for args in arguments]
+            arguments_set=[[[int(x in args) for x in range(max_seq_length)] for args in arguments]
                            for arguments in arguments_set],
             ng_arg_mask=[[(x in candidates) for x in range(max_seq_length)]
                          for candidates in arg_candidates_set],  # False -> mask, True -> keep
@@ -319,10 +320,12 @@ class PASDataset(Dataset):
         feature = self.features[idx]
         input_ids = np.array(feature.input_ids)          # (seq)
         input_mask = np.array(feature.input_mask)        # (seq)
+        segment_ids = np.array(feature.segment_ids)      # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
         ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
         ng_ment_mask = np.array(feature.ng_ment_mask)    # (seq, seq)
         stacks = [ng_arg_mask] * len(self.target_cases) + ([ng_ment_mask] if self.coreference else [])
         ng_token_mask = np.stack(stacks, axis=1)         # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
-        return input_ids, input_mask, arguments_ids, ng_token_mask, deps
+        task = np.array(TASK_ID['pa'])                   # ()
+        return input_ids, input_mask, segment_ids, arguments_ids, ng_token_mask, deps, task

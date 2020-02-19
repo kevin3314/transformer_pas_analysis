@@ -1,10 +1,13 @@
 import logging
-from typing import List, Optional, NamedTuple, Generator
+from typing import List, Optional, NamedTuple
+import _pickle as cPickle
 
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
+
+from utils.constants import TASK_ID
 
 
 class CommonsenseExample(NamedTuple):
@@ -16,9 +19,9 @@ class CommonsenseExample(NamedTuple):
 class InputFeatures(NamedTuple):
     tokens: List[str]
     input_ids: List[int]
-    input_mask: List[int]
+    input_mask: List[bool]
     segment_ids: List[int]
-    label: bool
+    label: int
 
 
 class CommonsenseDataset(Dataset):
@@ -38,12 +41,9 @@ class CommonsenseDataset(Dataset):
             self.features.append(feature)
 
     @staticmethod
-    def _read_csv(path: str) -> Generator[CommonsenseExample]:
-        with open(path) as f:
-            for line in f:
-                label, string = line.strip().split(',')
-                former_string, latter_string = string.split('@')
-                yield CommonsenseExample(former_string, latter_string, bool(int(label)))
+    def _read_csv(path: str) -> List[CommonsenseExample]:
+        with open(path, mode='rb') as f:
+            return cPickle.load(f)
 
     def _convert_example_to_feature(self,
                                     example: CommonsenseExample,
@@ -95,7 +95,7 @@ class CommonsenseDataset(Dataset):
             input_ids=input_ids,
             input_mask=input_mask,
             segment_ids=segment_ids,
-            label=example.label,
+            label=int(example.label),
         )
 
         return feature
@@ -105,8 +105,11 @@ class CommonsenseDataset(Dataset):
 
     def __getitem__(self, idx) -> tuple:
         feature = self.features[idx]
-        input_ids = np.array(feature.input_ids)      # (seq)
-        input_mask = np.array(feature.input_mask)    # (seq)
-        segment_ids = np.array(feature.segment_ids)  # (seq)
-        label = np.array(feature.label)              # ()
-        return input_ids, input_mask, segment_ids, label
+        input_ids = np.array(feature.input_ids)             # (seq)
+        input_mask = np.array(feature.input_mask)           # (seq)
+        segment_ids = np.array(feature.segment_ids)         # (seq)
+        label = np.full((1, 1, 1), feature.label)           # (1, 1, 1)
+        ng_token_mask = np.zeros((1, 1, 1), dtype=np.bool)  # (1, 1, 1)
+        deps = np.zeros((1, 1), dtype=np.int)               # (1, 1)
+        task = np.array(TASK_ID['ci'])                      # ()
+        return input_ids, input_mask, segment_ids, label, ng_token_mask, deps, task

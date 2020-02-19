@@ -1,7 +1,21 @@
+from typing import List, Tuple
+
+import torch
+import numpy as np
 from base import BaseDataLoader
 from data_loader.dataset.pas_dataset import PASDataset
 
 
 class PASDataLoader(BaseDataLoader):
     def __init__(self, dataset: PASDataset, batch_size: int, shuffle: bool, validation_split: float, num_workers: int):
-        super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)
+        # super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)
+        super().__init__(dataset, batch_size, shuffle, validation_split, num_workers, collate_fn=broadcast_collate_fn)
+
+
+def broadcast_collate_fn(batch: List[Tuple[np.ndarray, ...]]) -> Tuple[torch.Tensor, ...]:
+    input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = zip(*batch)
+    target = np.broadcast_arrays(*target)
+    ng_token_mask = np.broadcast_arrays(*ng_token_mask)
+    deps = np.broadcast_arrays(*deps)
+    transposed = (input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task)
+    return tuple(torch.as_tensor(np.stack(elem, axis=0)) for elem in transposed)

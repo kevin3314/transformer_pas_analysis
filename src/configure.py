@@ -37,7 +37,8 @@ class Path:
 
 def main() -> None:
     all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'EnsembleModel']
+                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'EnsembleModel',
+                  'CommonsenseModel']
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
@@ -152,7 +153,6 @@ def main() -> None:
         }
 
         train_kwdlc_dataset = copy.deepcopy(dataset)
-
         train_kwdlc_dataset['args']['path'] = str(train_kwdlc_dir) if corpus in ('kwdlc', 'all') else None
         train_kwdlc_dataset['args']['training'] = True
         train_kwdlc_dataset['args']['kc'] = False
@@ -178,6 +178,26 @@ def main() -> None:
         test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
         test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test') if corpus in ('kc', 'all') else None
         test_kc_dataset['args']['kc'] = True
+
+        if model == 'CommonsenseModel':
+            commonsense_dataset = {
+                'type': 'CommonsenseDataset',
+                'args': {
+                    'path': None,
+                    'max_seq_length': args.max_seq_length,
+                    'bert_model': bert_model,
+                },
+            }
+            train_commonsense_dataset = copy.deepcopy(commonsense_dataset)
+            train_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'train.pkl')
+            valid_commonsense_dataset = copy.deepcopy(commonsense_dataset)
+            valid_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'valid.pkl')
+            test_commonsense_dataset = copy.deepcopy(commonsense_dataset)
+            test_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'test.pkl')
+        else:
+            train_commonsense_dataset = None
+            valid_commonsense_dataset = None
+            test_commonsense_dataset = None
 
         data_loader = {
             'type': 'PASDataLoader',
@@ -211,6 +231,8 @@ def main() -> None:
             loss = 'cross_entropy_pas_dep_loss'
         elif model in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
             loss = 'multi_cross_entropy_pas_loss'
+        elif model == 'CommonsenseModel':
+            loss = 'cross_entropy_pas_commonsense_loss'
         else:
             loss = 'cross_entropy_pas_loss'
 
@@ -269,10 +291,13 @@ def main() -> None:
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
             train_kc_dataset=train_kc_dataset,
+            train_commonsense_dataset=train_commonsense_dataset,
             valid_kwdlc_dataset=valid_kwdlc_dataset,
             valid_kc_dataset=valid_kc_dataset,
+            valid_commonsense_dataset=valid_commonsense_dataset,
             test_kwdlc_dataset=test_kwdlc_dataset,
             test_kc_dataset=test_kc_dataset,
+            test_commonsense_dataset=test_commonsense_dataset,
             train_data_loader=train_data_loader,
             valid_data_loader=valid_data_loader,
             test_data_loader=test_data_loader,
