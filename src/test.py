@@ -90,16 +90,16 @@ class Tester:
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
+                input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output_ = model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
                 if model.__class__.__name__ == 'MultitaskDepModel':
                     output = output_[0]  # (b, seq, case, seq)
                 elif model.__class__.__name__ in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
                     output_base, output = output_
                     outputs_base.append(output_base.cpu().numpy())
                 elif model.__class__.__name__ == 'CommonsenseModel':
-                    output = output_[0][task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq)
+                    output = output_[0]#[task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq)
                     # if label == 'commonsense':
                     #     contingency_set += torch.argmax(output[1][task == TASK_ID['ci'], :], dim=1).tolist()
                     #     gold_contingency_set += target[task == TASK_ID['ci'], 0, 0, 0].tolist()
@@ -108,7 +108,7 @@ class Tester:
                 outputs.append(output.cpu().numpy())
 
                 # computing loss on test set
-                loss = self.loss(output_, arguments_ids, deps)
+                loss = self.loss(output_, target, deps, task)
                 total_loss += loss.item() * input_ids.size(0)
         avg_loss = total_loss / data_loader.n_samples
         if outputs_base:
