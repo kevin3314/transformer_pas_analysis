@@ -18,12 +18,14 @@ from base.base_model import BaseModel
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger, predict_overt):
+    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+                 target, logger, predict_overt):
         self.model: BaseModel = model
         self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
         self.kwdlc_data_loader = kwdlc_data_loader
         self.kc_data_loader = kc_data_loader
+        self.commonsense_data_loader = commonsense_data_loader
         self.target: str = target
         self.logger = logger
         self.predict_overt: bool = predict_overt
@@ -42,6 +44,8 @@ class Tester:
             log.update(self._test(self.kwdlc_data_loader, 'kwdlc'))
         if self.kc_data_loader is not None:
             log.update(self._test(self.kc_data_loader, 'kc'))
+        if self.commonsense_data_loader is not None:
+            log.update(self._test(self.commonsense_data_loader, 'commonsense'))
         return log
 
     def _test(self, data_loader, label: str):
@@ -54,6 +58,7 @@ class Tester:
             total_output = tuple(t + o for t, o in zip(total_output, output))
             total_loss += loss
         if len(total_output) == 2:
+            # ここでラベルによって分岐か？
             output_base, output = total_output
             arguments_sets_base = np.argmax(output_base, axis=3).tolist()
             result_base = self._eval(arguments_sets_base, data_loader, corpus=label, suffix='_base')
@@ -88,12 +93,18 @@ class Tester:
                 input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
 
                 output_ = model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
-                if isinstance(output_, tuple):
+                if model.__class__.__name__ == 'MultitaskDepModel':
+                    output = output_[0]  # (b, seq, case, seq)
+                elif model.__class__.__name__ in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
                     output_base, output = output_
                     outputs_base.append(output_base.cpu().numpy())
+                elif model.__class__.__name__ == 'CommonsenseModel':
+                    output = output_[0][task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq)
+                    # if label == 'commonsense':
+                    #     contingency_set += torch.argmax(output[1][task == TASK_ID['ci'], :], dim=1).tolist()
+                    #     gold_contingency_set += target[task == TASK_ID['ci'], 0, 0, 0].tolist()
                 else:
                     output = output_
-                output = output[:, :, :arguments_ids.size(2), :]
                 outputs.append(output.cpu().numpy())
 
                 # computing loss on test set
@@ -145,17 +156,21 @@ def main(config, args):
     logger = config.get_logger(args.target)
 
     # setup data_loader instances
-    kwdlc_data_loader = None
-    kc_data_loader = None
     expanded_vocab_size = None
+    kwdlc_data_loader = None
     if config[f'{args.target}_kwdlc_dataset']['args']['path'] is not None:
-        kwdlc_dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
-        kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kwdlc_dataset)
-        expanded_vocab_size = kwdlc_dataset.expanded_vocab_size
+        dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
+        kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
+        expanded_vocab_size = dataset.expanded_vocab_size
+    kc_data_loader = None
     if config[f'{args.target}_kc_dataset']['args']['path'] is not None:
-        kc_dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
-        kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kc_dataset)
-        expanded_vocab_size = kc_dataset.expanded_vocab_size
+        dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
+        kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
+        expanded_vocab_size = dataset.expanded_vocab_size
+    commonsense_data_loader = None
+    if config[f'{args.target}_commonsense_dataset'] is not None:
+        dataset = config.init_obj(f'{args.target}_commonsense_dataset', module_dataset, logger=logger)
+        commonsense_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
 
     # build model architecture
     model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
@@ -165,8 +180,8 @@ def main(config, args):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger,
-                    args.predict_overt)
+    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+                    args.target, logger, args.predict_overt)
 
     log = tester.test()
 

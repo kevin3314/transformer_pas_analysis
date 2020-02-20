@@ -110,11 +110,11 @@ class Trainer(BaseTrainer):
 
                 # (b, seq, case, seq) or tuple
                 output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)
-                if self.model.__class__.__name__ == 'MultitaskDepModel':
+                if self.config['arch']['type'] == 'MultitaskDepModel':
                     scores = output[0]  # (b, seq, case, seq)
-                elif self.model.__class__.__name__ in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
+                elif self.config['arch']['type'] in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
                     scores = output[-1]  # (b, seq, case, seq)
-                elif self.model.__class__.__name__ == 'CommonsenseModel':
+                elif self.config['arch']['type'] == 'CommonsenseModel':
                     scores = output[0][task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq)
                     if label == 'commonsense':
                         contingency_set += torch.argmax(output[1][task == TASK_ID['ci'], :], dim=1).tolist()
