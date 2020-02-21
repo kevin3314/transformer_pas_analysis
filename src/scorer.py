@@ -459,15 +459,19 @@ class Scorer:
             if predicate in predicates:
                 cases += self.cases
             if predicate in anaphors:
-                cases += ['ノ', 'ノ？']
+                cases += ['ノ']
             idx = predicate.tid
             tree_strings[idx] += '  '
             arguments = document.get_arguments(predicate)
             for case in cases:
-                args = arguments[case] + (arguments['判ガ'] if case == 'ガ' else [])
+                args = arguments[case]
+                if case == 'ガ':
+                    args += arguments['判ガ']
+                if case == 'ノ':
+                    args += arguments['ノ？']
                 if args:
                     arg = args[0].midasi
-                    result = self.comp_result.get((document.doc_id, predicate.dtid, case.rstrip('？')), None)
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
                     if result == 'overt':
                         color = 'green'
                     elif result in Scorer.DEPTYPE2ANALYSIS.values():
