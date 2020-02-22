@@ -179,7 +179,7 @@ def main(config, args):
         kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
         expanded_vocab_size = dataset.expanded_vocab_size
     commonsense_data_loader = None
-    if config[f'{args.target}_commonsense_dataset'] is not None:
+    if config.config.get(f'{args.target}_commonsense_dataset', None) is not None:
         dataset = config.init_obj(f'{args.target}_commonsense_dataset', module_dataset, logger=logger)
         commonsense_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
 

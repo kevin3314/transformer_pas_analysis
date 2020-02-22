@@ -127,7 +127,7 @@ class ConfigParser:
 
     # setting read-only attributes
     @property
-    def config(self):
+    def config(self) -> dict:
         return self._config
 
     @property
