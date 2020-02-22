@@ -4,6 +4,7 @@ from pathlib import Path
 
 import torch
 import numpy as np
+from sklearn.metrics import f1_score
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -23,6 +24,7 @@ class Tester:
         self.model: BaseModel = model
         self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
+        self.config = config
         self.kwdlc_data_loader = kwdlc_data_loader
         self.kc_data_loader = kc_data_loader
         self.commonsense_data_loader = commonsense_data_loader
@@ -51,25 +53,36 @@ class Tester:
     def _test(self, data_loader, label: str):
         log = {}
         total_output = (np.array(0), np.array(0))
+        output2 = None
         total_loss = 0.0
         for checkpoint in self.checkpoints:
             model = self._prepare_model(checkpoint)
             output, loss = self._test_epoch(model, data_loader)
             total_output = tuple(t + o for t, o in zip(total_output, output))
             total_loss += loss
-        if len(total_output) == 2:
-            # ここでラベルによって分岐か？
+
+        if self.config['arch']['type'] in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
             output_base, output = total_output
             arguments_sets_base = np.argmax(output_base, axis=3).tolist()
-            result_base = self._eval(arguments_sets_base, data_loader, corpus=label, suffix='_base')
+            result_base = self._eval_pas(arguments_sets_base, data_loader, corpus=label, suffix='_base')
             log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
+        elif self.config['arch']['type'] == 'CommonsenseModel':
+            output, output2 = total_output  # (N, seq, case, seq), (N, 2)
         else:
-            assert len(total_output) == 1
             output = total_output[0]
-        arguments_sets = np.argmax(output, axis=3).tolist()
-        result = self._eval(arguments_sets, data_loader, corpus=label)
-        result['loss'] = total_loss / self.kwdlc_data_loader.n_samples
+
+        if label in ('kwdlc', 'kc'):
+            arguments_set = np.argmax(output, axis=3).tolist()
+            result = self._eval_pas(arguments_set, data_loader, corpus=label)
+        elif label == 'commonsense':
+            assert self.config['arch']['type'] == 'CommonsenseModel'
+            contingency_set = np.argmax(output2, axis=1)  # (N)
+            result = self._eval_commonsense(contingency_set, data_loader)
+        else:
+            raise ValueError(f'unknown label: {label}')
+        result['loss'] = total_loss / data_loader.n_samples
         log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
+
         return log
 
     def _prepare_model(self, checkpoint: Path):
@@ -83,26 +96,19 @@ class Tester:
             model = torch.nn.DataParallel(model, device_ids=self.device_ids)
         return model
 
-    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple, np.ndarray], float]:
+    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple], float]:
         total_loss = 0.0
-        outputs_base = []
         outputs = []
+        outputs2 = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
                 output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
-                if model.__class__.__name__ == 'MultitaskDepModel':
-                    output = output_[0]  # (b, seq, case, seq)
-                elif model.__class__.__name__ in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
-                    output_base, output = output_
-                    outputs_base.append(output_base.cpu().numpy())
-                elif model.__class__.__name__ == 'CommonsenseModel':
-                    output = output_[0]#[task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq)
-                    # if label == 'commonsense':
-                    #     contingency_set += torch.argmax(output[1][task == TASK_ID['ci'], :], dim=1).tolist()
-                    #     gold_contingency_set += target[task == TASK_ID['ci'], 0, 0, 0].tolist()
+                if isinstance(output_, tuple):
+                    output, output2 = output_
+                    outputs2.append(output2.cpu().numpy())
                 else:
                     output = output_
                 outputs.append(output.cpu().numpy())
@@ -111,17 +117,17 @@ class Tester:
                 loss = self.loss(output_, target, deps, task)
                 total_loss += loss.item() * input_ids.size(0)
         avg_loss = total_loss / data_loader.n_samples
-        if outputs_base:
-            return (np.concatenate(outputs_base, axis=0), np.concatenate(outputs, axis=0)), avg_loss
+        if outputs2:
+            return (np.concatenate(outputs, axis=0), np.concatenate(outputs2, axis=0)), avg_loss
         else:
             return (np.concatenate(outputs, axis=0), ), avg_loss
 
-    def _eval(self, arguments_sets, data_loader, corpus: str, suffix: str = ''):
+    def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
-        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
+        documents_pred = prediction_writer.write(arguments_set, prediction_output_dir)
 
         result = {}
         for pas_target in self.pas_targets:
@@ -150,6 +156,11 @@ class Tester:
         for i, metric in enumerate(self.metrics):
             f1_metrics[i] += metric(result)
         return f1_metrics
+
+    @staticmethod
+    def _eval_commonsense(contingency_set: np.ndarray, data_loader) -> dict:
+        gold = np.array([f.label for f in data_loader.dataset.features])
+        return {'f1': f1_score(gold, contingency_set)}
 
 
 def main(config, args):
