@@ -9,7 +9,6 @@ from sklearn.metrics import f1_score
 from base import BaseTrainer
 from writer.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
-from utils.constants import TASK_ID
 
 
 class Trainer(BaseTrainer):
@@ -102,7 +101,6 @@ class Trainer(BaseTrainer):
         total_loss = 0
         arguments_set: List[List[List[int]]] = []
         contingency_set: List[int] = []
-        gold_contingency_set: List[int] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
                 batch = tuple(t.to(self.device) for t in batch)
@@ -115,10 +113,8 @@ class Trainer(BaseTrainer):
                 elif self.config['arch']['type'] in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
                     scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
-                    scores = output[0][task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq)
-                    if label == 'commonsense':
-                        contingency_set += torch.argmax(output[1][task == TASK_ID['ci'], :], dim=1).tolist()
-                        gold_contingency_set += target[task == TASK_ID['ci'], 0, 0, 0].tolist()
+                    scores = output[0]  # (b, seq, case, seq)
+                    contingency_set += torch.argmax(output[1], dim=1).tolist()
                 else:
                     scores = output  # (b, seq, case, seq)
 
@@ -154,20 +150,20 @@ class Trainer(BaseTrainer):
             val_metrics = self._eval_metrics(scorer.result_dict(), label)
 
             log.update(dict(zip([met.__name__ for met in self.metrics], val_metrics)))
-
-        if label == 'commonsense':
-            log['f1'] = self._eval_commonsense(contingency_set, gold_contingency_set)
-            self.writer.add_scalar('{}_{}'.format(label, 'f1'), log['f1'])
+        elif label == 'commonsense':
+            log['f1'] = self._eval_commonsense(contingency_set)
 
         return log
 
-    @staticmethod
-    def _eval_commonsense(prediction: List[int], gold: List[int]) -> float:
-        return f1_score(gold, prediction)
+    def _eval_commonsense(self, contingency_set: List[int]) -> float:
+        gold = [f.label for f in self.valid_commonsense_data_loader.dataset.features]
+        f1 = f1_score(gold, contingency_set)
+        self.writer.add_scalar(f'commonsense_f1', f1)
+        return f1
 
     def _eval_metrics(self, result: dict, label: str):
         f1_metrics = np.zeros(len(self.metrics))
         for i, metric in enumerate(self.metrics):
             f1_metrics[i] += metric(result)
-            self.writer.add_scalar('{}_{}'.format(label, metric.__name__), f1_metrics[i])
+            self.writer.add_scalar(f'{label}_{metric.__name__}', f1_metrics[i])
         return f1_metrics
