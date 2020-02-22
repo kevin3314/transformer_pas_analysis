@@ -236,21 +236,32 @@ def main() -> None:
         else:
             loss = 'cross_entropy_pas_loss'
 
-        metrics = [
-            'case_analysis_f1_ga',
-            'case_analysis_f1_wo',
-            'case_analysis_f1_ni',
-            'case_analysis_f1_ga2',
-            'case_analysis_f1',
-            'zero_anaphora_f1_ga',
-            'zero_anaphora_f1_wo',
-            'zero_anaphora_f1_ni',
-            'zero_anaphora_f1_ga2',
-            'zero_anaphora_f1_inter',
-            'zero_anaphora_f1_intra',
-            'zero_anaphora_f1_exophora',
-            'zero_anaphora_f1',
-        ]
+        metrics = []
+        if 'ガ' in cases:
+            metrics.append('case_analysis_f1_ga')
+        if 'ヲ' in cases:
+            metrics.append('case_analysis_f1_wo')
+        if 'ニ' in cases:
+            metrics.append('case_analysis_f1_ni')
+        if 'ガ２' in cases:
+            metrics.append('case_analysis_f1_ga2')
+        if any(met.startswith('case_analysis_f1_') for met in metrics):
+            metrics.append('case_analysis_f1')
+        if 'ガ' in cases:
+            metrics.append('zero_anaphora_f1_ga')
+        if 'ヲ' in cases:
+            metrics.append('zero_anaphora_f1_wo')
+        if 'ニ' in cases:
+            metrics.append('zero_anaphora_f1_ni')
+        if 'ガ２' in cases:
+            metrics.append('zero_anaphora_f1_ga2')
+        if any(met.startswith('zero_anaphora_f1_') for met in metrics):
+            metrics += [
+                'zero_anaphora_f1_inter',
+                'zero_anaphora_f1_intra',
+                'zero_anaphora_f1_exophora',
+                'zero_anaphora_f1',
+            ]
         if args.coreference:
             metrics.append('coreference_f1')
         if 'ノ' in cases:
