@@ -585,7 +585,7 @@ def main():
 
     reader_gold = KWDLCReader(
         Path(args.gold_dir),
-        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？'.split(','),
+        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ'.split(','),
         target_corefs=args.coref_string.split(','),
         extract_nes=False
     )
