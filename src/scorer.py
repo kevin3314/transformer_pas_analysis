@@ -150,7 +150,7 @@ class Scorer:
                 # calculate recall
                 # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
                 # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
-                if args_gold:
+                if args_gold or (self.comp_result.get(key, None) in Scorer.DEPTYPE2ANALYSIS.values()):
                     arg_gold = None
                     for arg in args_gold_relaxed:
                         if arg in args_pred:
@@ -224,7 +224,7 @@ class Scorer:
                 self.measures['ノ'][analysis].denom_pred += 1
 
             # calculate recall
-            if antecedents_gold:
+            if antecedents_gold or (self.comp_result.get(key, None) in Scorer.DEPTYPE2ANALYSIS.values()):
                 antecedent_gold = None
                 for ant in antecedents_gold_relaxed:
                     if ant in antecedents_pred:
@@ -281,7 +281,7 @@ class Scorer:
                 self.measure_coref.denom_pred += 1
 
             # calculate recall
-            if tgt_mentions_gold or exophors_gold:
+            if tgt_mentions_gold or exophors_gold or (self.comp_result.get(key, None) == 'correct'):
                 if (set(tgt_mentions_pred) & set(tgt_mentions_gold_relaxed)) \
                         or (set(exophors_pred) & set(exophors_gold_relaxed)):
                     assert self.comp_result[key] == 'correct'
