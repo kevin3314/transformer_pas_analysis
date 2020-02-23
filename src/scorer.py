@@ -454,6 +454,7 @@ class Scorer:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(sentence.tag_list())
+        all_midasis = [m.midasi for m in document.mentions.values()]
         for predicate in filter(lambda p: p.sid == sid, set(predicates + anaphors)):
             cases = []
             if predicate in predicates:
@@ -469,33 +470,30 @@ class Scorer:
                     args += arguments['判ガ']
                 if case == 'ノ':
                     args += arguments['ノ？']
-                if args:
-                    arg = args[0].midasi
-                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
-                    if result == 'overt':
-                        color = 'green'
-                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
-                        color = 'blue'
-                    elif result == 'wrong':
-                        if isinstance(args[0], SpecialArgument) and arg not in self.relax_exophors:
-                            color = 'gray'
-                        else:
+                color: str = 'gray'
+                result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
+                if result == 'overt':
+                    color = 'green'
+                elif result in Scorer.DEPTYPE2ANALYSIS.values():
+                    color = 'blue'
+                elif result == 'wrong':
+                    for arg in args:
+                        if isinstance(arg, Argument):
                             color = 'red'
-                    elif result is None:
-                        color = 'gray'
-                    else:
-                        logger.warning(f'unknown result: {result}')
-                        color = 'gray'
-                else:
-                    arg = 'NULL'
-                    color = 'gray'
+                        elif arg.midasi in self.relax_exophors:
+                            color = 'red'
+                targets = set()
+                for arg in args:
+                    target = arg.midasi
+                    if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                        target += str(arg.dtid)
+                    targets.add(target)
                 if html:
-                    tree_strings[idx] += f'<font color="{color}">{arg}:{case}</font> '
+                    tree_strings[idx] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
                 else:
-                    tree_strings[idx] += f'{arg}:{case} '
+                    tree_strings[idx] += f'{",".join(targets)}:{case} '
         if self.coreference:
             for src_mention in filter(lambda m: m.sid == sid, mentions):
-                # tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
                 tgt_mentions_relaxed = self._filter_mentions(
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
@@ -503,7 +501,9 @@ class Scorer:
                     target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
                     if not target:
                         target = tgt_mention.midasi
-                    targets.add(target + str(tgt_mention.dtid))
+                    if all_midasis.count(tgt_mention.midasi) > 1:
+                        target += str(tgt_mention.dtid)
+                    targets.add(target)
                 for eid in src_mention.eids:
                     entity = document.entities[eid]
                     if entity.exophor in self.relax_exophors.values():
