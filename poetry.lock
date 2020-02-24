@@ -307,6 +307,7 @@ testing = ["pytest"]
 reference = "6ca9bfa24963cb9da450367f9eff3ecfd7429e97"
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
+
 [[package]]
 category = "main"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -322,6 +323,14 @@ name = "mojimoji"
 optional = false
 python-versions = "*"
 version = "0.0.9"
+
+[[package]]
+category = "main"
+description = "A fast converter between Japanese hankaku and zenkaku characters"
+name = "mojimoji2"
+optional = false
+python-versions = "*"
+version = "0.1.3"
 
 [[package]]
 category = "dev"
@@ -636,6 +645,7 @@ version = "0.0.1"
 reference = "0c2c51ab07a8c7028f0faa55a8b31d7032ade936"
 type = "git"
 url = "https://github.com/ku-nlp/python-textformatting.git"
+
 [[package]]
 category = "main"
 description = "Fast and Customizable Tokenizers"
@@ -766,7 +776,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["jaraco.itertools", "func-timeout"]
 
 [metadata]
-content-hash = "9daf11aae9d95b5e97fe57e58ddffe0bf9dee7da69bcda16f9c8420151dd44fe"
+content-hash = "e6d6f694bbf3dd652956cb20f325eba6fc4caee0cde123f742af8c2ea234254b"
 python-versions = "^3.6"
 
 [metadata.files]
@@ -908,6 +918,10 @@ markupsafe = [
 ]
 mojimoji = [
     {file = "mojimoji-0.0.9.post0.tar.gz", hash = "sha256:7e07191fb74e24c741c7c9408b12c238e27b604cfaaf28ee5cd3947f89fde5d5"},
+]
+mojimoji2 = [
+    {file = "mojimoji2-0.1.3-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:7d7fe621832d175c700659ce216a1b7db264e3369fffb1987a0940450d0ffc51"},
+    {file = "mojimoji2-0.1.3.tar.gz", hash = "sha256:ba392713e8d1174da18d47df5616b43e9e08a18470953a3b36a3d979697026f9"},
 ]
 more-itertools = [
     {file = "more-itertools-8.2.0.tar.gz", hash = "sha256:b1ddb932186d8a6ac451e1d95844b382f55e12686d51ca0c68b6f61f2ab7a507"},
