@@ -4,8 +4,9 @@ import argparse
 from pathlib import Path
 from typing import List
 
+from kyoto_reader import Document
+
 from writer.prediction_writer import PredictionKNPWriter
-from kwdlc_reader import Document
 from analyzer import Analyzer
 
 

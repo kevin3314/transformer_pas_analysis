@@ -23,6 +23,7 @@ pandas = "*"
 scipy = "*"
 transformers = "*"
 scikit-learn = "*"
+kyoto-reader = {editable = true,git = "https://github.com/ku-nlp/kyoto-reader.git",ref = "master"}
 
 [requires]
 python_version = "3.6"

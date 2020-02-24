@@ -5,13 +5,14 @@ import _pickle as cPickle
 import json
 from typing import List
 
-from kwdlc_reader import KWDLCReader
+from kyoto_reader import KyotoReader
+
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
 
 def process(input_path: Path, output_path: Path, cases: List[str], corefs: List[str]):
     output_path.mkdir(exist_ok=True)
-    reader = KWDLCReader(input_path, cases, corefs, extract_nes=False)
+    reader = KyotoReader(input_path, cases, corefs, extract_nes=False)
     documents = reader.process_all_documents()
     for document in documents:
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:

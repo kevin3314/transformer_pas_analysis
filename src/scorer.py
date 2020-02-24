@@ -8,8 +8,8 @@ from typing import List, Dict, Set, Union, Optional, TextIO
 from collections import OrderedDict
 
 from pyknp import BList
+from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 
-from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -583,13 +583,13 @@ def main():
                         help='PAS analysis evaluation target (pred: predicates, noun: eventive noun)')
     args = parser.parse_args()
 
-    reader_gold = KWDLCReader(
+    reader_gold = KyotoReader(
         Path(args.gold_dir),
         target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ'.split(','),
         target_corefs=args.coref_string.split(','),
         extract_nes=False
     )
-    reader_pred = KWDLCReader(
+    reader_pred = KyotoReader(
         Path(args.prediction_dir),
         target_cases=reader_gold.target_cases,
         target_corefs=reader_gold.target_corefs,

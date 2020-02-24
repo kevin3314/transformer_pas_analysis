@@ -5,9 +5,9 @@ from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 from pathlib import Path
 
 from pyknp import Tag
+from kyoto_reader import Document, Pas, BaseArgument, Argument
 
 from data_loader.dataset import InputFeatures, PASDataset
-from kwdlc_reader import Document, Pas, BaseArgument, Argument
 
 
 class PredictionKNPWriter:

@@ -5,9 +5,9 @@ import textwrap
 import argparse
 
 from flask import Flask, request, jsonify, make_response
+from kyoto_reader import Document
 
 from writer.prediction_writer import PredictionKNPWriter
-from kwdlc_reader import Document
 from analyzer import Analyzer
 
 app = Flask(__name__)

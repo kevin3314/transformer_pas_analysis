@@ -7,8 +7,8 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
+from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
-from kwdlc_reader import KWDLCReader, Document, ALL_EXOPHORS
 from data_loader.dataset.read_example import read_example, PasExample
 from utils.constants import TASK_ID
 
@@ -47,7 +47,7 @@ class PASDataset(Dataset):
         else:
             assert knp_string is not None
             source = knp_string
-        self.reader = KWDLCReader(source,
+        self.reader = KyotoReader(source,
                                   target_cases=dataset_config['target_cases'],
                                   target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)

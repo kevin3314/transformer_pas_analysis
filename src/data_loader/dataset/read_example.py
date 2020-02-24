@@ -6,8 +6,7 @@ import _pickle as cPickle
 from collections import OrderedDict
 
 from pyknp import BList, Tag, Morpheme
-
-from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
+from kyoto_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 
 def read_example(document: Document,
