@@ -99,7 +99,7 @@ def main() -> None:
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
-    cases: List[str] = args.case_string.split(',')
+    cases: List[str] = args.case_string.split(',') if args.case_string else []
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         name = f'{model}-{corpus}-{n_epoch}e-{args.bert}'
