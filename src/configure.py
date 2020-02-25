@@ -80,7 +80,7 @@ def main() -> None:
                         help='number of gpus to use')
     parser.add_argument('--bert', choices=['base', 'large', 'large-wwm'], default='base',
                         help='BERT model')
-    parser.add_argument('--refinement-bert', choices=['base', 'large'], default='base',
+    parser.add_argument('--refinement-bert', choices=['base', 'large', 'large-wwm'], default='base',
                         help='BERT model type used for RefinementModel')
     parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
                         help='refinement layer type for RefinementModel')
@@ -108,7 +108,7 @@ def main() -> None:
         name += '-nocase' if 'ノ' in cases else ''
         name += '-noun' if args.eventive_noun else ''
         if model == 'RefinementModel':
-            name += '-largeref' if args.refinement_bert == 'large' else ''
+            name += '-largeref' if args.refinement_bert in ('large', 'large-wwm') else ''
             name += '-reftype' + str(args.refinement_type)
         name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
