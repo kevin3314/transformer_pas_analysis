@@ -286,12 +286,26 @@ def main() -> None:
         else:
             raise ValueError(f'unknown lr schedule: {args.lr_schedule}')
 
+        mnt_mode = 'max'
+        if 'zero_anaphora_f1' in metrics:
+            mnt_metric = 'zero_anaphora_f1'
+        elif 'coreference_f1' in metrics:
+            mnt_metric = 'coreference_f1'
+        elif 'bridging_anaphora_f1' in metrics:
+            mnt_metric = 'bridging_anaphora_f1'
+        else:
+            mnt_metric = 'loss'
+            mnt_mode = 'min'
+        if corpus in ('kwdlc', 'all'):
+            mnt_metric = 'val_kwdlc_' + mnt_metric
+        else:
+            mnt_metric = 'val_kc_' + mnt_metric
         trainer = {
             'epochs': n_epoch,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,
-            'monitor': 'max val_kwdlc_zero_anaphora_f1',
+            'monitor': f'{mnt_mode} {mnt_metric}',
             'early_stop': 10,
             'tensorboard': True,
         }
