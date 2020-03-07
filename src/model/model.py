@@ -58,6 +58,106 @@ class BaselineModel(BaseModel):
         return output  # (b, seq, case, seq)
 
 
+class BaselineModel2(BaseModel):
+    """出力の重みを格ごとに用意"""
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+
+        # head selection [Zhang+ 16]
+        self.W_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.U_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outputs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False)] * self.num_case)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                ) -> torch.Tensor:             # (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask, token_type_ids=segment_ids)
+
+        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outputs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+
+        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
+
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        return output  # (b, seq, case, seq)
+
+
+class BaselineModel3(BaseModel):
+    """BaselineModel2に加え述語側の表現を格間で共通に"""
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+
+        # head selection [Zhang+ 16]
+        self.W_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.U_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outputs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False)] * self.num_case)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                ) -> torch.Tensor:             # (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask, token_type_ids=segment_ids)
+
+        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, hid)
+        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.unsqueeze(2).expand(-1, -1, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outputs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+
+        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
+
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        return output  # (b, seq, case, seq)
+
+
 class RefinementModel(BaseModel):
     def __init__(self,
                  bert_model: str,
@@ -97,9 +197,6 @@ class RefinementModel(BaseModel):
         # output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
         return base_logits, base_logits.detach() + modification  # (b, seq, case, seq), (b, seq, case, seq)
-
-
-RefinementModel2 = RefinementModel
 
 
 class EnsembleModel(BaseModel):
@@ -389,8 +486,7 @@ class CaseInteractionModel2(BaseModel):
 
         self.ref = nn.Linear(self.hidden_size, 1)
 
-        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
-                                         for _ in range(self.num_case)])
+        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)] * self.num_case)
         self.output = nn.Linear(self.hidden_size, 1, bias=False)
 
     def forward(self,
