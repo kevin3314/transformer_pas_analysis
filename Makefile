@@ -41,7 +41,7 @@ all: train
 N := $(shell expr $(TRAIN_NUM) - $(NUM_TRAINED))
 .PHONY: train
 train:
-	env n=$(N) gpu=$(GPUS) scripts/train.sh $(CONFIG)
+	for i in $$(seq $(N)); do $(PYTHON) src/train.py -c $(CONFIG) -d $(GPUS) --seed $${RANDOM}; done
 	$(MAKE) test TARGET=valid
 
 # test
