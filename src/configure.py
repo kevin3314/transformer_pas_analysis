@@ -6,6 +6,9 @@ import pathlib
 import argparse
 from typing import List
 import itertools
+import inspect
+
+import model.model as module_arch
 
 
 class Config:
@@ -36,9 +39,8 @@ class Path:
 
 
 def main() -> None:
-    all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'EnsembleModel',
-                  'CommonsenseModel', 'BaselineModel2', 'BaselineModel3']
+    all_models = [m[0] for m in inspect.getmembers(module_arch, inspect.isclass)
+                  if m[1].__module__ == module_arch.__name__]
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
