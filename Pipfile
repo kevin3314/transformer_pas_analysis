@@ -7,7 +7,6 @@ verify_ssl = true
 ipython = "*"
 ipdb = "*"
 pytest = "*"
-pdbpp = "*"
 
 [packages]
 numpy = "*"
@@ -26,4 +25,4 @@ scikit-learn = "*"
 kyoto-reader = {editable = true,git = "https://github.com/ku-nlp/kyoto-reader.git",ref = "master"}
 
 [requires]
-python_version = "3.6"
+python_version = "3.7"
