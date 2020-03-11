@@ -56,8 +56,8 @@ class PredictionKNPWriter:
                                                  document)
             document_pred = Document('\n'.join(output_knp_lines) + '\n',
                                      document.doc_id,
-                                     document.target_cases,
-                                     document.target_corefs,
+                                     document.cases,
+                                     document.corefs,
                                      document.relax_cases,
                                      extract_nes=False,
                                      use_pas_tag=False)

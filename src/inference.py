@@ -55,9 +55,7 @@ def draw_tree(document: Document,
             tgt_mentions = [tgt for tgt in document.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
             targets = set()
             for tgt_mention in tgt_mentions:
-                target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<助詞>' not in mrph.fstring)
-                if not target:
-                    target = tgt_mention.midasi
+                target = tgt_mention.midasi
                 if all_midasis.count(tgt_mention.midasi) > 1:
                     target += str(tgt_mention.dtid)
                 targets.add(target)
@@ -96,7 +94,7 @@ def main(args):
         for document_pred in documents_pred:
             print()
             for sid in document_pred.sid2sentence.keys():
-                document_pred.draw_tree(sid, dataset.coreference, sys.stdout)
+                draw_tree(document_pred, sid, dataset.target_cases, dataset.coreference, sys.stdout)
 
 
 if __name__ == '__main__':

@@ -498,10 +498,8 @@ class Scorer:
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
                 for tgt_mention in tgt_mentions_relaxed:
-                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<助詞>' not in mrph.fstring)
-                    if not target:
-                        target = tgt_mention.midasi
-                    if all_midasis.count(tgt_mention.midasi) > 1:
+                    target: str = tgt_mention.midasi
+                    if all_midasis.count(target) > 1:
                         target += str(tgt_mention.dtid)
                     targets.add(target)
                 for eid in src_mention.eids:
