@@ -498,7 +498,7 @@ class Scorer:
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
                 for tgt_mention in tgt_mentions_relaxed:
-                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
+                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<助詞>' not in mrph.fstring)
                     if not target:
                         target = tgt_mention.midasi
                     if all_midasis.count(tgt_mention.midasi) > 1:
@@ -516,9 +516,9 @@ class Scorer:
                 tree_strings[idx] += '  ＝:'
                 if html:
                     tree_strings[idx] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
-                                         + ' '.join(targets) + '</span> '
+                                         + ','.join(targets) + '</span> '
                 else:
-                    tree_strings[idx] += ' '.join(targets)
+                    tree_strings[idx] += ','.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 
