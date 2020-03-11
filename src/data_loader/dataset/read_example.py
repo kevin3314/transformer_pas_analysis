@@ -38,7 +38,7 @@ def read_example(document: Document,
 
 
 def _hash(document, *args) -> str:
-    attrs = ('target_cases', 'target_corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
+    attrs = ('cases', 'corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
     assert set(attrs) <= set(vars(document).keys())
     vars_document = {k: v for k, v in vars(document).items() if k in attrs}
     string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
