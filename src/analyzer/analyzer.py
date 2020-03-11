@@ -41,6 +41,7 @@ class Analyzer:
         config_path = Path(model_path).parent / 'config.json'
         config = read_json(config_path)
         self.config = ConfigParser(config, resume=model_path, run_id='')  # save_dir 作らせたくない
+        os.environ['BPA_DISABLE_CACHE'] = '1'
 
         dataset_config = config['test_kwdlc_dataset']['args']
         bert_config = BertConfig.from_pretrained(dataset_config['bert_model'])

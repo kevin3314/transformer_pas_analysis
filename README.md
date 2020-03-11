@@ -196,6 +196,7 @@ make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 
 - `BPA_CACHE_DIR`: A directory where processed document is cached. Default is `/data/$USER/bpa_cache`.
 - `BPA_OVERWRITE_CACHE`: If set, bert_pas_analysis doesn't load cache even if it exists.
+- `BPA_DISABLE_CACHE`: If set, bert_pas_analysis doesn't load or save cache.
 
 ## Dataset
 
