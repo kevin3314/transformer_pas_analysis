@@ -5,10 +5,64 @@ import torch.nn as nn
 from transformers import BertModel
 
 from base import BaseModel
-from model.refinement.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
+from model.sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
+from model.sub.coreference import Coreference
 
 
 class BaselineModel(BaseModel):
+    """BaselineModel2に加え述語側の表現を格間で共通に"""
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case
+        self.coreference = coreference
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.coref = Coreference(bert_hidden_size, dropout)
+        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False)] * self.num_case)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case(+1), seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                ) -> torch.Tensor:             # (b, seq, case(+1), seq)
+        batch_size, sequence_len = input_ids.size()
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask, token_type_ids=segment_ids)
+
+        h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, hid)
+        h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.unsqueeze(2).expand(-1, -1, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        if self.coreference:
+            outputs.append(self.coref(sequence_output))
+        output = torch.stack(outputs, dim=2)  # (b, seq, case(+1), seq)
+
+        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
+        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
+
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        return output  # (b, seq, case, seq)
+
+
+class BaselineModelOld(BaseModel):
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
