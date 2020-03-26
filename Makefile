@@ -16,7 +16,7 @@ AGGR_CASE := all_case
 CSV_BASENAME := $(CORPUS)_$(PAS_TARGET).csv
 
 SHELL = /bin/bash -eu
-PYTHON := $(shell which python)
+PYTHON := $(shell which python3)
 
 ifdef CONFIG
 	RESULT := result/$(subst /,-,$(patsubst config/%.json,%,$(CONFIG)))
