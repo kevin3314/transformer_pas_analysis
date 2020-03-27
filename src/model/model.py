@@ -205,8 +205,8 @@ class BaselineModelOld(BaseModel):
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
 
-        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
         h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
