@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import math
 import copy
@@ -109,7 +110,7 @@ def main() -> None:
         name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         name += '-nocase' if 'ノ' in cases else ''
         name += '-noun' if args.eventive_noun else ''
-        if model == 'RefinementModel':
+        if 'Refinement' in model:
             name += '-largeref' if args.refinement_bert in ('large', 'large-wwm') else ''
             name += '-reftype' + str(args.refinement_type)
         name += f'-{args.additional_name}' if args.additional_name is not None else ''
@@ -132,7 +133,7 @@ def main() -> None:
                 'coreference': args.coreference,
             },
         }
-        if model == 'RefinementModel':
+        if 'Refinement' in model:
             refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': refinement_bert_model})
@@ -231,7 +232,7 @@ def main() -> None:
 
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
-        elif model in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
+        elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', model):
             loss = 'multi_cross_entropy_pas_loss'
         elif model == 'CommonsenseModel':
             loss = 'cross_entropy_pas_commonsense_loss'

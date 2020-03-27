@@ -1,3 +1,4 @@
+import re
 import os
 import socket
 from typing import Dict, Tuple, Union, Optional, List
@@ -106,7 +107,7 @@ class Analyzer:
                 output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
                 if self.config['arch']['type'] == 'MultitaskDepModel':
                     scores = output[0]  # (b, seq, case, seq)
-                elif self.config['arch']['type'] in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
+                elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
                     scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
                     scores = output[0]  # (b, seq, case, seq)

@@ -1,6 +1,7 @@
+import re
 import argparse
-from typing import List, Union, Tuple, Callable
 from pathlib import Path
+from typing import List, Union, Tuple, Callable
 
 import torch
 import numpy as np
@@ -61,7 +62,7 @@ class Tester:
             total_output = tuple(t + o for t, o in zip(total_output, output))
             total_loss += loss
 
-        if self.config['arch']['type'] in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
+        if re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
             output_base, output = total_output
             arguments_sets_base = np.argmax(output_base, axis=3).tolist()
             result_base = self._eval_pas(arguments_sets_base, data_loader, corpus=label, suffix='_base')
