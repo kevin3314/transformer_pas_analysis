@@ -285,9 +285,10 @@ class RefinementModel2(BaseModel):
                 ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, seq, case, seq)
         # (b, seq, case, seq)
         base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, deps)
-        refined = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
+        output = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
+        output = self.mask(output, attention_mask, ng_token_mask)
 
-        return base_logits, self.mask(refined)  # (b, seq, case, seq), (b, seq, case, seq)
+        return base_logits, output  # (b, seq, case, seq), (b, seq, case, seq)
 
 
 class DuplicateModel(BaseModel):
