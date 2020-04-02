@@ -182,7 +182,7 @@
         "kyoto-reader": {
             "editable": true,
             "git": "https://github.com/ku-nlp/kyoto-reader.git",
-            "ref": "0b2bf73194ec70ad1e4d9d2ed631a2bf01d3335a"
+            "ref": "5ef76397aaaeaf5f097a624fa94625b9708cfb12"
         },
         "markdown": {
             "hashes": [
