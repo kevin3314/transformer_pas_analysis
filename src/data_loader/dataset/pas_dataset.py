@@ -7,9 +7,10 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
+from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
-from kwdlc_reader import KWDLCReader, Document
 from data_loader.dataset.read_example import read_example, PasExample
+from utils.constants import TASK_ID
 
 
 class InputFeatures(NamedTuple):
@@ -17,11 +18,11 @@ class InputFeatures(NamedTuple):
     orig_to_tok_index: List[int]  # for output
     tok_to_orig_index: List[Optional[int]]  # for output
     input_ids: List[int]  # for training
-    input_mask: List[int]  # for training
+    input_mask: List[bool]  # for training
     segment_ids: List[int]  # for training
     arguments_set: List[List[List[int]]]  # for training
-    ng_arg_mask: List[List[int]]  # for training
-    ng_ment_mask: List[List[int]]  # for training
+    ng_arg_mask: List[List[bool]]  # for training
+    ng_ment_mask: List[List[bool]]  # for training
     deps: List[List[int]]  # for training
 
 
@@ -37,7 +38,7 @@ class PASDataset(Dataset):
                  bert_model: str,
                  kc: bool,
                  train_target: List[str],
-                 eventive_noun: bool = False,
+                 eventive_noun: bool,
                  knp_string: Optional[str] = None,
                  logger=None,
                  ) -> None:
@@ -46,12 +47,12 @@ class PASDataset(Dataset):
         else:
             assert knp_string is not None
             source = knp_string
-        self.reader = KWDLCReader(source,
+        self.reader = KyotoReader(source,
                                   target_cases=dataset_config['target_cases'],
                                   target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
-        self.target_cases: List[str] = cases
-        self.target_exophors: List[str] = exophors
+        self.target_cases: List[str] = [c for c in cases if c in self.reader.target_cases]
+        self.target_exophors: List[str] = [e for e in exophors if e in ALL_EXOPHORS]
         self.coreference: bool = coreference
         self.kc: bool = kc
         self.train_overt: bool = 'overt' in train_target
@@ -206,7 +207,7 @@ class PASDataset(Dataset):
             input_ids=input_ids,
             input_mask=input_mask,
             segment_ids=segment_ids,
-            arguments_set=[[[(x in args) for x in range(max_seq_length)] for args in arguments]
+            arguments_set=[[[int(x in args) for x in range(max_seq_length)] for args in arguments]
                            for arguments in arguments_set],
             ng_arg_mask=[[(x in candidates) for x in range(max_seq_length)]
                          for candidates in arg_candidates_set],  # False -> mask, True -> keep
@@ -319,10 +320,12 @@ class PASDataset(Dataset):
         feature = self.features[idx]
         input_ids = np.array(feature.input_ids)          # (seq)
         input_mask = np.array(feature.input_mask)        # (seq)
+        segment_ids = np.array(feature.segment_ids)      # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
         ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
         ng_ment_mask = np.array(feature.ng_ment_mask)    # (seq, seq)
         stacks = [ng_arg_mask] * len(self.target_cases) + ([ng_ment_mask] if self.coreference else [])
         ng_token_mask = np.stack(stacks, axis=1)         # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
-        return input_ids, input_mask, arguments_ids, ng_token_mask, deps
+        task = np.array(TASK_ID['pa'])                   # ()
+        return input_ids, input_mask, segment_ids, arguments_ids, ng_token_mask, deps, task

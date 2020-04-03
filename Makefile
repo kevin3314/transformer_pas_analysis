@@ -16,7 +16,7 @@ AGGR_CASE := all_case
 CSV_BASENAME := $(CORPUS)_$(PAS_TARGET).csv
 
 SHELL = /bin/bash -eu
-PYTHON := $(shell which python)
+PYTHON := $(shell which python3)
 
 ifdef CONFIG
 	RESULT := result/$(subst /,-,$(patsubst config/%.json,%,$(CONFIG)))
@@ -41,7 +41,7 @@ all: train
 N := $(shell expr $(TRAIN_NUM) - $(NUM_TRAINED))
 .PHONY: train
 train:
-	env n=$(N) gpu=$(GPUS) scripts/train.sh $(CONFIG)
+	for i in $$(seq $(N)); do $(PYTHON) src/train.py -c $(CONFIG) -d $(GPUS) --seed $${RANDOM}; done
 	$(MAKE) test TARGET=valid
 
 # test
@@ -52,7 +52,7 @@ test: $(AGGR_SCORE_FILE)
 $(AGGR_SCORE_FILE): $(RESULT_FILES)
 	mkdir -p $(dir $@)
 	cat <(ls $(RESULT)/*/eval_$(TARGET)/$(CSV_BASENAME) | head -1 | xargs head -1) \
-	<(ls $(RESULT)/*/eval_$(TARGET)/$(CSV_BASENAME) | xargs grep -h $(AGGR_CASE),) \
+	<(ls $(RESULT)/*/eval_$(TARGET)/$(CSV_BASENAME) | xargs grep -h $(AGGR_CASE)) \
 	| tr -d ' ' | sed -r 's/^[^,]+,//' > $@ || rm -f $@
 
 $(RESULT_FILES): %/eval_$(TARGET)/$(CSV_BASENAME): %/model_best.pth

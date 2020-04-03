@@ -4,6 +4,7 @@ import random
 
 import transformers.optimization as module_optim
 import torch
+from torch.utils.data import ConcatDataset
 import numpy as np
 
 import data_loader.data_loaders as module_loader
@@ -26,26 +27,29 @@ def main(config: ConfigParser, args: argparse.Namespace):
     logger = config.get_logger('train')
 
     # setup data_loader instances
+    train_datasets = []
     if config['train_kwdlc_dataset']['args']['path'] is not None:
-        train_dataset = config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger)
-        expanded_vocab_size = train_dataset.expanded_vocab_size
-        if config['train_kc_dataset']['args']['path'] is not None:
-            train_dataset += config.init_obj('train_kc_dataset', module_dataset, logger=logger)
-    else:
-        train_dataset = config.init_obj('train_kc_dataset', module_dataset, logger=logger)
-        expanded_vocab_size = train_dataset.expanded_vocab_size
-    train_data_loader = config.init_obj('train_data_loader', module_loader, train_dataset)
+        train_datasets.append(config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger))
+    if config['train_kc_dataset']['args']['path'] is not None:
+        train_datasets.append(config.init_obj('train_kc_dataset', module_dataset, logger=logger))
+    if config['train_commonsense_dataset'] is not None:
+        train_datasets.append(config.init_obj('train_commonsense_dataset', module_dataset, logger=logger))
+    train_data_loader = config.init_obj('train_data_loader', module_loader, ConcatDataset(train_datasets))
     valid_kwdlc_data_loader = None
-    valid_kc_data_loader = None
     if config['valid_kwdlc_dataset']['args']['path'] is not None:
-        valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
-        valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
+        dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
+        valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, dataset)
+    valid_kc_data_loader = None
     if config['valid_kc_dataset']['args']['path'] is not None:
-        valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
-        valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
+        dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
+        valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, dataset)
+    valid_commonsense_data_loader = None
+    if config['valid_commonsense_dataset'] is not None:
+        dataset = config.init_obj('valid_commonsense_dataset', module_dataset, logger=logger)
+        valid_commonsense_data_loader = config.init_obj('valid_data_loader', module_loader, dataset)
 
     # build model architecture, then print to console
-    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
+    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=train_datasets[0].expanded_vocab_size)
     logger.info(model)
 
     # get function handles of loss and metrics
@@ -69,6 +73,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
                       data_loader=train_data_loader,
                       valid_kwdlc_data_loader=valid_kwdlc_data_loader,
                       valid_kc_data_loader=valid_kc_data_loader,
+                      valid_commonsense_data_loader=valid_commonsense_data_loader,
                       lr_scheduler=lr_scheduler)
 
     trainer.train()

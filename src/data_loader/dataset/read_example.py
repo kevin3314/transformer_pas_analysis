@@ -6,8 +6,7 @@ import _pickle as cPickle
 from collections import OrderedDict
 
 from pyknp import BList, Tag, Morpheme
-
-from kwdlc_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
+from kyoto_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 
 def read_example(document: Document,
@@ -17,11 +16,12 @@ def read_example(document: Document,
                  kc: bool,
                  eventive_noun: bool,
                  ) -> 'PasExample':
-    overwrite_cache: bool = ('BPA_OVERWRITE_CACHE' in os.environ)
+    load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
+    save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
     bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
     example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun)
     cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
-    if cache_path.exists() and not overwrite_cache:
+    if cache_path.exists() and load_cache:
         with cache_path.open('rb') as f:
             example = cPickle.load(f)
     else:
@@ -32,14 +32,15 @@ def read_example(document: Document,
                      coreference=coreference,
                      kc=kc,
                      eventive_noun=eventive_noun)
-        cache_path.parent.mkdir(exist_ok=True, parents=True)
-        with cache_path.open('wb') as f:
-            cPickle.dump(example, f)
+        if save_cache:
+            cache_path.parent.mkdir(exist_ok=True, parents=True)
+            with cache_path.open('wb') as f:
+                cPickle.dump(example, f)
     return example
 
 
 def _hash(document, *args) -> str:
-    attrs = ('target_cases', 'target_corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
+    attrs = ('cases', 'corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
     assert set(attrs) <= set(vars(document).keys())
     vars_document = {k: v for k, v in vars(document).items() if k in attrs}
     string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)

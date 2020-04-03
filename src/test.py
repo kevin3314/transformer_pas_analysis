@@ -1,9 +1,11 @@
+import re
 import argparse
-from typing import List, Union, Tuple, Callable
 from pathlib import Path
+from typing import List, Union, Tuple, Callable
 
 import torch
 import numpy as np
+from sklearn.metrics import f1_score
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
@@ -18,12 +20,15 @@ from base.base_model import BaseModel
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, target, logger, predict_overt):
+    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+                 target, logger, predict_overt):
         self.model: BaseModel = model
         self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
+        self.config = config
         self.kwdlc_data_loader = kwdlc_data_loader
         self.kc_data_loader = kc_data_loader
+        self.commonsense_data_loader = commonsense_data_loader
         self.target: str = target
         self.logger = logger
         self.predict_overt: bool = predict_overt
@@ -42,29 +47,43 @@ class Tester:
             log.update(self._test(self.kwdlc_data_loader, 'kwdlc'))
         if self.kc_data_loader is not None:
             log.update(self._test(self.kc_data_loader, 'kc'))
+        if self.commonsense_data_loader is not None:
+            log.update(self._test(self.commonsense_data_loader, 'commonsense'))
         return log
 
     def _test(self, data_loader, label: str):
         log = {}
         total_output = (np.array(0), np.array(0))
+        output2 = None
         total_loss = 0.0
         for checkpoint in self.checkpoints:
             model = self._prepare_model(checkpoint)
             output, loss = self._test_epoch(model, data_loader)
             total_output = tuple(t + o for t, o in zip(total_output, output))
             total_loss += loss
-        if len(total_output) == 2:
+
+        if re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
             output_base, output = total_output
             arguments_sets_base = np.argmax(output_base, axis=3).tolist()
-            result_base = self._eval(arguments_sets_base, data_loader, corpus=label, suffix='_base')
+            result_base = self._eval_pas(arguments_sets_base, data_loader, corpus=label, suffix='_base')
             log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
+        elif self.config['arch']['type'] == 'CommonsenseModel':
+            output, output2 = total_output  # (N, seq, case, seq), (N, 2)
         else:
-            assert len(total_output) == 1
             output = total_output[0]
-        arguments_sets = np.argmax(output, axis=3).tolist()
-        result = self._eval(arguments_sets, data_loader, corpus=label)
-        result['loss'] = total_loss / self.kwdlc_data_loader.n_samples
+
+        if label in ('kwdlc', 'kc'):
+            arguments_set = np.argmax(output, axis=3).tolist()
+            result = self._eval_pas(arguments_set, data_loader, corpus=label)
+        elif label == 'commonsense':
+            assert self.config['arch']['type'] == 'CommonsenseModel'
+            contingency_set = np.argmax(output2, axis=1)  # (N)
+            result = self._eval_commonsense(contingency_set, data_loader)
+        else:
+            raise ValueError(f'unknown label: {label}')
+        result['loss'] = total_loss / data_loader.n_samples
         log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
+
         return log
 
     def _prepare_model(self, checkpoint: Path):
@@ -78,39 +97,38 @@ class Tester:
             model = torch.nn.DataParallel(model, device_ids=self.device_ids)
         return model
 
-    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple, np.ndarray], float]:
+    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple], float]:
         total_loss = 0.0
-        outputs_base = []
         outputs = []
+        outputs2 = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, arguments_ids, ng_token_mask, deps = batch
+                input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output_ = model(input_ids, input_mask, ng_token_mask, deps)  # (b, seq, case, seq)
+                output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
                 if isinstance(output_, tuple):
-                    output_base, output = output_
-                    outputs_base.append(output_base.cpu().numpy())
+                    output, output2 = output_
+                    outputs2.append(output2.cpu().numpy())
                 else:
                     output = output_
-                output = output[:, :, :arguments_ids.size(2), :]
                 outputs.append(output.cpu().numpy())
 
                 # computing loss on test set
-                loss = self.loss(output_, arguments_ids, deps)
+                loss = self.loss(output_, target, deps, task)
                 total_loss += loss.item() * input_ids.size(0)
         avg_loss = total_loss / data_loader.n_samples
-        if outputs_base:
-            return (np.concatenate(outputs_base, axis=0), np.concatenate(outputs, axis=0)), avg_loss
+        if outputs2:
+            return (np.concatenate(outputs, axis=0), np.concatenate(outputs2, axis=0)), avg_loss
         else:
             return (np.concatenate(outputs, axis=0), ), avg_loss
 
-    def _eval(self, arguments_sets, data_loader, corpus: str, suffix: str = ''):
+    def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
-        documents_pred = prediction_writer.write(arguments_sets, prediction_output_dir)
+        documents_pred = prediction_writer.write(arguments_set, prediction_output_dir)
 
         result = {}
         for pas_target in self.pas_targets:
@@ -140,22 +158,31 @@ class Tester:
             f1_metrics[i] += metric(result)
         return f1_metrics
 
+    @staticmethod
+    def _eval_commonsense(contingency_set: np.ndarray, data_loader) -> dict:
+        gold = np.array([f.label for f in data_loader.dataset.features])
+        return {'f1': f1_score(gold, contingency_set)}
+
 
 def main(config, args):
     logger = config.get_logger(args.target)
 
     # setup data_loader instances
-    kwdlc_data_loader = None
-    kc_data_loader = None
     expanded_vocab_size = None
+    kwdlc_data_loader = None
     if config[f'{args.target}_kwdlc_dataset']['args']['path'] is not None:
-        kwdlc_dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
-        kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kwdlc_dataset)
-        expanded_vocab_size = kwdlc_dataset.expanded_vocab_size
+        dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
+        kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
+        expanded_vocab_size = dataset.expanded_vocab_size
+    kc_data_loader = None
     if config[f'{args.target}_kc_dataset']['args']['path'] is not None:
-        kc_dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
-        kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, kc_dataset)
-        expanded_vocab_size = kc_dataset.expanded_vocab_size
+        dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
+        kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
+        expanded_vocab_size = dataset.expanded_vocab_size
+    commonsense_data_loader = None
+    if config.config.get(f'{args.target}_commonsense_dataset', None) is not None:
+        dataset = config.init_obj(f'{args.target}_commonsense_dataset', module_dataset, logger=logger)
+        commonsense_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
 
     # build model architecture
     model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
@@ -165,8 +192,8 @@ def main(config, args):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, args.target, logger,
-                    args.predict_overt)
+    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+                    args.target, logger, args.predict_overt)
 
     log = tester.test()
 

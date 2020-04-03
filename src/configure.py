@@ -1,3 +1,5 @@
+import os
+import re
 import json
 import math
 import copy
@@ -5,6 +7,9 @@ import pathlib
 import argparse
 from typing import List
 import itertools
+import inspect
+
+import model.model as module_arch
 
 
 class Config:
@@ -24,19 +29,19 @@ class Config:
 class Path:
     bert_model = {
         'local': {
-            'base': '/Users/NobuhiroUeda/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'large': None
+            'base': f'{os.environ["HOME"]}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
         },
         'server': {
             'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE'
+            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
+            'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
         }
     }
 
 
 def main() -> None:
-    all_models = ['BaselineModel', 'DependencyModel', 'LayerAttentionModel', 'MultitaskDepModel',
-                  'CaseInteractionModel', 'CaseInteractionModel2', 'RefinementModel', 'EnsembleModel']
+    all_models = [m[0] for m in inspect.getmembers(module_arch, inspect.isclass)
+                  if m[1].__module__ == module_arch.__name__]
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
@@ -76,9 +81,9 @@ def main() -> None:
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
-    parser.add_argument('--use-bert-large', action='store_true', default=False,
-                        help='whether to use BERT_LARGE model')
-    parser.add_argument('--refinement-bert', choices=['base', 'large'], default='base',
+    parser.add_argument('--bert', choices=['base', 'large', 'large-wwm'], default='base',
+                        help='BERT model')
+    parser.add_argument('--refinement-bert', choices=['base', 'large', 'large-wwm'], default='base',
                         help='BERT model type used for RefinementModel')
     parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
                         help='refinement layer type for RefinementModel')
@@ -93,22 +98,20 @@ def main() -> None:
     args = parser.parse_args()
 
     config_dir = pathlib.Path(args.config)
-    bert_model = Path.bert_model[args.env]['large' if args.use_bert_large else 'base']
-    n_gpu: int = args.gpus
+    bert_model = Path.bert_model[args.env][args.bert]
     data_root = pathlib.Path(args.dataset).resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
-    cases: List[str] = args.case_string.split(',')
+    cases: List[str] = args.case_string.split(',') if args.case_string else []
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
-        name = f'{model}-{corpus}-{n_epoch}e'
-        name += '-large' if args.use_bert_large else '-base'
+        name = f'{model}-{corpus}-{n_epoch}e-{args.bert}'
         name += '-coref' if args.coreference else ''
         name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
         name += '-nocase' if 'ノ' in cases else ''
         name += '-noun' if args.eventive_noun else ''
-        if model == 'RefinementModel':
-            name += '-largeref' if args.refinement_bert == 'large' else ''
+        if 'Refinement' in model:
+            name += '-largeref' if args.refinement_bert in ('large', 'large-wwm') else ''
             name += '-reftype' + str(args.refinement_type)
         name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
@@ -130,7 +133,7 @@ def main() -> None:
                 'coreference': args.coreference,
             },
         }
-        if model == 'RefinementModel':
+        if 'Refinement' in model:
             refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': refinement_bert_model})
@@ -153,7 +156,6 @@ def main() -> None:
         }
 
         train_kwdlc_dataset = copy.deepcopy(dataset)
-
         train_kwdlc_dataset['args']['path'] = str(train_kwdlc_dir) if corpus in ('kwdlc', 'all') else None
         train_kwdlc_dataset['args']['training'] = True
         train_kwdlc_dataset['args']['kc'] = False
@@ -179,6 +181,26 @@ def main() -> None:
         test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
         test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test') if corpus in ('kc', 'all') else None
         test_kc_dataset['args']['kc'] = True
+
+        if model == 'CommonsenseModel':
+            commonsense_dataset = {
+                'type': 'CommonsenseDataset',
+                'args': {
+                    'path': None,
+                    'max_seq_length': args.max_seq_length,
+                    'bert_model': bert_model,
+                },
+            }
+            train_commonsense_dataset = copy.deepcopy(commonsense_dataset)
+            train_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'train.pkl')
+            valid_commonsense_dataset = copy.deepcopy(commonsense_dataset)
+            valid_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'valid.pkl')
+            test_commonsense_dataset = copy.deepcopy(commonsense_dataset)
+            test_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'test.pkl')
+        else:
+            train_commonsense_dataset = None
+            valid_commonsense_dataset = None
+            test_commonsense_dataset = None
 
         data_loader = {
             'type': 'PASDataLoader',
@@ -210,26 +232,39 @@ def main() -> None:
 
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
-        elif model in ('CaseInteractionModel2', 'RefinementModel', 'EnsembleModel'):
+        elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', model):
             loss = 'multi_cross_entropy_pas_loss'
+        elif model == 'CommonsenseModel':
+            loss = 'cross_entropy_pas_commonsense_loss'
         else:
             loss = 'cross_entropy_pas_loss'
 
-        metrics = [
-            'case_analysis_f1_ga',
-            'case_analysis_f1_wo',
-            'case_analysis_f1_ni',
-            'case_analysis_f1_ga2',
-            'case_analysis_f1',
-            'zero_anaphora_f1_ga',
-            'zero_anaphora_f1_wo',
-            'zero_anaphora_f1_ni',
-            'zero_anaphora_f1_ga2',
-            'zero_anaphora_f1_inter',
-            'zero_anaphora_f1_intra',
-            'zero_anaphora_f1_exophora',
-            'zero_anaphora_f1',
-        ]
+        metrics = []
+        if 'ガ' in cases:
+            metrics.append('case_analysis_f1_ga')
+        if 'ヲ' in cases:
+            metrics.append('case_analysis_f1_wo')
+        if 'ニ' in cases:
+            metrics.append('case_analysis_f1_ni')
+        if 'ガ２' in cases:
+            metrics.append('case_analysis_f1_ga2')
+        if any(met.startswith('case_analysis_f1_') for met in metrics):
+            metrics.append('case_analysis_f1')
+        if 'ガ' in cases:
+            metrics.append('zero_anaphora_f1_ga')
+        if 'ヲ' in cases:
+            metrics.append('zero_anaphora_f1_wo')
+        if 'ニ' in cases:
+            metrics.append('zero_anaphora_f1_ni')
+        if 'ガ２' in cases:
+            metrics.append('zero_anaphora_f1_ga2')
+        if any(met.startswith('zero_anaphora_f1_') for met in metrics):
+            metrics += [
+                'zero_anaphora_f1_inter',
+                'zero_anaphora_f1_intra',
+                'zero_anaphora_f1_exophora',
+                'zero_anaphora_f1',
+            ]
         if args.coreference:
             metrics.append('coreference_f1')
         if 'ノ' in cases:
@@ -254,26 +289,43 @@ def main() -> None:
         else:
             raise ValueError(f'unknown lr schedule: {args.lr_schedule}')
 
+        mnt_mode = 'max'
+        if 'zero_anaphora_f1' in metrics:
+            mnt_metric = 'zero_anaphora_f1'
+        elif 'coreference_f1' in metrics:
+            mnt_metric = 'coreference_f1'
+        elif 'bridging_anaphora_f1' in metrics:
+            mnt_metric = 'bridging_anaphora_f1'
+        else:
+            mnt_metric = 'loss'
+            mnt_mode = 'min'
+        if corpus in ('kwdlc', 'all'):
+            mnt_metric = 'val_kwdlc_' + mnt_metric
+        else:
+            mnt_metric = 'val_kc_' + mnt_metric
         trainer = {
             'epochs': n_epoch,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,
-            'monitor': 'max val_kwdlc_zero_anaphora_f1',
+            'monitor': f'{mnt_mode} {mnt_metric}',
             'early_stop': 10,
             'tensorboard': True,
         }
 
         config = Config(
             name=name,
-            n_gpu=n_gpu,
+            n_gpu=args.gpus,
             arch=arch,
             train_kwdlc_dataset=train_kwdlc_dataset,
             train_kc_dataset=train_kc_dataset,
+            train_commonsense_dataset=train_commonsense_dataset,
             valid_kwdlc_dataset=valid_kwdlc_dataset,
             valid_kc_dataset=valid_kc_dataset,
+            valid_commonsense_dataset=valid_commonsense_dataset,
             test_kwdlc_dataset=test_kwdlc_dataset,
             test_kc_dataset=test_kc_dataset,
+            test_commonsense_dataset=test_commonsense_dataset,
             train_data_loader=train_data_loader,
             valid_data_loader=valid_data_loader,
             test_data_loader=test_data_loader,

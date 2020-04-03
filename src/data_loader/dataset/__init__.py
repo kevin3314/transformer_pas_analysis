@@ -1,2 +1,3 @@
 from .read_example import PasExample
-from .dataset import InputFeatures, PASDataset
+from .pas_dataset import InputFeatures, PASDataset
+from .commonsense_dataset import CommonsenseDataset

@@ -7,7 +7,6 @@ verify_ssl = true
 ipython = "*"
 ipdb = "*"
 pytest = "*"
-pdbpp = "*"
 
 [packages]
 numpy = "*"
@@ -22,6 +21,8 @@ textformatting = {editable = true,git = "https://github.com/ku-nlp/python-textfo
 pandas = "*"
 scipy = "*"
 transformers = "*"
+scikit-learn = "*"
+kyoto-reader = {editable = true,git = "https://github.com/ku-nlp/kyoto-reader.git",ref = "master"}
 
 [requires]
-python_version = "3.6"
+python_version = "3.7"

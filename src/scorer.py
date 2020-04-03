@@ -8,8 +8,8 @@ from typing import List, Dict, Set, Union, Optional, TextIO
 from collections import OrderedDict
 
 from pyknp import BList
+from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 
-from kwdlc_reader import KWDLCReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 from utils.util import OrderedDefaultDict
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ class Scorer:
                 # calculate recall
                 # 正解が複数ある場合、そのうち一つが当てられていればそれを正解に採用．
                 # いずれも当てられていなければ、relax されていない項から一つを選び正解に採用．
-                if args_gold:
+                if args_gold or (self.comp_result.get(key, None) in Scorer.DEPTYPE2ANALYSIS.values()):
                     arg_gold = None
                     for arg in args_gold_relaxed:
                         if arg in args_pred:
@@ -224,7 +224,7 @@ class Scorer:
                 self.measures['ノ'][analysis].denom_pred += 1
 
             # calculate recall
-            if antecedents_gold:
+            if antecedents_gold or (self.comp_result.get(key, None) in Scorer.DEPTYPE2ANALYSIS.values()):
                 antecedent_gold = None
                 for ant in antecedents_gold_relaxed:
                     if ant in antecedents_pred:
@@ -281,7 +281,7 @@ class Scorer:
                 self.measure_coref.denom_pred += 1
 
             # calculate recall
-            if tgt_mentions_gold or exophors_gold:
+            if tgt_mentions_gold or exophors_gold or (self.comp_result.get(key, None) == 'correct'):
                 if (set(tgt_mentions_pred) & set(tgt_mentions_gold_relaxed)) \
                         or (set(exophors_pred) & set(exophors_gold_relaxed)):
                     assert self.comp_result[key] == 'correct'
@@ -454,52 +454,54 @@ class Scorer:
             sentence.draw_tag_tree(fh=string)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(sentence.tag_list())
+        all_midasis = [m.midasi for m in document.mentions.values()]
         for predicate in filter(lambda p: p.sid == sid, set(predicates + anaphors)):
             cases = []
             if predicate in predicates:
                 cases += self.cases
             if predicate in anaphors:
-                cases += ['ノ', 'ノ？']
+                cases += ['ノ']
             idx = predicate.tid
             tree_strings[idx] += '  '
             arguments = document.get_arguments(predicate)
             for case in cases:
-                args = arguments[case] + (arguments['判ガ'] if case == 'ガ' else [])
-                if args:
-                    arg = args[0].midasi
-                    result = self.comp_result.get((document.doc_id, predicate.dtid, case.rstrip('？')), None)
-                    if result == 'overt':
-                        color = 'green'
-                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
-                        color = 'blue'
-                    elif result == 'wrong':
-                        if isinstance(args[0], SpecialArgument) and arg not in self.relax_exophors:
-                            color = 'gray'
-                        else:
+                args = arguments[case]
+                if case == 'ガ':
+                    args += arguments['判ガ']
+                if case == 'ノ':
+                    args += arguments['ノ？']
+                color: str = 'gray'
+                result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
+                if result == 'overt':
+                    color = 'green'
+                elif result in Scorer.DEPTYPE2ANALYSIS.values():
+                    color = 'blue'
+                elif result == 'wrong':
+                    for arg in args:
+                        if isinstance(arg, Argument):
                             color = 'red'
-                    elif result is None:
-                        color = 'gray'
-                    else:
-                        logger.warning(f'unknown result: {result}')
-                        color = 'gray'
-                else:
-                    arg = 'NULL'
-                    color = 'gray'
+                        elif arg.midasi in self.relax_exophors:
+                            color = 'red'
+                targets = set()
+                for arg in args:
+                    target = arg.midasi
+                    if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                        target += str(arg.dtid)
+                    targets.add(target)
                 if html:
-                    tree_strings[idx] += f'<font color="{color}">{arg}:{case}</font> '
+                    tree_strings[idx] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
                 else:
-                    tree_strings[idx] += f'{arg}:{case} '
+                    tree_strings[idx] += f'{",".join(targets)}:{case} '
         if self.coreference:
             for src_mention in filter(lambda m: m.sid == sid, mentions):
-                # tgt_mentions = self._filter_mentions(document.get_siblings(src_mention), src_mention)
                 tgt_mentions_relaxed = self._filter_mentions(
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
                 for tgt_mention in tgt_mentions_relaxed:
-                    target = ''.join(mrph.midasi for mrph in tgt_mention.tag.mrph_list() if '<内容語>' in mrph.fstring)
-                    if not target:
-                        target = tgt_mention.midasi
-                    targets.add(target + str(tgt_mention.dtid))
+                    target: str = tgt_mention.midasi
+                    if all_midasis.count(target) > 1:
+                        target += str(tgt_mention.dtid)
+                    targets.add(target)
                 for eid in src_mention.eids:
                     entity = document.entities[eid]
                     if entity.exophor in self.relax_exophors.values():
@@ -512,9 +514,9 @@ class Scorer:
                 tree_strings[idx] += '  ＝:'
                 if html:
                     tree_strings[idx] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
-                                         + ' '.join(targets) + '</span> '
+                                         + ','.join(targets) + '</span> '
                 else:
-                    tree_strings[idx] += ' '.join(targets)
+                    tree_strings[idx] += ','.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 
@@ -579,13 +581,13 @@ def main():
                         help='PAS analysis evaluation target (pred: predicates, noun: eventive noun)')
     args = parser.parse_args()
 
-    reader_gold = KWDLCReader(
+    reader_gold = KyotoReader(
         Path(args.gold_dir),
-        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？'.split(','),
+        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ'.split(','),
         target_corefs=args.coref_string.split(','),
         extract_nes=False
     )
-    reader_pred = KWDLCReader(
+    reader_pred = KyotoReader(
         Path(args.prediction_dir),
         target_cases=reader_gold.target_cases,
         target_corefs=reader_gold.target_corefs,

@@ -5,10 +5,11 @@ import textwrap
 import argparse
 
 from flask import Flask, request, jsonify, make_response
+from kyoto_reader import Document
 
 from writer.prediction_writer import PredictionKNPWriter
-from kwdlc_reader import Document
 from analyzer import Analyzer
+from inference import draw_tree
 
 app = Flask(__name__)
 
@@ -44,7 +45,7 @@ def api():
     html_string += '<pre>\n'
     for sid in document.sid2sentence.keys():
         with io.StringIO() as string:
-            document.draw_tree(sid, dataset.coreference, string)
+            draw_tree(document, sid, dataset.target_cases, dataset.coreference, string)
             tree_string = string.getvalue()
         logger.info('output:\n' + tree_string)
         html_string += tree_string

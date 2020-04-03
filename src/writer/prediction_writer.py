@@ -5,9 +5,9 @@ from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 from pathlib import Path
 
 from pyknp import Tag
+from kyoto_reader import Document, Pas, BaseArgument, Argument
 
 from data_loader.dataset import InputFeatures, PASDataset
-from kwdlc_reader import Document, Pas, BaseArgument, Argument
 
 
 class PredictionKNPWriter:
@@ -56,8 +56,8 @@ class PredictionKNPWriter:
                                                  document)
             document_pred = Document('\n'.join(output_knp_lines) + '\n',
                                      document.doc_id,
-                                     document.target_cases,
-                                     document.target_corefs,
+                                     document.cases,
+                                     document.corefs,
                                      document.relax_cases,
                                      extract_nes=False,
                                      use_pas_tag=False)

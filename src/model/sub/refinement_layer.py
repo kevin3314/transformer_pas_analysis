@@ -21,15 +21,16 @@ class RefinementLayer1(BaseModel):
         self.dropout = nn.Dropout(dropout)
 
         self.num_case = num_case + int(coreference)
+        self.coreference = coreference
         bert_hidden_size = self.bert.config.hidden_size
         self.hidden_size = 256
 
-        self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
-        self.U_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
+        self.l_prd = nn.Linear(bert_hidden_size, self.hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
 
         self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
                                          for _ in range(self.num_case)])
-        self.output = nn.Linear(self.hidden_size, 1, bias=False)
+        self.outs = nn.ModuleList([nn.Linear(self.hidden_size, 1, bias=False) for _ in range(self.num_case)])
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -40,20 +41,22 @@ class RefinementLayer1(BaseModel):
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
 
-        h_p = self.W_prd(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
-        # (b, seq, case*hid) -> (b, seq, case, hid)
-        h_a = self.U_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
+        # (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
+        h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, self.hidden_size)  # (b, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
 
-        h_pa = h_p.unsqueeze(dim=2) + h_a.unsqueeze(dim=1)  # (b, seq, seq, case, hid)
-        base_score = base_score.transpose(2, 3).contiguous().unsqueeze(dim=3).expand(-1, -1, -1, self.num_case, -1)
-        h = torch.cat([h_pa, base_score], dim=4)  # (b, seq, seq case, hid+case)
-        h = torch.tanh(self.dropout(h))
+        base_score = base_score.transpose(2, 3).contiguous()  # (b, seq, seq, case)
+        base_score = base_score.unsqueeze(3).expand(-1, -1, -1, self.num_case, -1)  # (b, seq, seq, case, case)
+        h = torch.cat([h_pa, base_score], dim=4)  # (b, seq, seq, case, hid+case)
         h_mids = [layer(h[:, :, :, i, :]) for i, layer in enumerate(self.mid_layers)]  # [(b, seq, seq, hid)]
         h_mid = torch.stack(h_mids, dim=3)  # (b, seq, seq, case, hid)
-        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
-        output = self.output(torch.tanh(self.dropout(h_mid))).squeeze(dim=4)
+        h_mid = torch.tanh(self.dropout(h_mid))
+        outputs = [out(h_mid[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
 
-        return output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+        return output  # (b, seq, case, seq)
 
 
 class RefinementLayer2(BaseModel):
