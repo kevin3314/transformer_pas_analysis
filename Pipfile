@@ -14,6 +14,7 @@ tqdm = "*"
 mojimoji = "*"
 flask = "*"
 tensorboard = "*"
+grpcio = "==1.27.2"
 future = "*"
 pyknp = {editable = true,git = "https://github.com/ku-nlp/pyknp.git",ref = "master"}
 torch = "*"
