@@ -55,10 +55,8 @@ def split_kc(input_dir: Path, output_dir: Path, tokenizer: BertTokenizer):
         cum: List[int] = did2cumlens[did]
         end = 1
         # end を探索
-        while cum[end+1] - cum[0] <= MAX_SUBWORD_LEN:
+        while end < len(sids) and cum[end+1] - cum[0] <= MAX_SUBWORD_LEN:
             end += 1
-            if end >= len(sids):
-                break
 
         idx = 0
         while end < len(sids) + 1:
