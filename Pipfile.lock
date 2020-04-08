@@ -24,17 +24,17 @@
         },
         "boto3": {
             "hashes": [
-                "sha256:0f716513fa495cbef3a50a8b46182cb069c475f423b02bcd7440eb7c5a86878f",
-                "sha256:5effba33ceb55a524e26f245dfe008bf3caca96a6a3d52886ae2fc9ddc06bb64"
+                "sha256:c61ab9b65b05f58c6ec6fcec6820f45e2a72f7a9b52ec894e2152bbf419e9d4e",
+                "sha256:fb3d5dbded3b5c4ff6e1c0750b9fa8a0f9d1cbe056f6d542cc2beda2ebaa71ed"
             ],
-            "version": "==1.12.37"
+            "version": "==1.12.38"
         },
         "botocore": {
             "hashes": [
-                "sha256:30055e9a3e313400d92ca4ad599e6506d71fb1addc75f075ab7179973ac52de6",
-                "sha256:51422695a5a39ca9320acd3edaf7b337bed75bbc7d260deb76c1d801adc0daa2"
+                "sha256:903df3186ab1f222b78539920cfba09891da341dc45623a6159f88b2a8775f60",
+                "sha256:f3dc5e45abc1f1c8e86cf6ae8d787084230ae4b9c92a4e5d73213dff807a3802"
             ],
-            "version": "==1.15.37"
+            "version": "==1.15.38"
         },
         "cachetools": {
             "hashes": [
@@ -195,7 +195,7 @@
         "kyoto-reader": {
             "editable": true,
             "git": "https://github.com/ku-nlp/kyoto-reader.git",
-            "ref": "48665a9328d6e9c8baa3a2c25b86621f619373f0"
+            "ref": "eacff5df7f1cfd493e6327f4b2e8318b22dc5885"
         },
         "markdown": {
             "hashes": [
@@ -244,10 +244,22 @@
         },
         "mojimoji": {
             "hashes": [
-                "sha256:7e07191fb74e24c741c7c9408b12c238e27b604cfaaf28ee5cd3947f89fde5d5"
+                "sha256:18081ce1690dc7ca0c37c750c8d9344f13cd5cc9736928e5f75d28d955abaa43",
+                "sha256:2a76ade82c9e70e3ab73574d299fa9304ed718ea8d845f455782ab2ad2d60a45",
+                "sha256:2ade646beecee60e2f37662654a81285121a920535faeb5a6bc9edcb8eeec345",
+                "sha256:33496206725ee7ede340e86c7b3697e73bdffc6c22c76f6b85a7df320ef42827",
+                "sha256:36fced765d03c9aeb65a4e8f346c0cb5d19ebd6b91cbf526b2ba5991d94faf17",
+                "sha256:38d4d8f7d0cb13e4ee20aacb5bfe62cd1d6a42365c5dad7bbf28c0121c2f063d",
+                "sha256:3cbebe477e3e52d78dee6454be1bf77adafd6cb58b8c0ac478c28778076e3de2",
+                "sha256:4a888fc1f9ce8e578cde65c06689e41a941e4c04b82504ad596e7f2207c69f91",
+                "sha256:5b0612d595d54f0d644fc08579b47f35993c87f71fea444712a3bc29ce58ae20",
+                "sha256:75a6850a3710b2bfea8ae93a136ae3e8e0daca474d83946a885080b24ac245de",
+                "sha256:8a3e050ebd79863a02e08a4a0cada3b1df5dc70995f093ebabea22cb01ceb89a",
+                "sha256:af5d651e88c4fba559cd6f5b8022883a4af0a07148f9ea27de00fa1c6fb66e63",
+                "sha256:fecacb7daee2b3fc55a2ca208caff2569347c0f3a943573578e40815b4d1c290"
             ],
             "index": "pypi",
-            "version": "==0.0.9.post0"
+            "version": "==0.0.10"
         },
         "numpy": {
             "hashes": [
