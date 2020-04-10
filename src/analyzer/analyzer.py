@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 
 import torch
-from mojimoji import han_to_zen
+import jaconv
 from pyknp import Juman, KNP
 from transformers import BertConfig
 from textformatting import ssplit
@@ -280,5 +280,5 @@ class Analyzer:
     @staticmethod
     def sanitize_string(string: str):
         string = ''.join(string.split())  # remove space character
-        string = han_to_zen(string)
+        string = jaconv.h2z(string, digit=True, ascii=True)
         return string

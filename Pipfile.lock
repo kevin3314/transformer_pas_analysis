@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "533a02ee75561e2abeb185450637f75d39261704abe41c3e068dc2e4d1bcc8ad"
+            "sha256": "69b5e3f6ef855c8636f2c04728add32320d42f029f7752a3b94e74b0aa9d4ae7"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -175,6 +175,7 @@
             "hashes": [
                 "sha256:2ccdf768da20d55f30e8801e5e2e27783aae1bb29b890e503e1124134d6d09c9"
             ],
+            "index": "pypi",
             "version": "==0.2.4"
         },
         "jinja2": {
@@ -247,25 +248,6 @@
                 "sha256:e8313f01ba26fbbe36c7be1966a7b7424942f670f38e666995b88d012765b9be"
             ],
             "version": "==1.1.1"
-        },
-        "mojimoji": {
-            "hashes": [
-                "sha256:18081ce1690dc7ca0c37c750c8d9344f13cd5cc9736928e5f75d28d955abaa43",
-                "sha256:2a76ade82c9e70e3ab73574d299fa9304ed718ea8d845f455782ab2ad2d60a45",
-                "sha256:2ade646beecee60e2f37662654a81285121a920535faeb5a6bc9edcb8eeec345",
-                "sha256:33496206725ee7ede340e86c7b3697e73bdffc6c22c76f6b85a7df320ef42827",
-                "sha256:36fced765d03c9aeb65a4e8f346c0cb5d19ebd6b91cbf526b2ba5991d94faf17",
-                "sha256:38d4d8f7d0cb13e4ee20aacb5bfe62cd1d6a42365c5dad7bbf28c0121c2f063d",
-                "sha256:3cbebe477e3e52d78dee6454be1bf77adafd6cb58b8c0ac478c28778076e3de2",
-                "sha256:4a888fc1f9ce8e578cde65c06689e41a941e4c04b82504ad596e7f2207c69f91",
-                "sha256:5b0612d595d54f0d644fc08579b47f35993c87f71fea444712a3bc29ce58ae20",
-                "sha256:75a6850a3710b2bfea8ae93a136ae3e8e0daca474d83946a885080b24ac245de",
-                "sha256:8a3e050ebd79863a02e08a4a0cada3b1df5dc70995f093ebabea22cb01ceb89a",
-                "sha256:af5d651e88c4fba559cd6f5b8022883a4af0a07148f9ea27de00fa1c6fb66e63",
-                "sha256:fecacb7daee2b3fc55a2ca208caff2569347c0f3a943573578e40815b4d1c290"
-            ],
-            "index": "pypi",
-            "version": "==0.0.10"
         },
         "numpy": {
             "hashes": [
