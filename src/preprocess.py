@@ -1,6 +1,7 @@
 """Preprocess dataset."""
 import argparse
 import json
+import shutil
 from pathlib import Path
 import _pickle as cPickle
 from typing import List, Dict
@@ -74,7 +75,7 @@ def split_kc(input_dir: Path, output_dir: Path, tokenizer: BertTokenizer):
 
 def process_kc(input_path: Path, output_path: Path, cases: List[str], corefs: List[str], tokenizer: BertTokenizer):
     tmp_dir = Path('/tmp/kc')
-    tmp_dir.mkdir(exist_ok=True)
+    tmp_dir.mkdir(exist_ok=False)
     # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
     split_kc(input_path, tmp_dir, tokenizer)
 
@@ -84,6 +85,7 @@ def process_kc(input_path: Path, output_path: Path, cases: List[str], corefs: Li
     for document in documents:
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
+    shutil.rmtree(tmp_dir)
 
 
 def process_commonsense(input_path: Path, output_path: Path):
