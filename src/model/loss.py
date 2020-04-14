@@ -52,7 +52,7 @@ def cross_entropy_pas_commonsense_loss(output: Tuple[torch.Tensor, torch.Tensor]
         target_pas = target[task == TASK_ID['pa'], :, :, :]  # (x, seq, case, seq) or (0, 1, 1, 1)
         loss_pas = cross_entropy_pas_loss(output_pas, target_pas)  # ()
     else:
-        loss_pas = torch.tensor(0, device=target.device)
+        loss_pas = torch.tensor(0, dtype=torch.float, requires_grad=True, device=target.device)
 
     if mask_ci.sum().item() > 0:
         output_commonsense = output[1][task == TASK_ID['ci'], :]  # (b-x, 2)
@@ -60,6 +60,6 @@ def cross_entropy_pas_commonsense_loss(output: Tuple[torch.Tensor, torch.Tensor]
         target_commonsense = target[task == TASK_ID['ci'], 0, 0, 0]  # (b-x)
         loss_commonsense = -log_softmax_commonsense[torch.arange(target_commonsense.size(0)), target_commonsense].mean()
     else:
-        loss_commonsense = torch.tensor(0, device=target.device)
+        loss_commonsense = torch.tensor(0, dtype=torch.float, requires_grad=True, device=target.device)
 
     return loss_pas + loss_commonsense

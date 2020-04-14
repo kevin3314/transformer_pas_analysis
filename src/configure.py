@@ -115,14 +115,13 @@ def main() -> None:
             name += '-reftype' + str(args.refinement_type)
         name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
-        train_kwdlc_dir = data_root / 'kwdlc' / 'train'
-        train_kc_dir = data_root / 'kc' / 'train'
-        glob_pat = '*.' + dataset_config['pickle_ext']
         num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
-            num_train_examples += sum(1 for _ in train_kwdlc_dir.glob(glob_pat))
+            num_train_examples += dataset_config['num_examples']['kwdlc']['train']
         if corpus in ('kc', 'all'):
-            num_train_examples += sum(1 for _ in train_kc_dir.glob(glob_pat))
+            num_train_examples += dataset_config['num_examples']['kc']['train']
+        if model == 'CommonsenseModel':
+            num_train_examples += dataset_config['num_examples']['commonsense']['train']
 
         arch = {
             'type': model,
@@ -156,7 +155,7 @@ def main() -> None:
         }
 
         train_kwdlc_dataset = copy.deepcopy(dataset)
-        train_kwdlc_dataset['args']['path'] = str(train_kwdlc_dir) if corpus in ('kwdlc', 'all') else None
+        train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train') if corpus in ('kwdlc', 'all') else None
         train_kwdlc_dataset['args']['training'] = True
         train_kwdlc_dataset['args']['kc'] = False
 
@@ -171,7 +170,7 @@ def main() -> None:
         test_kwdlc_dataset['args']['kc'] = False
 
         train_kc_dataset = copy.deepcopy(train_kwdlc_dataset)
-        train_kc_dataset['args']['path'] = str(train_kc_dir) if corpus in ('kc', 'all') else None
+        train_kc_dataset['args']['path'] = str(data_root / 'kc' / 'train') if corpus in ('kc', 'all') else None
         train_kc_dataset['args']['kc'] = True
 
         valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
