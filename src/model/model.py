@@ -584,11 +584,12 @@ class CommonsenseModel(BaseModel):
         self.num_case = num_case + int(coreference)
         bert_hidden_size = self.bert.config.hidden_size
 
-        self.W_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.U_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.output = nn.Linear(bert_hidden_size, 1, bias=False)
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.mask = Mask()
 
-        self.cs_cls = nn.Linear(bert_hidden_size, 2)
+        self.out_cs = nn.Linear(bert_hidden_size, 1)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -596,25 +597,19 @@ class CommonsenseModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq) or (b, 1, 1, 1)
                 deps: torch.Tensor,            # (b, seq, seq) or (b, 1, 1)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, 2)
+                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid), (b, hid)
         sequence_output, pooled_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
 
-        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, hid)
+        h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.unsqueeze(2).expand(-1, -1, self.num_case, -1)  # (b, seq, case, hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        # (b, seq, seq, case, hid) -> (b, seq, seq, case, 1) -> (b, seq, seq, case)
-        output = self.output(torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))).squeeze(-1)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
 
-        output = output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+        output_contingency = self.out_cs(pooled_output).squeeze(-1)  # (b)
 
-        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
-
-        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
-
-        contingency_score = self.cs_cls(pooled_output)  # (b, hid) -> (b, 2)
-
-        return output, contingency_score  # (b, seq, case, seq), (b, 2)
+        return self.mask(output, attention_mask, ng_token_mask), output_contingency  # (b, seq, case, seq), (b)

@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import torch
+import torch.nn.functional as F
 
 from utils.constants import TASK_ID
 
@@ -40,7 +41,7 @@ def cross_entropy_pas_dep_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b,
     return pas_loss + dep_loss
 
 
-def cross_entropy_pas_commonsense_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b, seq, case, seq), (b, 2)
+def cross_entropy_pas_commonsense_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b, seq, case, seq), (b)
                                        target: torch.Tensor,  # (b, seq, case, seq) or (b, 1, 1, 1)
                                        _,
                                        task: torch.Tensor,    # (b)
@@ -55,10 +56,10 @@ def cross_entropy_pas_commonsense_loss(output: Tuple[torch.Tensor, torch.Tensor]
         loss_pas = torch.tensor(0, dtype=torch.float, requires_grad=True, device=target.device)
 
     if mask_ci.sum().item() > 0:
-        output_commonsense = output[1][task == TASK_ID['ci'], :]  # (b-x, 2)
-        log_softmax_commonsense = torch.log_softmax(output_commonsense, dim=1)  # (b-x, 2)
+        output_commonsense = output[1][task == TASK_ID['ci']]  # (b-x)
+        sigmoid_commonsense = torch.sigmoid(output_commonsense)  # (b-x)
         target_commonsense = target[task == TASK_ID['ci'], 0, 0, 0]  # (b-x)
-        loss_commonsense = -log_softmax_commonsense[torch.arange(target_commonsense.size(0)), target_commonsense].mean()
+        loss_commonsense = F.binary_cross_entropy(sigmoid_commonsense, target_commonsense.float(), reduction='mean')
     else:
         loss_commonsense = torch.tensor(0, dtype=torch.float, requires_grad=True, device=target.device)
 

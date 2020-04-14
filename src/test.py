@@ -77,7 +77,7 @@ class Tester:
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
             assert self.config['arch']['type'] == 'CommonsenseModel'
-            contingency_set = np.argmax(output2, axis=1)  # (N)
+            contingency_set = (output2 > 0.5).astype(np.int)  # (N)
             result = self._eval_commonsense(contingency_set, data_loader)
         else:
             raise ValueError(f'unknown label: {label}')
