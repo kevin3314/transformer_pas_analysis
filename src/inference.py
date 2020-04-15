@@ -90,7 +90,7 @@ def main(args):
     if args.tab is True:
         prediction_writer.write(arguments_set, destination)
     else:
-        documents_pred: List[Document] = prediction_writer.write(arguments_set, destination)
+        documents_pred: List[Document] = prediction_writer.write(arguments_set, destination, skip_untagged=False)
         for document_pred in documents_pred:
             print()
             for sid in document_pred.sid2sentence.keys():

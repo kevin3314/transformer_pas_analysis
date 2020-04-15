@@ -24,7 +24,7 @@ def api():
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
     with io.StringIO() as string:
-        document: Document = prediction_writer.write(arguments_set, string)[0]
+        document: Document = prediction_writer.write(arguments_set, string, skip_untagged=False)[0]
         knp_result: str = string.getvalue()
 
     html_string = textwrap.dedent('''
