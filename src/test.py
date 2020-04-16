@@ -34,7 +34,8 @@ class Tester:
         self.predict_overt: bool = predict_overt
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
-        self.checkpoints: List[Path] = list(config.save_dir.glob('**/model_best.pth'))
+        self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
+            else list(config.save_dir.glob('**/model_best.pth'))
         self.save_dir: Path = config.save_dir / f'eval_{target}'
         self.save_dir.mkdir(exist_ok=True)
         eventive_noun = (kwdlc_data_loader and config[f'{target}_kwdlc_dataset']['args']['eventive_noun']) or \
