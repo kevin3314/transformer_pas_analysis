@@ -28,11 +28,13 @@ class CommonsenseDataset(Dataset):
     def __init__(self,
                  path: str,
                  max_seq_length: int,
+                 num_special_tokens: int,
                  bert_model: str,
                  logger=None,
                  ) -> None:
         self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
         self.logger = logger if logger else logging.getLogger(__file__)
+        self.num_special_tokens = num_special_tokens
         self.features: List[InputFeatures] = []
         for example in tqdm(self._read_csv(path), desc='reading commonsense dataset'):
             feature = self._convert_example_to_feature(example, max_seq_length)
@@ -50,10 +52,11 @@ class CommonsenseDataset(Dataset):
                                     max_seq_length: int) -> Optional[InputFeatures]:
         """Loads a data file into a list of `InputBatch`s."""
 
+        vocab_size = self.tokenizer.vocab_size
         former_tokens: List[str] = self.tokenizer.tokenize(example.former)
         latter_tokens: List[str] = self.tokenizer.tokenize(example.latter)
         # ignore too long document
-        if 1 + len(former_tokens) + 1 + len(latter_tokens) > max_seq_length:
+        if 1 + len(former_tokens) + 1 + len(latter_tokens) > max_seq_length - self.num_special_tokens:
             return None
 
         tokens: List[str] = []
@@ -81,10 +84,16 @@ class CommonsenseDataset(Dataset):
         input_mask = [True] * len(input_ids)
 
         # Zero-pad up to the sequence length.
-        pad_len = max_seq_length - len(input_ids)
-        input_ids += [self.tokenizer.pad_token_id] * pad_len
-        input_mask += [False] * pad_len
-        segment_ids += [0] * pad_len
+        while len(input_ids) < max_seq_length - self.num_special_tokens:
+            input_ids.append(self.tokenizer.pad_token_id)
+            input_mask.append(False)
+            segment_ids.append(0)
+
+        # add special tokens
+        for i in range(self.num_special_tokens):
+            input_ids.append(vocab_size + i)
+            input_mask.append(True)
+            segment_ids.append(0)  # pas_dataset との整合性を保つため segment_id は 0 に設定
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def show_usage():
     print('Usage:')
-    print('$ env HOST=<HOST> PORT=<PORT> pipenv run server.py')
+    print('$ env HOST=<HOST> PORT=<PORT> poetry run server.py')
 
 
 def analyze_raw_data_from_client(knp_result: str):
@@ -21,7 +21,7 @@ def analyze_raw_data_from_client(knp_result: str):
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
     with io.StringIO() as string:
-        _ = prediction_writer.write(arguments_set, string)
+        _ = prediction_writer.write(arguments_set, string, skip_untagged=False)
         knp_result = string.getvalue()
     return knp_result
 

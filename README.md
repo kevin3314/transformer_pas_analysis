@@ -47,8 +47,8 @@ Result:
 ```text
 太郎Cはp──┐
   パンnをp┐│
-     買ってv┤  太郎:ガ パン:ヲ NULL:ニ NULL:ガ２ NULL:ノ
-    食べたv。*  太郎:ガ パン:ヲ NULL:ニ NULL:ガ２ NULL:ノ
+     買ってv┤  太郎:ガ パン:ヲ :ニ :ガ２ :ノ
+    食べたv。*  太郎:ガ パン:ヲ :ニ :ガ２ :ノ
 ```
 
 Options:
@@ -61,9 +61,8 @@ Options:
 
 ## Analyze a Large Number of Documents
 
-Given raw sentences, first you need to apply (BERT)KNP to them
-and split into documents.
-Next, specify the document directory when you run `inference.py`
+Given raw sentences, first you need to apply (BERT)KNP to them and split into documents.
+Then, run `inference.py` specifying the document directory.
 
 ```zsh
 python src/inference.py \
@@ -76,24 +75,63 @@ For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/m
 
 ## Training Your Own Model
 
-### Preprocess Documents
-
-First, you need to load corpus and pickle it.
+### Preparing Corpus
 
 ```zsh
-python src/preprocess.py \
---kwdlc <path-to-KWDLC-directory> \
---kc <path-to-KyotoCorpus-directory> \
---out <path-to-output-directory>
+cd /somewhere
+mkdir kwdlc kc
 ```
 
-example:
+download corpora:
+
+for menbers of bitbucket.org:ku_nlp
+- `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
+- `git clone git@bitbucket.org:ku_nlp/kyotocorpus.git kc/kyotocorpus`
+
+otherwise
+- `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
+- `git clone https://github.com/ku-nlp/KyotoCorpus kc/KyotoCorpus`
+- follow [instructions of KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus#conversion-to-the-complete-annotated-corpus)
+
+add features:
+
+[kyoto-reader](https://github.com/ku-nlp/kyoto-reader) provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
+Make sure you are in the virtual environment of bert_pas_analysis when you run `configure` and `idsplit` commands.
+
+```
+$ git clone https://github.com/ku-nlp/JumanDIC
+$ configure --corpus-dir /somewhere/kwdlc/KWDLC/knp \
+--data-dir /somewhere/kwdlc \
+--juman-dic-dir /somewhere/JumanDIC/dic
+created Makefile at /somewhere/kwdlc
+$ configure --corpus-dir /somewhere/kc/kyotocorpus/knp \
+--data-dir /somewhere/kc \
+--juman-dic-dir /somewhere/JumanDIC/dic
+created Makefile at /somewhere/kc
+$ cd /somewhere/kwdlc && make -i
+$ cd /somewhere/kc && make -i
+$ idsplit --corpus-dir /somewhere/kwdlc/knp \
+--output-dir /somewhere/kwdlc \
+--train /somewhere/kwdlc/KWDLC/id/split_for_pas/train.id \
+--valid /somewhere/kwdlc/KWDLC/id/split_for_pas/dev.id \
+--test /somewhere/kwdlc/KWDLC/id/split_for_pas/test.id
+$ idsplit --corpus-dir /somewhere/kc/knp \
+--output-dir /somewhere/kc \
+--train /somewhere/kc/kyotocorpus/id/split_for_pas/train.full.id \
+--valid /somewhere/kc/kyotocorpus/id/split_for_pas/dev.full.id \
+--test /somewhere/kc/kyotocorpus/id/split_for_pas/test.full.id
+```
+
+### Preprocessing Documents
+
+After preparing corpora, you need to load and pickle them.
 
 ```zsh
 python src/preprocess.py \
---kwdlc /mnt/hinoki/ueda/kwdlc/new \
---kc /mnt/hinoki/ueda/kc/split \
---out data/dataset
+--kwdlc /somewhere/kwdlc \
+--kc /somewhere/kc \
+--out /somewhere/dataset \
+--bert-model <path/to/pre-traind/BERT/model/directory>
 ```
 
 Don't care if many "sentence not found" messages are shown when processing kc.
@@ -200,8 +238,8 @@ make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 
 ## Dataset
 
-- /mnt/hinoki/ueda/kwdlc/new
-- /mnt/hinoki/ueda/kc/split
+- Kyoto University Web Document Leads Corpus ([KWDLC](https://github.com/ku-nlp/KWDLC))
+- Kyoto University Text Corpus ([KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus))
 
 ## Licence
 

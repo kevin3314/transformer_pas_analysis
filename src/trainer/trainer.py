@@ -115,7 +115,7 @@ class Trainer(BaseTrainer):
                     scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
                     scores = output[0]  # (b, seq, case, seq)
-                    contingency_set += torch.argmax(output[1], dim=1).tolist()
+                    contingency_set += output[1].gt(0.5).int().tolist()
                 else:
                     scores = output  # (b, seq, case, seq)
 

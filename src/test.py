@@ -34,7 +34,8 @@ class Tester:
         self.predict_overt: bool = predict_overt
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
-        self.checkpoints: List[Path] = list(config.save_dir.glob('**/model_best.pth'))
+        self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
+            else list(config.save_dir.glob('**/model_best.pth'))
         self.save_dir: Path = config.save_dir / f'eval_{target}'
         self.save_dir.mkdir(exist_ok=True)
         eventive_noun = (kwdlc_data_loader and config[f'{target}_kwdlc_dataset']['args']['eventive_noun']) or \
@@ -77,7 +78,7 @@ class Tester:
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
             assert self.config['arch']['type'] == 'CommonsenseModel'
-            contingency_set = np.argmax(output2, axis=1)  # (N)
+            contingency_set = (output2 > 0.5).astype(np.int)  # (N)
             result = self._eval_commonsense(contingency_set, data_loader)
         else:
             raise ValueError(f'unknown label: {label}')
@@ -160,6 +161,7 @@ class Tester:
 
     @staticmethod
     def _eval_commonsense(contingency_set: np.ndarray, data_loader) -> dict:
+        assert data_loader.dataset.__class__.__name__ == 'CommonsenseDataset'
         gold = np.array([f.label for f in data_loader.dataset.features])
         return {'f1': f1_score(gold, contingency_set)}
 

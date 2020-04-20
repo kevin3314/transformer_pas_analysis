@@ -36,8 +36,12 @@ class PredictionKNPWriter:
     def write(self,
               arguments_sets: List[List[List[int]]],
               destination: Union[Path, TextIO, None],
+              skip_untagged: bool = True,
               ) -> List[Document]:
         """Write final predictions to the file."""
+
+        did2examples = {did: tuple(ex) for did, *ex
+                        in zip(self.dids, self.all_features, arguments_sets, self.gold_arguments_sets)}
 
         if isinstance(destination, Path):
             self.logger.info(f'Writing predictions to: {destination}')
@@ -46,14 +50,22 @@ class PredictionKNPWriter:
             self.logger.warning('invalid output destination')
 
         documents_pred: List[Document] = []
-        for did, features, arguments_set, gold_arguments_set in \
-                zip(self.dids, self.all_features, arguments_sets, self.gold_arguments_sets):
-            document = self.did2document[did]
-            output_knp_lines = self._rewrite_rel(document.knp_string,
-                                                 features,
-                                                 arguments_set,
-                                                 gold_arguments_set,
-                                                 document)
+        for did, document in self.did2document.items():
+            if did in did2examples:
+                features, arguments_set, gold_arguments_set = did2examples[did]
+                output_knp_lines = self._rewrite_rel(document.knp_string,
+                                                     features,
+                                                     arguments_set,
+                                                     gold_arguments_set,
+                                                     document)
+            else:
+                if skip_untagged:
+                    continue
+                output_knp_lines = []
+                for line in document.knp_string.strip().split('\n'):
+                    if line.startswith('+ '):
+                        line = self.rel_pat.sub('', line)  # remove gold data
+                    output_knp_lines.append(line.strip())
             document_pred = Document('\n'.join(output_knp_lines) + '\n',
                                      document.doc_id,
                                      document.cases,
@@ -62,10 +74,8 @@ class PredictionKNPWriter:
                                      extract_nes=False,
                                      use_pas_tag=False)
             documents_pred.append(document_pred)
-
             if destination is None:
                 continue
-
             output_knp_lines = self._add_pas_analysis(output_knp_lines, document_pred)
             output_string = '\n'.join(output_knp_lines) + '\n'
             if isinstance(destination, Path):

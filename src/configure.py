@@ -56,11 +56,11 @@ def main() -> None:
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
-    parser.add_argument('--coreference', action='store_true', default=False,
+    parser.add_argument('--coreference', '--coref', action='store_true', default=False,
                         help='Perform coreference resolution.')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='Case strings. Separate by ","')
-    parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
+    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout ratio')
@@ -83,9 +83,9 @@ def main() -> None:
                         help='number of gpus to use')
     parser.add_argument('--bert', choices=['base', 'large', 'large-wwm'], default='base',
                         help='BERT model')
-    parser.add_argument('--refinement-bert', choices=['base', 'large', 'large-wwm'], default='base',
+    parser.add_argument('--refinement-bert', '--rbert', choices=['base', 'large', 'large-wwm'], default='base',
                         help='BERT model type used for RefinementModel')
-    parser.add_argument('--refinement-type', type=int, default=1, choices=[1, 2, 3],
+    parser.add_argument('--refinement-type', '--rtype', type=int, default=1, choices=[1, 2, 3],
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
@@ -93,7 +93,7 @@ def main() -> None:
                         help='corpus to use in training')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
                         help='dependency type to train')
-    parser.add_argument('--eventive-noun', action='store_true', default=False,
+    parser.add_argument('--eventive-noun', '--noun', action='store_true', default=False,
                         help='analyze eventive noun as predicate')
     args = parser.parse_args()
 
@@ -115,14 +115,13 @@ def main() -> None:
             name += '-reftype' + str(args.refinement_type)
         name += f'-{args.additional_name}' if args.additional_name is not None else ''
 
-        train_kwdlc_dir = data_root / 'kwdlc' / 'train'
-        train_kc_dir = data_root / 'kc' / 'train'
-        glob_pat = '*.' + dataset_config['pickle_ext']
         num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
-            num_train_examples += sum(1 for _ in train_kwdlc_dir.glob(glob_pat))
+            num_train_examples += dataset_config['num_examples']['kwdlc']['train']
         if corpus in ('kc', 'all'):
-            num_train_examples += sum(1 for _ in train_kc_dir.glob(glob_pat))
+            num_train_examples += dataset_config['num_examples']['kc']['train']
+        if model == 'CommonsenseModel':
+            num_train_examples += dataset_config['num_examples']['commonsense']['train']
 
         arch = {
             'type': model,
@@ -156,7 +155,7 @@ def main() -> None:
         }
 
         train_kwdlc_dataset = copy.deepcopy(dataset)
-        train_kwdlc_dataset['args']['path'] = str(train_kwdlc_dir) if corpus in ('kwdlc', 'all') else None
+        train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train') if corpus in ('kwdlc', 'all') else None
         train_kwdlc_dataset['args']['training'] = True
         train_kwdlc_dataset['args']['kc'] = False
 
@@ -171,7 +170,7 @@ def main() -> None:
         test_kwdlc_dataset['args']['kc'] = False
 
         train_kc_dataset = copy.deepcopy(train_kwdlc_dataset)
-        train_kc_dataset['args']['path'] = str(train_kc_dir) if corpus in ('kc', 'all') else None
+        train_kc_dataset['args']['path'] = str(data_root / 'kc' / 'train') if corpus in ('kc', 'all') else None
         train_kc_dataset['args']['kc'] = True
 
         valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
@@ -188,6 +187,7 @@ def main() -> None:
                 'args': {
                     'path': None,
                     'max_seq_length': args.max_seq_length,
+                    'num_special_tokens': len(args.exophors.split(',')) + 1 + int(args.coreference),
                     'bert_model': bert_model,
                 },
             }

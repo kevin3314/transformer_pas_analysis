@@ -88,12 +88,12 @@ class PASDataset(Dataset):
         """Loads a data file into a list of `InputBatch`s."""
 
         vocab_size = self.tokenizer.vocab_size
-        num_expand_vocab = len(self.special_to_index)
+        num_special_tokens = len(self.special_to_index)
         num_case_w_coreference = len(self.target_cases) + int(self.coreference)
 
         all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
         # ignore too long document
-        if len(all_tokens) > max_seq_length - num_expand_vocab:
+        if len(all_tokens) > max_seq_length - num_special_tokens:
             return None
 
         tokens: List[str] = []
@@ -173,7 +173,7 @@ class PASDataset(Dataset):
         input_mask = [True] * len(input_ids)
 
         # Zero-pad up to the sequence length (except for special tokens).
-        while len(input_ids) < max_seq_length - num_expand_vocab:
+        while len(input_ids) < max_seq_length - num_special_tokens:
             input_ids.append(0)
             input_mask.append(False)
             segment_ids.append(0)
@@ -183,7 +183,7 @@ class PASDataset(Dataset):
             deps.append([0] * max_seq_length)
 
         # add special tokens
-        for i in range(num_expand_vocab):
+        for i in range(num_special_tokens):
             input_ids.append(vocab_size + i)
             input_mask.append(True)
             segment_ids.append(0)
