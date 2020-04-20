@@ -161,6 +161,7 @@ class Tester:
 
     @staticmethod
     def _eval_commonsense(contingency_set: np.ndarray, data_loader) -> dict:
+        assert data_loader.dataset.__class__.__name__ == 'CommonsenseDataset'
         gold = np.array([f.label for f in data_loader.dataset.features])
         return {'f1': f1_score(gold, contingency_set)}
 
