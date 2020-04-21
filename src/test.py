@@ -96,7 +96,7 @@ class Tester:
     def _softmax(x: np.ndarray, axis: int):
         """Compute softmax values for each sets of scores in x."""
         e_x = np.exp(x - np.max(x))
-        return e_x / e_x.sum(axis=axis, keepdims=True)
+        return e_x / (e_x.sum(axis=axis, keepdims=True) + 1e-8)
 
     def _prepare_model(self, checkpoint: Path):
         # prepare model for testing
