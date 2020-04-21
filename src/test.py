@@ -21,7 +21,7 @@ from base.base_model import BaseModel
 
 class Tester:
     def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                 target, logger, predict_overt):
+                 target, logger, predict_overt, confidence_threshold):
         self.model: BaseModel = model
         self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
@@ -32,6 +32,7 @@ class Tester:
         self.target: str = target
         self.logger = logger
         self.predict_overt: bool = predict_overt
+        self.threshold: float = confidence_threshold
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
         self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
@@ -74,6 +75,10 @@ class Tester:
             output = total_output[0]
 
         if label in ('kwdlc', 'kc'):
+            output = Tester._softmax(output, axis=3)
+            null_idx = data_loader.dataset.special_to_index['NULL']
+            # collapses coreference resolution result
+            output[:, :, :, null_idx] += (output < self.threshold).all(axis=3).astype(np.int) * self.threshold
             arguments_set = np.argmax(output, axis=3).tolist()
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
@@ -86,6 +91,12 @@ class Tester:
         log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
 
         return log
+
+    @staticmethod
+    def _softmax(x: np.ndarray, axis: int):
+        """Compute softmax values for each sets of scores in x."""
+        e_x = np.exp(x - np.max(x))
+        return e_x / e_x.sum(axis=axis, keepdims=True)
 
     def _prepare_model(self, checkpoint: Path):
         # prepare model for testing
@@ -195,7 +206,7 @@ def main(config, args):
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                    args.target, logger, args.predict_overt)
+                    args.target, logger, args.predict_overt, args.confidence_threshold)
 
     log = tester.test()
 
@@ -219,6 +230,8 @@ if __name__ == '__main__':
                         help='evaluation target')
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
+    parser.add_argument('--confidence-threshold', default=0.0, type=float,
+                        help='threshold for argument existence [0, 1] (default: 0.0)')
     parser.add_help = True
 
     parsed_args = parser.parse_args()
