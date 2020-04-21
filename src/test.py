@@ -21,7 +21,7 @@ from base.base_model import BaseModel
 
 class Tester:
     def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                 target, logger, predict_overt, confidence_threshold):
+                 target, logger, predict_overt, confidence_threshold, result_suffix):
         self.model: BaseModel = model
         self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
@@ -37,7 +37,7 @@ class Tester:
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
         self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
             else list(config.save_dir.glob('**/model_best.pth'))
-        self.save_dir: Path = config.save_dir / f'eval_{target}'
+        self.save_dir: Path = config.save_dir / f'eval_{target}{result_suffix}'
         self.save_dir.mkdir(exist_ok=True)
         eventive_noun = (kwdlc_data_loader and config[f'{target}_kwdlc_dataset']['args']['eventive_noun']) or \
                         (kc_data_loader and config[f'{target}_kc_dataset']['args']['eventive_noun'])
@@ -206,7 +206,7 @@ def main(config, args):
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                    args.target, logger, args.predict_overt, args.confidence_threshold)
+                    args.target, logger, args.predict_overt, args.confidence_threshold, args.result_suffix)
 
     log = tester.test()
 
@@ -226,12 +226,14 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('-c', '--config', default=None, type=str,
                         help='config file path (default: None)')
-    parser.add_argument('--target', default='test', type=str, choices=['valid', 'test'],
+    parser.add_argument('-t', '--target', default='test', type=str, choices=['valid', 'test'],
                         help='evaluation target')
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
     parser.add_argument('--confidence-threshold', default=0.0, type=float,
                         help='threshold for argument existence [0, 1] (default: 0.0)')
+    parser.add_argument('--result-suffix', default='', type=str,
+                        help='custom evaluation result directory name')
     parser.add_help = True
 
     parsed_args = parser.parse_args()
