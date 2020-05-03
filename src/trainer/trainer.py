@@ -51,7 +51,8 @@ class Trainer(BaseTrainer):
             input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq) or tuple
+            # (b, seq, case, seq) or tuple
+            output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps, target)
             loss = self.loss(output, target, deps, task)
             loss.backward()
             self.optimizer.step()
@@ -108,7 +109,7 @@ class Trainer(BaseTrainer):
                 input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
                 # (b, seq, case, seq) or tuple
-                output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)
+                output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps, target)
                 if self.config['arch']['type'] == 'MultitaskDepModel':
                     scores = output[0]  # (b, seq, case, seq)
                 elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):

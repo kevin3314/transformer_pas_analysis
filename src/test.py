@@ -118,7 +118,7 @@ class Tester:
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
+                output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps, target)  # (b, seq, case, seq)
                 if isinstance(output_, tuple):
                     output, output2 = output_
                     outputs2.append(output2.cpu().numpy())
