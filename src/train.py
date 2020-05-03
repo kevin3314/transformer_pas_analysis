@@ -9,7 +9,6 @@ import numpy as np
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
-import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from utils.parse_config import ConfigParser
@@ -52,8 +51,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
     model: BaseModel = config.init_obj('arch', module_arch, vocab_size=train_datasets[0].expanded_vocab_size)
     logger.info(model)
 
-    # get function handles of loss and metrics
-    loss = getattr(module_loss, config['loss'])
+    # get function handles of metrics
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
     # build optimizer, learning rate scheduler
@@ -68,7 +66,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
 
     lr_scheduler = config.init_obj('lr_scheduler', module_optim, optimizer)
 
-    trainer = Trainer(model, loss, metrics, optimizer,
+    trainer = Trainer(model, metrics, optimizer,
                       config=config,
                       data_loader=train_data_loader,
                       valid_kwdlc_data_loader=valid_kwdlc_data_loader,

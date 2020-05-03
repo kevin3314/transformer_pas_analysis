@@ -121,4 +121,4 @@ class CommonsenseDataset(Dataset):
         ng_token_mask = np.zeros((1, 1, 1), dtype=np.bool)  # (1, 1, 1)
         deps = np.zeros((1, 1), dtype=np.int)               # (1, 1)
         task = np.array(TASK_ID['ci'])                      # ()
-        return input_ids, input_mask, segment_ids, label, ng_token_mask, deps, task
+        return input_ids, input_mask, segment_ids, ng_token_mask, label, deps, task

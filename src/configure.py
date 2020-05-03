@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import math
 import copy
@@ -230,15 +229,6 @@ def main() -> None:
             },
         }
 
-        if model == 'MultitaskDepModel':
-            loss = 'cross_entropy_pas_dep_loss'
-        elif re.match(r'(CaseInteractionModel|Refinement|Duplicate)', model):
-            loss = 'multi_cross_entropy_pas_loss'
-        elif model == 'CommonsenseModel':
-            loss = 'cross_entropy_pas_commonsense_loss'
-        else:
-            loss = 'cross_entropy_pas_loss'
-
         metrics = []
         if 'ガ' in cases:
             metrics.append('case_analysis_f1_ga')
@@ -330,7 +320,6 @@ def main() -> None:
             valid_data_loader=valid_data_loader,
             test_data_loader=test_data_loader,
             optimizer=optimizer,
-            loss=loss,
             metrics=metrics,
             lr_scheduler=lr_scheduler,
             trainer=trainer,

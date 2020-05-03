@@ -9,7 +9,6 @@ from sklearn.metrics import f1_score
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
-import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from utils.parse_config import ConfigParser
@@ -20,10 +19,9 @@ from base.base_model import BaseModel
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+    def __init__(self, model, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
                  target, logger, predict_overt, confidence_threshold, result_suffix):
         self.model: BaseModel = model
-        self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
         self.config = config
         self.kwdlc_data_loader = kwdlc_data_loader
@@ -115,20 +113,18 @@ class Tester:
         outputs2 = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
+                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps, target)  # (b, seq, case, seq)
-                if isinstance(output_, tuple):
+                loss, *output_ = model(*batch)
+                if len(output_) == 2:
                     output, output2 = output_
                     outputs2.append(output2.cpu().numpy())
                 else:
                     output = output_
                 outputs.append(output.cpu().numpy())
 
-                # computing loss on test set
-                loss = self.loss(output_, target, deps, task)
-                total_loss += loss.item() * input_ids.size(0)
+                total_loss += loss.item() * output.size(0)
         avg_loss = total_loss / data_loader.n_samples
         if outputs2:
             return (np.concatenate(outputs, axis=0), np.concatenate(outputs2, axis=0)), avg_loss
@@ -201,11 +197,10 @@ def main(config, args):
     model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
     logger.info(model)
 
-    # get function handles of loss and metrics
-    loss_fn = getattr(module_loss, config['loss'])
+    # get function handles of metrics
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+    tester = Tester(model, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
                     args.target, logger, args.predict_overt, args.confidence_threshold, args.result_suffix)
 
     log = tester.test()

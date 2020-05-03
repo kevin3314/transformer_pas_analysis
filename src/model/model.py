@@ -6,9 +6,15 @@ import torch.nn as nn
 from transformers import BertConfig
 
 from base import BaseModel
-from model.sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
-from model.sub.mask import Mask
-from model.sub.bert import BertModel
+from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
+from .sub.mask import Mask
+from .sub.bert import BertModel
+from .loss import (
+    cross_entropy_pas_loss,
+    cross_entropy_pas_dep_loss,
+    multi_cross_entropy_pas_loss,
+    cross_entropy_pas_commonsense_loss
+)
 
 
 class BaselineModel(BaseModel):
@@ -40,9 +46,9 @@ class BaselineModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> torch.Tensor:             # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
@@ -54,8 +60,11 @@ class BaselineModel(BaseModel):
         h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
         outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
 
-        return self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
 
 
 class BaselineModelOld(BaseModel):
@@ -87,9 +96,9 @@ class BaselineModelOld(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> torch.Tensor:             # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
@@ -101,8 +110,11 @@ class BaselineModelOld(BaseModel):
         h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
         # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
         output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output = self.mask(output, attention_mask, ng_token_mask)
 
-        return self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
 
 
 class RefinementModel(BaseModel):
@@ -131,16 +143,17 @@ class RefinementModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
-        base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, deps)
+        _, base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, target)
         modification = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
+        refined_logits = base_logits.detach() + modification
 
-        # modification を直接出力するときは mask を忘れずに
+        loss = multi_cross_entropy_pas_loss((base_logits, refined_logits), target)
 
-        return base_logits, base_logits.detach() + modification  # (b, seq, case, seq), (b, seq, case, seq)
+        return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
 class RefinementModel2(BaseModel):
@@ -171,15 +184,17 @@ class RefinementModel2(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
-        base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, deps)
-        output = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
-        output = self.mask(output, attention_mask, ng_token_mask)
+        _, base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, target)
+        refined_logits = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
+        refined_logits = self.mask(refined_logits, attention_mask, ng_token_mask)
 
-        return base_logits, output  # (b, seq, case, seq), (b, seq, case, seq)
+        loss = multi_cross_entropy_pas_loss((base_logits, refined_logits), target)
+
+        return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
 class DuplicateModel(BaseModel):
@@ -202,14 +217,17 @@ class DuplicateModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # [(b, seq, case, seq)]
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
-        base_logits = self.baseline_model1(input_ids, attention_mask, segment_ids, ng_token_mask, deps)
-        modification = self.baseline_model2(input_ids, attention_mask, segment_ids, ng_token_mask, deps)
+        _, base_logits = self.baseline_model1(input_ids, attention_mask, segment_ids, ng_token_mask, target)
+        _, modification = self.baseline_model2(input_ids, attention_mask, segment_ids, ng_token_mask, target)
+        refined_logits = base_logits.detach() + modification  # (b, seq, case, seq)
 
-        return base_logits, base_logits.detach() + modification  # [(b, seq, case, seq)]
+        loss = multi_cross_entropy_pas_loss((base_logits, refined_logits), target)
+
+        return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
 class GoldDepModel(BaseModel):
@@ -241,9 +259,10 @@ class GoldDepModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> torch.Tensor:             # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
@@ -262,8 +281,11 @@ class GoldDepModel(BaseModel):
 
         outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
 
-        return self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
 
 
 class MultitaskDepModel(BaseModel):
@@ -285,49 +307,52 @@ class MultitaskDepModel(BaseModel):
         self.num_case = num_case + int(coreference)
         bert_hidden_size = self.bert.config.hidden_size
 
-        self.W_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.U_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.out = nn.Linear(bert_hidden_size + 1, 1, bias=False)
-
         self.W_dep = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.U_dep = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.out_dep = nn.Linear(bert_hidden_size, 1, bias=True)
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size + 1, 1, bias=False) for _ in range(self.num_case))
+        self.mask = Mask()
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, seq)
-                __: torch.Tensor,              # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b, seq, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                deps: torch.Tensor,            # (b, seq, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
-        batch_size, sequence_len, hidden_dim = sequence_output.size()
 
         # dependency parsing
         dep_i = self.W_dep(sequence_output)  # (b, seq, hid)
         dep_j = self.U_dep(sequence_output)  # (b, seq, hid)
-        # (b, seq, seq, hid) -> (b, seq, seq, 1)
-        dep = self.out_dep(torch.tanh(self.dropout(dep_i.unsqueeze(1) + dep_j.unsqueeze(2))))
+        # (b, seq, seq, hid) -> (b, seq, seq, 1) -> (b, seq, seq)
+        h_dep = self.out_dep(torch.tanh(self.dropout(dep_i.unsqueeze(2) + dep_j.unsqueeze(1)))).squeeze(-1)
 
         # PAS analysis
-        h_p = self.W_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_a = self.U_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
-        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
-        expanded_dep = torch.tanh(dep).unsqueeze(3).expand(-1, -1, -1, self.num_case, 1)  # (b, seq, seq, case, 1)
-        output = self.out(torch.cat([h, expanded_dep], dim=4)).squeeze(-1)  # (b, seq, seq, case)
+        # -> (b, seq, hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, -1)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
 
-        output = output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
+        # -> (b, seq, seq, 1) -> (b, seq, seq, case) -> (b, seq, seq, case, 1)
+        expanded_dep = torch.tanh(h_dep).unsqueeze(3).expand(-1, -1, -1, self.num_case).unsqueeze(4)
+        h = torch.cat([h, expanded_dep], dim=4)
 
-        extended_attention_mask = attention_mask.view(batch_size, 1, 1, sequence_len)  # (b, 1, 1, seq)
-        mask = extended_attention_mask & ng_token_mask  # (b, seq, case, seq)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
 
-        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+        loss = cross_entropy_pas_dep_loss((output, h_dep), target, deps)
 
-        return output, dep.unsqueeze(3)  # (b, seq, case, seq), (b, seq, seq)
+        return loss, output, h_dep
 
 
 class CaseInteractionModel(BaseModel):
@@ -365,9 +390,9 @@ class CaseInteractionModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, bhid)
         sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
@@ -396,7 +421,9 @@ class CaseInteractionModel(BaseModel):
         output_base += (~mask).float() * -1024.0  # (b, seq, case, seq)
         output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        return output_base, output  # (b, seq, case, seq)
+        loss = multi_cross_entropy_pas_loss((output_base, output), target)
+
+        return loss, output_base, output  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
 class CommonsenseModel(BaseModel):
@@ -430,9 +457,10 @@ class CommonsenseModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq) or (b, 1, 1, 1)
-                deps: torch.Tensor,            # (b, seq, seq) or (b, 1, 1)
-                _: torch.Tensor,               # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, torch.Tensor]:  # (b, seq, case, seq), (b)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                _,
+                task: torch.Tensor,            # (b)
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid), (b, hid)
         sequence_output, pooled_output = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
@@ -444,10 +472,13 @@ class CommonsenseModel(BaseModel):
         h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
         outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)
 
         output_contingency = self.out_cs(pooled_output).squeeze(-1)  # (b)
 
-        return self.mask(output, attention_mask, ng_token_mask), output_contingency  # (b, seq, case, seq), (b)
+        loss = cross_entropy_pas_commonsense_loss((output, output_contingency), target, task)
+
+        return loss, output, output_contingency  # (b, seq, case, seq), (b)
 
 
 class ConditionalModel1(BaseModel):
@@ -480,9 +511,9 @@ class ConditionalModel1(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                ) -> torch.Tensor:             # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
@@ -505,8 +536,11 @@ class ConditionalModel1(BaseModel):
         h_pa = torch.tanh(self.dropout(h_pa))  # (b, seq, seq, case, hid)
         outputs = [out(h_pa[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
 
-        return self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
 
 
 class ConditionalModel2(BaseModel):
@@ -542,9 +576,9 @@ class ConditionalModel2(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                ) -> torch.Tensor:             # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         prediction = target.bool() & torch.rand_like(target, dtype=torch.float).lt(0.5)  # (b, seq, case, seq)
         # (b, seq, hid)
@@ -560,8 +594,11 @@ class ConditionalModel2(BaseModel):
         h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
         outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
 
-        return self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
 
 
 class ConditionalModel3(BaseModel):
@@ -601,9 +638,9 @@ class ConditionalModel3(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                deps: torch.Tensor,            # (b, seq, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                ) -> torch.Tensor:             # (b, seq, case, seq)
+                *_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         prediction = target.bool() & torch.rand_like(target, dtype=torch.float).lt(0.5)  # (b, seq, case, seq)
         # (b, seq, hid)
@@ -619,5 +656,8 @@ class ConditionalModel3(BaseModel):
         h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
         outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output = self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
 
-        return self.mask(output, attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output

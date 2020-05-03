@@ -8,7 +8,6 @@ from utils.constants import TASK_ID
 
 def cross_entropy_pas_loss(output: torch.Tensor,  # (b, seq, case, seq)
                            target: torch.Tensor,  # (b, seq, case, seq)
-                           *_
                            ) -> torch.Tensor:     # ()
     log_softmax = torch.log_softmax(output, dim=3)  # (b, seq, case, seq)
     eps = 1e-6
@@ -17,7 +16,6 @@ def cross_entropy_pas_loss(output: torch.Tensor,  # (b, seq, case, seq)
 
 def multi_cross_entropy_pas_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b, seq, case, seq)
                                  target: torch.Tensor,  # (b, seq, case, seq)
-                                 *_
                                  ) -> torch.Tensor:     # ()
     total_loss = None
     for out in output:
@@ -32,18 +30,17 @@ def multi_cross_entropy_pas_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (
 def cross_entropy_pas_dep_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b, seq, case, seq), (b, seq, seq)
                                target: torch.Tensor,  # (b, seq, case, seq)
                                dep: torch.Tensor,     # (b, seq, seq)
-                               *_
                                ) -> torch.Tensor:     # ()
     output_pas, output_dep = output
     pas_loss = cross_entropy_pas_loss(output_pas, target)  # ()
     log_softmax = torch.log_softmax(output_dep, dim=2)  # (b, seq, seq)
-    dep_loss = torch.sum(-log_softmax * dep)  # ()
+    eps = 1e-6
+    dep_loss = torch.sum(-log_softmax * dep) / (torch.sum(dep) + eps)  # ()
     return pas_loss + dep_loss
 
 
 def cross_entropy_pas_commonsense_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b, seq, case, seq), (b)
                                        target: torch.Tensor,  # (b, seq, case, seq) or (b, 1, 1, 1)
-                                       _,
                                        task: torch.Tensor,    # (b)
                                        ) -> torch.Tensor:     # ()
     mask_pa = task.eq(TASK_ID['pa'])

@@ -328,4 +328,4 @@ class PASDataset(Dataset):
         ng_token_mask = np.stack(stacks, axis=1)         # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
-        return input_ids, input_mask, segment_ids, arguments_ids, ng_token_mask, deps, task
+        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task
