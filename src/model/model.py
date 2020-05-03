@@ -107,7 +107,7 @@ class BaselineModelOld(BaseModel):
         h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
         h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
         # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
         output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
         output = self.mask(output, attention_mask, ng_token_mask)
@@ -402,7 +402,7 @@ class CaseInteractionModel(BaseModel):
         h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
 
-        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
         h_pa = h_pa.transpose(2, 3).contiguous()  # (b, seq, case, seq, hid)
         # -> (b, seq, case, seq, 1) -> (b, seq, case, seq)
         output_base = self.ref(h_pa).squeeze(-1)
@@ -469,7 +469,7 @@ class CommonsenseModel(BaseModel):
         h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
         h_p = h_p.unsqueeze(2).expand(-1, -1, self.num_case, -1)  # (b, seq, case, hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
-        h = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
         outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
         output = self.mask(output, attention_mask, ng_token_mask)

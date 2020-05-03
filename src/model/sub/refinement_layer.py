@@ -46,7 +46,7 @@ class RefinementLayer1(BaseModel):
         h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
         h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, self.hidden_size)  # (b, seq, case, hid)
-        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
 
         base_score = base_score.transpose(2, 3).contiguous()  # (b, seq, seq, case)
         base_score = base_score.unsqueeze(3).expand(-1, -1, -1, self.num_case, -1)  # (b, seq, seq, case, case)
