@@ -32,7 +32,7 @@ class BaselineModel(BaseModel):
 
         self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
         self.mask = Mask()
 
     def forward(self,
@@ -233,7 +233,7 @@ class GoldDepModel(BaseModel):
 
         self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size + 1, 1, bias=False) for _ in range(self.num_case)])
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size + 1, 1, bias=False) for _ in range(self.num_case))
         self.mask = Mask()
 
     def forward(self,
@@ -356,7 +356,8 @@ class CaseInteractionModel(BaseModel):
 
         self.ref = nn.Linear(self.hidden_size, 1)
 
-        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)] * self.num_case)
+        self.mid_layers = nn.ModuleList(nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
+                                        for _ in range(self.num_case))
         self.output = nn.Linear(self.hidden_size, 1, bias=False)
 
     def forward(self,
@@ -419,7 +420,7 @@ class CommonsenseModel(BaseModel):
 
         self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
         self.mask = Mask()
 
         self.out_cs = nn.Linear(bert_hidden_size, 1)
@@ -471,7 +472,7 @@ class ConditionalModel1(BaseModel):
         self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
         self.l_arg2 = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
         self.mask = Mask()
 
     def forward(self,
@@ -533,7 +534,7 @@ class ConditionalModel2(BaseModel):
 
         self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
         self.mask = Mask()
 
     def forward(self,
@@ -592,7 +593,7 @@ class ConditionalModel3(BaseModel):
 
         self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
-        self.outs = nn.ModuleList([nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
         self.mask = Mask()
 
     def forward(self,
