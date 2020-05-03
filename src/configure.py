@@ -232,7 +232,7 @@ def main() -> None:
 
         if model == 'MultitaskDepModel':
             loss = 'cross_entropy_pas_dep_loss'
-        elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', model):
+        elif re.match(r'(CaseInteractionModel|Refinement|Duplicate)', model):
             loss = 'multi_cross_entropy_pas_loss'
         elif model == 'CommonsenseModel':
             loss = 'cross_entropy_pas_commonsense_loss'
