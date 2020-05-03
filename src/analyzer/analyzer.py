@@ -104,7 +104,8 @@ class Analyzer:
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
+                # (b, seq, case, seq)
+                output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps, target)
                 if self.config['arch']['type'] == 'MultitaskDepModel':
                     scores = output[0]  # (b, seq, case, seq)
                 elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
