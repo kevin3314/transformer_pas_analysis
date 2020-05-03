@@ -117,6 +117,8 @@ class Tester:
                 batch = tuple(t.to(self.device) for t in batch)
 
                 loss, *output_ = model(*batch)
+                if len(loss.size()) > 0:
+                    loss = loss.mean()
                 if len(output_) == 2:
                     output, output2 = output_
                     outputs2.append(output2.cpu().numpy())

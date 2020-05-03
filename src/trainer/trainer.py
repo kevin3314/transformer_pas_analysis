@@ -52,6 +52,8 @@ class Trainer(BaseTrainer):
 
             self.optimizer.zero_grad()
             loss, *output = self.model(*batch)
+            if len(loss.size()) > 0:
+                loss = loss.mean()
             loss.backward()
             self.optimizer.step()
 
@@ -108,6 +110,8 @@ class Trainer(BaseTrainer):
 
                 # (b, seq, case, seq) or tuple
                 loss, *output = self.model(*batch)
+                if len(loss.size()) > 0:
+                    loss = loss.mean()
                 if re.match(r'(CaseInteractionModel|Refinement|Duplicate)', self.config['arch']['type']):
                     pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
