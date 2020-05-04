@@ -107,7 +107,7 @@ class Analyzer:
                 _, *output = self.model(*batch)
                 if self.config['arch']['type'] == 'MultitaskDepModel':
                     pas_scores = output[0]  # (b, seq, case, seq)
-                elif re.match(r'(CaseInteractionModel|Refinement|Duplicate)', self.config['arch']['type']):
+                elif re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
                     pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
                     pas_scores = output[0]  # (b, seq, case, seq)

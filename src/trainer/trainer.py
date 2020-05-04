@@ -112,7 +112,7 @@ class Trainer(BaseTrainer):
                 loss, *output = self.model(*batch)
                 if len(loss.size()) > 0:
                     loss = loss.mean()
-                if re.match(r'(CaseInteractionModel|Refinement|Duplicate)', self.config['arch']['type']):
+                if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
                     pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
                     pas_scores = output[0]  # (b, seq, case, seq)

@@ -61,7 +61,7 @@ class Tester:
             total_output = tuple(t + o for t, o in zip(total_output, output)) if total_output is not None else output
             total_loss += loss
 
-        if re.match(r'(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+        if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
             *pre_outputs, output = total_output
             for i, pre_output in enumerate(pre_outputs):
                 arguments_sets = np.argmax(pre_output, axis=3).tolist()
