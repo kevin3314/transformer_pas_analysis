@@ -123,7 +123,7 @@ class Tester:
                     output, output2 = output_
                     outputs2.append(output2.cpu().numpy())
                 else:
-                    output = output_
+                    output = output_[0]
                 outputs.append(output.cpu().numpy())
 
                 total_loss += loss.item() * output.size(0)
