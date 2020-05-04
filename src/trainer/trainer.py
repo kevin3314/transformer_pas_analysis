@@ -51,7 +51,7 @@ class Trainer(BaseTrainer):
             batch = tuple(t.to(self.device) for t in batch)
 
             self.optimizer.zero_grad()
-            loss, *output = self.model(*batch)
+            loss, *_ = self.model(*batch)
             if len(loss.size()) > 0:
                 loss = loss.mean()
             loss.backward()
@@ -60,7 +60,7 @@ class Trainer(BaseTrainer):
             self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
             self.writer.add_scalar('lr', self.lr_scheduler.get_lr()[0])
             self.writer.add_scalar('loss', loss.item())
-            total_loss += loss.item() * output[0].size(0)
+            total_loss += loss.item() * batch[0].size(0)
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(

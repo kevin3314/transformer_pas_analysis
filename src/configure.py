@@ -94,6 +94,8 @@ def main() -> None:
                         help='dependency type to train')
     parser.add_argument('--eventive-noun', '--noun', action='store_true', default=False,
                         help='analyze eventive noun as predicate')
+    parser.add_argument('--refinement-iter', '--riter', type=int, default=3,
+                        help='number of refinement iteration (IterativeRefinementModel)')
     args = parser.parse_args()
 
     config_dir = pathlib.Path(args.config)
@@ -104,15 +106,18 @@ def main() -> None:
     cases: List[str] = args.case_string.split(',') if args.case_string else []
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
-        name = f'{model}-{corpus}-{n_epoch}e-{args.bert}'
-        name += '-coref' if args.coreference else ''
-        name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
-        name += '-nocase' if 'ノ' in cases else ''
-        name += '-noun' if args.eventive_noun else ''
-        if 'Refinement' in model:
-            name += '-largeref' if args.refinement_bert in ('large', 'large-wwm') else ''
-            name += '-reftype' + str(args.refinement_type)
-        name += f'-{args.additional_name}' if args.additional_name is not None else ''
+        items = [model]
+        items += [str(args.refinement_iter)] if model == 'IterativeRefinementModel' else []
+        items += [corpus, f'{n_epoch}e', args.bert]
+        items += ['coref'] if args.coreference else []
+        items += [''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)]
+        items += ['nocase'] if 'ノ' in cases else []
+        items += ['noun'] if args.eventive_noun else []
+        if model in ('RefinementModel', 'RefinementModel2'):
+            items += ['largeref'] if args.refinement_bert in ('large', 'large-wwm') else []
+            items += [f'reftype{args.refinement_type}']
+        items += [args.additional_name] if args.additional_name is not None else []
+        name = '-'.join(items)
 
         num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
@@ -131,10 +136,12 @@ def main() -> None:
                 'coreference': args.coreference,
             },
         }
-        if 'Refinement' in model:
+        if model in ('RefinementModel', 'RefinementModel2'):
             refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': refinement_bert_model})
+        if model == 'IterativeRefinementModel':
+            arch['args'].update({'num_iter': args.refinement_iter})
 
         dataset = {
             'type': 'PASDataset',
