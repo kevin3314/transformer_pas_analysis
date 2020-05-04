@@ -68,13 +68,17 @@ class Tester:
                 result = self._eval_pas(arguments_sets, data_loader, corpus=label, suffix=f'_{i}')
                 log.update({f'{self.target}_{label}_{k}_{i}': v for k, v in result.items()})
         else:
-            output = total_output[0]
+            output = total_output[0]  # (N, seq, case, seq)
 
         if label in ('kwdlc', 'kc'):
             output = Tester._softmax(output, axis=3)
             null_idx = data_loader.dataset.special_to_index['NULL']
-            # Note: collapses coreference resolution result
-            output[:, :, :, null_idx] += (output < self.threshold).all(axis=3).astype(np.int) * self.threshold
+            if data_loader.dataset.coreference:
+                output[:, :, :-1, null_idx] += (output[:, :, :-1] < self.threshold).all(axis=3).astype(np.int) * 1024
+                na_idx = data_loader.dataset.special_to_index['NA']
+                output[:, :, -1, na_idx] += (output[:, :, -1] < self.threshold).all(axis=2).astype(np.int) * 1024
+            else:
+                output[:, :, :, null_idx] += (output < self.threshold).all(axis=3).astype(np.int) * 1024
             arguments_set = np.argmax(output, axis=3).tolist()
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
