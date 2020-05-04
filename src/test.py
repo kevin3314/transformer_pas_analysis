@@ -122,9 +122,9 @@ class Tester:
                     loss = loss.mean()
                 outputs.append(tuple(o.cpu().numpy() for o in output))
 
-                total_loss += loss.item() * output.size(0)
+                total_loss += loss.item() * output[0].size(0)
         avg_loss: float = total_loss / data_loader.n_samples
-        return (avg_loss, *(np.concatenate(outs, axis=0) for *outs in zip(*outputs)))
+        return (avg_loss, *(np.concatenate(outs, axis=0) for outs in zip(*outputs)))
 
     def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'

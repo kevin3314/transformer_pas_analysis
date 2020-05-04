@@ -58,7 +58,7 @@ class Trainer(BaseTrainer):
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
-            self.writer.add_scalar('lr', self.lr_scheduler.get_lr()[0])
+            self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
             self.writer.add_scalar('loss', loss.item())
             total_loss += loss.item() * batch[0].size(0)
 
