@@ -1,7 +1,7 @@
 import re
 import argparse
 from pathlib import Path
-from typing import List, Union, Tuple, Callable
+from typing import List, Tuple, Callable
 
 import torch
 import numpy as np
@@ -53,35 +53,33 @@ class Tester:
 
     def _test(self, data_loader, label: str):
         log = {}
-        total_output = (np.array(0), np.array(0))
-        output2 = None
+        total_output = None
         total_loss = 0.0
         for checkpoint in self.checkpoints:
             model = self._prepare_model(checkpoint)
-            output, loss = self._test_epoch(model, data_loader)
-            total_output = tuple(t + o for t, o in zip(total_output, output))
+            loss, *output = self._test_epoch(model, data_loader)
+            total_output = tuple(t + o for t, o in zip(total_output, output)) if total_output is not None else output
             total_loss += loss
 
-        if re.match(r'(CaseInteractionModel|Refinement|Duplicate)', self.config['arch']['type']):
-            output_base, output = total_output
-            arguments_sets_base = np.argmax(output_base, axis=3).tolist()
-            result_base = self._eval_pas(arguments_sets_base, data_loader, corpus=label, suffix='_base')
-            log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
-        elif self.config['arch']['type'] == 'CommonsenseModel':
-            output, output2 = total_output  # (N, seq, case, seq), (N, 2)
+        if re.match(r'(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+            *pre_outputs, output = total_output
+            for i, pre_output in enumerate(pre_outputs):
+                arguments_sets = np.argmax(pre_output, axis=3).tolist()
+                result = self._eval_pas(arguments_sets, data_loader, corpus=label, suffix=f'_{i}')
+                log.update({f'{self.target}_{label}_{k}_{i}': v for k, v in result.items()})
         else:
             output = total_output[0]
 
         if label in ('kwdlc', 'kc'):
             output = Tester._softmax(output, axis=3)
             null_idx = data_loader.dataset.special_to_index['NULL']
-            # collapses coreference resolution result
+            # Note: collapses coreference resolution result
             output[:, :, :, null_idx] += (output < self.threshold).all(axis=3).astype(np.int) * self.threshold
             arguments_set = np.argmax(output, axis=3).tolist()
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
             assert self.config['arch']['type'] == 'CommonsenseModel'
-            contingency_set = (output2 > 0.5).astype(np.int)  # (N)
+            contingency_set = (total_output[1] > 0.5).astype(np.int)  # (N)
             result = self._eval_commonsense(contingency_set, data_loader)
         else:
             raise ValueError(f'unknown label: {label}')
@@ -107,31 +105,22 @@ class Tester:
             model = torch.nn.DataParallel(model, device_ids=self.device_ids)
         return model
 
-    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple], float]:
+    def _test_epoch(self, model, data_loader) -> Tuple[float, ...]:
         total_loss = 0.0
-        outputs = []
-        outputs2 = []
+        outputs: List[Tuple[np.ndarray, ...]] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
                 # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
                 batch = tuple(t.to(self.device) for t in batch)
 
-                loss, *output_ = model(*batch)
+                loss, *output = model(*batch)
                 if len(loss.size()) > 0:
                     loss = loss.mean()
-                if len(output_) == 2:
-                    output, output2 = output_
-                    outputs2.append(output2.cpu().numpy())
-                else:
-                    output = output_[0]
-                outputs.append(output.cpu().numpy())
+                outputs.append(tuple(o.cpu().numpy() for o in output))
 
                 total_loss += loss.item() * output.size(0)
-        avg_loss = total_loss / data_loader.n_samples
-        if outputs2:
-            return (np.concatenate(outputs, axis=0), np.concatenate(outputs2, axis=0)), avg_loss
-        else:
-            return (np.concatenate(outputs, axis=0), ), avg_loss
+        avg_loss: float = total_loss / data_loader.n_samples
+        return (avg_loss, *(np.concatenate(outs, axis=0) for *outs in zip(*outputs)))
 
     def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
