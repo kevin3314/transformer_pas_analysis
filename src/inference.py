@@ -88,7 +88,7 @@ def main(args):
     prediction_writer = PredictionKNPWriter(dataset, logger)
     destination = Path(args.export_dir) if args.export_dir is not None else sys.stdout
     if args.tab is True:
-        prediction_writer.write(arguments_set, destination)
+        prediction_writer.write(arguments_set, destination, skip_untagged=False)
     else:
         documents_pred: List[Document] = prediction_writer.write(arguments_set, destination, skip_untagged=False)
         for document_pred in documents_pred:

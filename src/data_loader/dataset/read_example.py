@@ -78,13 +78,13 @@ class PasExample:
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
                 for n in '１２３４５６７８９':
                     relax_exophors[exophor + n] = exophor
+        dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
+                                                                    for pred in document.get_predicates()}
         dmid = 0
         head_dmids = []
         for sentence in document:
             process: bool = process_all or (sentence is last_sent)
             head_dmids += self._get_head_dmids(sentence, document.mrph2dmid)
-            dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
-                                                                        for pred in document.get_predicates()}
             for tag in sentence.tag_list():
                 mrph_list: List[Morpheme] = tag.mrph_list()
                 if not mrph_list:
