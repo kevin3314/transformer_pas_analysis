@@ -157,10 +157,14 @@ class PASDataset(Dataset):
             deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
             deps[-1] += [0] * (max_seq_length - len(tok_to_orig_index))
 
-            arg_candidates = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]] + \
-                             [self.special_to_index[special] for special in (self.target_exophors + ['NULL'])]
+            # arguments が空のもの (助詞など) には arg_candidates を設定しない
+            if any(args for args, case in zip(arguments, example.arguments_set[orig_index].keys()) if case != '='):
+                arg_candidates = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]] + \
+                                 [self.special_to_index[special] for special in (self.target_exophors + ['NULL'])]
+            else:
+                arg_candidates = []
             arg_candidates_set.append(arg_candidates)
-            if self.coreference:
+            if self.coreference and arguments[-1]:  # TODO: cases をexample.arguments_set[orig_index].keys()から作るなどしてちゃんとする
                 ment_candidates = [orig_to_tok_index[dmid] for dmid in example.ment_candidates_set[orig_index]] + \
                                   [self.special_to_index[special] for special in (self.target_exophors + ['NA'])]
             else:
