@@ -26,11 +26,11 @@ PAS analysis process is as follows:
 
 ## Requirements
 
-- Python 3.6.5
-- PyTorch 1.3.1
-- Transformers 2.1.1
+- Python 3.7
+- PyTorch 1.4.0
+- Transformers 2.8.0
 - pyknp 0.4.1
-<!-- - kyoto-reader 0.0.1 -->
+- kyoto-reader 1.0.0
 
 ## Quick Start
 
