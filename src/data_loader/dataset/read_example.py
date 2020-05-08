@@ -159,6 +159,9 @@ class PasExample:
                     string += '%N'
                 else:
                     assert arg.dep_type in ('intra', 'inter')
+                    # 文間後方照応はスキップ
+                    if arg.dep_type == 'inter' and arg.dmid > dmid:
+                        continue
                     string += '%O'
             # exophor
             else:
