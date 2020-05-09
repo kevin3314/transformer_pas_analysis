@@ -88,9 +88,10 @@ def main(args):
     prediction_writer = PredictionKNPWriter(dataset, logger)
     destination = Path(args.export_dir) if args.export_dir is not None else sys.stdout
     if args.tab is True:
-        prediction_writer.write(arguments_set, destination, skip_untagged=False)
+        prediction_writer.write(arguments_set, destination, skip_untagged=args.skip_untagged)
     else:
-        documents_pred: List[Document] = prediction_writer.write(arguments_set, destination, skip_untagged=False)
+        documents_pred: List[Document] = prediction_writer.write(arguments_set, destination,
+                                                                 skip_untagged=args.skip_untagged)
         for document_pred in documents_pred:
             print()
             for sid in document_pred.sid2sentence.keys():
@@ -115,6 +116,7 @@ if __name__ == '__main__':
                         help='whether to output details')
     parser.add_argument('--use-bertknp', action='store_true', default=False,
                         help='use BERTKNP in base phrase segmentation and parsing')
-    # parser.add_argument('-c', '--config', default=None, type=str,
-    #                     help='config file path (default: None)')
+    parser.add_argument('--skip-untagged', action='store_true', default=False,
+                        help='If set, do not export documents which failed to be analyzed')
+
     main(parser.parse_args())
