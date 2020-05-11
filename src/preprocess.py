@@ -13,7 +13,20 @@ from transformers import BertTokenizer
 
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
-MAX_SUBWORD_LEN = 121
+NUM_SPECIAL_TOKENS = 5
+
+BERT_MODELS = {
+    'local': {
+        'base': f'{Path.home()}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+        'nict': f'{Path.home()}/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
+    },
+    'server': {
+        'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+        'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
+        'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
+        'nict': '/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
+    }
+}
 
 
 def process_kwdlc(input_path: Path, output_path: Path, cases: List[str], corefs: List[str]) -> int:
@@ -25,10 +38,10 @@ def process_kwdlc(input_path: Path, output_path: Path, cases: List[str], corefs:
     return len(reader.did2source)
 
 
-def split_kc(input_dir: Path, output_dir: Path, tokenizer: BertTokenizer):
+def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokenizer: BertTokenizer):
     """
-    各文書を，tokenize したあとの長さが MAX_SUBWORD_LEN 以下になるように複数の文書に分割する．
-    1文に分割しても MAX_SUBWORD_LEN を超えるような，長い文はそのまま出力する
+    各文書を，tokenize したあとの長さが max_subword_length 以下になるように複数の文書に分割する．
+    1文に分割しても max_subword_length を超えるような長い文はそのまま出力する
     """
     did2sids: Dict[str, List[str]] = defaultdict(list)
     did2cumlens: Dict[str, List[int]] = {}
@@ -56,14 +69,14 @@ def split_kc(input_dir: Path, output_dir: Path, tokenizer: BertTokenizer):
         cum: List[int] = did2cumlens[did]
         end = 1
         # end を探索
-        while end < len(sids) and cum[end+1] - cum[0] <= MAX_SUBWORD_LEN:
+        while end < len(sids) and cum[end+1] - cum[0] <= max_subword_length:
             end += 1
 
         idx = 0
         while end < len(sids) + 1:
             start = 0
             # start を探索
-            while cum[end] - cum[start] > MAX_SUBWORD_LEN:
+            while cum[end] - cum[start] > max_subword_length:
                 start += 1
                 if start == end - 1:
                     break
@@ -73,19 +86,15 @@ def split_kc(input_dir: Path, output_dir: Path, tokenizer: BertTokenizer):
             end += 1
 
 
-def process_kc(input_path: Path,
-               output_path: Path,
-               cases: List[str],
-               corefs: List[str],
-               tokenizer: BertTokenizer
-               ) -> int:
+def process_kc(input_path: Path, output_path: Path, config: dict, tokenizer: BertTokenizer) -> int:
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_dir = Path(tmp_dir)
         # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
-        split_kc(input_path, tmp_dir, tokenizer)
+        max_subword_length = config['max_seq_length'] - 2 - NUM_SPECIAL_TOKENS
+        split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
 
         output_path.mkdir(exist_ok=True)
-        reader = KyotoReader(tmp_dir, cases, corefs, extract_nes=False)
+        reader = KyotoReader(tmp_dir, config['target_cases'], config['target_corefs'], extract_nes=False)
         for document in reader.process_all_documents():
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
@@ -105,6 +114,7 @@ def process_commonsense(input_path: Path, output_path: Path) -> int:
 
 
 def main():
+    all_bert_models = list(set(model for v in BERT_MODELS.values() for model in v.keys()))
     parser = argparse.ArgumentParser()
     parser.add_argument('--kwdlc', type=str, default=None,
                         help='path to directory where KWDLC data exists')
@@ -112,30 +122,39 @@ def main():
                         help='path to directory where Kyoto Corpus data exists')
     parser.add_argument('--commonsense', type=str, default=None,
                         help='path to directory where commonsense inference data exists')
-    parser.add_argument('--out', type=str, required=True,
+    parser.add_argument('--out', type=(lambda p: Path(p)), required=True,
                         help='path to directory where dataset to be located')
     parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
                         help='Coreference strings. Separate by ","')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ',
                         help='Case strings. Separate by ","')
-    parser.add_argument('--bert-model', type=str, default=None,
-                        help='path to pre-trained BERT model directory')
+    parser.add_argument('--max-seq-length', type=int, default=128,
+                        help='The maximum total input sequence length after WordPiece tokenization. Sequences '
+                             'longer than this will be truncated, and sequences shorter than this will be padded.')
+    parser.add_argument('--bert', choices=all_bert_models, type=str, default='base',
+                        help='BERT model name')
+    parser.add_argument('--env', choices=['local', 'server'], type=str, default='server',
+                        help='development environment')
     args = parser.parse_args()
 
     # make directories to save dataset
-    Path(args.out).mkdir(exist_ok=True)
+    args.out.mkdir(exist_ok=True)
 
     target_cases: List[str] = args.case_string.split(',')
     target_corefs: List[str] = args.coref_string.split(',')
+    bert_model = BERT_MODELS[args.env][args.bert]
     config = {
         'target_cases': target_cases,
         'target_corefs': target_corefs,
-        'num_examples': {}
+        'num_examples': {},
+        'max_seq_length': args.max_seq_length,
+        'bert_name': args.bert,
+        'bert_path': bert_model,
     }
 
     if args.kwdlc is not None:
         kwdlc_dir = Path(args.kwdlc).resolve()
-        output_dir = Path(args.out) / 'kwdlc'
+        output_dir: Path = args.out / 'kwdlc'
         output_dir.mkdir(exist_ok=True)
         print('processing kwdlc...')
         num_examples_train = process_kwdlc(kwdlc_dir / 'train', output_dir / 'train', target_cases, target_corefs)
@@ -146,19 +165,19 @@ def main():
 
     if args.kc is not None:
         kc_dir = Path(args.kc).resolve()
-        output_dir = Path(args.out) / 'kc'
+        output_dir: Path = args.out / 'kc'
         output_dir.mkdir(exist_ok=True)
-        tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=False, tokenize_chinese_chars=False)
+        tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
         print('processing kc...')
-        num_examples_train = process_kc(kc_dir / 'train', output_dir / 'train', target_cases, target_corefs, tokenizer)
-        num_examples_valid = process_kc(kc_dir / 'valid', output_dir / 'valid', target_cases, target_corefs, tokenizer)
-        num_examples_test = process_kc(kc_dir / 'test', output_dir / 'test', target_cases, target_corefs, tokenizer)
+        num_examples_train = process_kc(kc_dir / 'train', output_dir / 'train', config, tokenizer)
+        num_examples_valid = process_kc(kc_dir / 'valid', output_dir / 'valid', config, tokenizer)
+        num_examples_test = process_kc(kc_dir / 'test', output_dir / 'test', config, tokenizer)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kc'] = num_examples_dict
 
     if args.commonsense is not None:
         commonsense_dir = Path(args.commonsense).resolve()
-        output_dir = Path(args.out) / 'commonsense'
+        output_dir: Path = args.out / 'commonsense'
         output_dir.mkdir(exist_ok=True)
         print('processing commonsense...')
         num_examples_train = process_commonsense(commonsense_dir / 'train.csv', output_dir / 'train.pkl')
@@ -167,7 +186,7 @@ def main():
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['commonsense'] = num_examples_dict
 
-    with Path(args.out).joinpath('config.json').open(mode='wt') as f:
+    with args.out.joinpath('config.json').open(mode='wt') as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
 

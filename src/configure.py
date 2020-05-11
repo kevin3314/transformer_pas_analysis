@@ -1,10 +1,9 @@
-import os
 import json
 import math
 import copy
-import pathlib
 import argparse
 from typing import List
+from pathlib import Path
 import itertools
 import inspect
 
@@ -18,7 +17,7 @@ class Config:
         for key, value in kwargs.items():
             self.config.update({key: value})
 
-    def dump(self, config_dir: pathlib.Path) -> None:
+    def dump(self, config_dir: Path) -> None:
         config_dir.mkdir(exist_ok=True)
         config_path = config_dir / f'{self.config["name"]}.json'
         with config_path.open('w') as f:
@@ -26,31 +25,15 @@ class Config:
         print(config_path)
 
 
-class Path:
-    bert_model = {
-        'local': {
-            'base': f'{os.environ["HOME"]}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'nict': f'{os.environ["HOME"]}/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
-        },
-        'server': {
-            'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
-            'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
-            'nict': '/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
-        }
-    }
-
-
 def main() -> None:
     all_models = [m[0] for m in inspect.getmembers(module_arch, inspect.isclass)
                   if m[1].__module__ == module_arch.__name__]
     all_lr_schedulers = [m[0][4:] for m in inspect.getmembers(module_optim, inspect.isfunction)
                          if m[1].__module__ == module_optim.__name__ and m[0].startswith('get_')]
-    all_bert_models = list(set(model for v in Path.bert_model.values() for model in v.keys()))
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str,
+    parser.add_argument('-c', '--config', type=(lambda p: Path(p)),
                         help='path to output directory')
-    parser.add_argument('-d', '--dataset', type=str,
+    parser.add_argument('-d', '--dataset', type=(lambda p: Path(p)),
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
@@ -58,9 +41,6 @@ def main() -> None:
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
-    parser.add_argument('--max-seq-length', type=int, default=128,
-                        help='The maximum total input sequence length after WordPiece tokenization. Sequences '
-                             'longer than this will be truncated, and sequences shorter than this will be padded.')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
                         help='Perform coreference resolution.')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
@@ -77,16 +57,10 @@ def main() -> None:
                         help='Proportion of training to perform linear learning rate warmup for')
     parser.add_argument('--warmup-steps', type=int, default=None,
                         help='Linear warmup over warmup_steps.')
-    parser.add_argument('--env', choices=['local', 'server'], type=str, default='server',
-                        help='development environment')
     parser.add_argument('--additional-name', type=str, default=None,
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
-    parser.add_argument('--bert', choices=all_bert_models, type=str, default='base',
-                        help=f'BERT model name (available: {", ".join(all_lr_schedulers)})')
-    parser.add_argument('--refinement-bert', '--rbert', choices=all_bert_models, default='base',
-                        help='BERT model name for RefinementModel')
     parser.add_argument('--refinement-type', '--rtype', type=int, choices=[1, 2, 3], default=1,
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
@@ -101,9 +75,7 @@ def main() -> None:
                         help='number of refinement iteration (IterativeRefinementModel)')
     args = parser.parse_args()
 
-    config_dir = pathlib.Path(args.config)
-    bert_model = Path.bert_model[args.env][args.bert]
-    data_root = pathlib.Path(args.dataset).resolve()
+    data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
     cases: List[str] = args.case_string.split(',') if args.case_string else []
@@ -111,7 +83,7 @@ def main() -> None:
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         items = [model]
         items += [str(args.refinement_iter)] if model == 'IterativeRefinementModel' else []
-        items += [corpus, f'{n_epoch}e', args.bert]
+        items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
         items += ['coref'] if args.coreference else []
         items += [''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)]
         items += ['nocase'] if 'ノ' in cases else []
@@ -133,16 +105,15 @@ def main() -> None:
         arch = {
             'type': model,
             'args': {
-                'bert_model': bert_model,
+                'bert_model': dataset_config['bert_path'],
                 'dropout': args.dropout,
                 'num_case': len(cases),
                 'coreference': args.coreference,
             },
         }
         if model in ('RefinementModel', 'RefinementModel2'):
-            refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
             arch['args'].update({'refinement_type': args.refinement_type,
-                                 'refinement_bert_model': refinement_bert_model})
+                                 'refinement_bert_model': dataset_config['bert_path']})
         if model == 'IterativeRefinementModel':
             arch['args'].update({'num_iter': args.refinement_iter})
 
@@ -150,13 +121,13 @@ def main() -> None:
             'type': 'PASDataset',
             'args': {
                 'path': None,
-                'max_seq_length': args.max_seq_length,
+                'max_seq_length': dataset_config['max_seq_length'],
                 'cases': cases,
                 'exophors': args.exophors.split(','),
                 'coreference': args.coreference,
                 'dataset_config': dataset_config,
                 'training': None,
-                'bert_model': bert_model,
+                'bert_model': dataset_config['bert_path'],
                 'kc': None,
                 'train_target': args.train_target,
                 'eventive_noun': args.eventive_noun,
@@ -195,9 +166,9 @@ def main() -> None:
                 'type': 'CommonsenseDataset',
                 'args': {
                     'path': None,
-                    'max_seq_length': args.max_seq_length,
+                    'max_seq_length': dataset_config['max_seq_length'],
                     'num_special_tokens': len(args.exophors.split(',')) + 1 + int(args.coreference),
-                    'bert_model': bert_model,
+                    'bert_model': dataset_config['bert_path'],
                 },
             }
             train_commonsense_dataset = copy.deepcopy(commonsense_dataset)
@@ -334,7 +305,7 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(config_dir)
+        config.dump(args.config)
 
 
 if __name__ == '__main__':

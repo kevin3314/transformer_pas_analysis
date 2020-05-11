@@ -131,7 +131,7 @@ python src/preprocess.py \
 --kwdlc /somewhere/kwdlc \
 --kc /somewhere/kc \
 --out /somewhere/dataset \
---bert-model <path/to/pre-traind/BERT/model/directory>
+--bert large-wwm
 ```
 
 Don't care if many "sentence not found" messages are shown when processing kc.
@@ -144,12 +144,12 @@ The resultant files will be located at `config/`.
 
 ```zsh
 python src/configure.py \
--c config \
--d <path-to-dataset-directory> \
+-c <path-to-config-directory> \
+-d /somewhere/dataset \
 -e <num-epochs> \
 -b <batch-size> \
 --model <model-name> \
---corpus kwdlc
+--corpus all
 ```
 
 example:
