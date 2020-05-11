@@ -1,7 +1,7 @@
 """Preprocess dataset."""
 import argparse
 import json
-import shutil
+import tempfile
 from pathlib import Path
 import _pickle as cPickle
 from typing import List, Dict
@@ -79,17 +79,16 @@ def process_kc(input_path: Path,
                corefs: List[str],
                tokenizer: BertTokenizer
                ) -> int:
-    tmp_dir = Path('/tmp/kc')
-    tmp_dir.mkdir(exist_ok=False)
-    # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
-    split_kc(input_path, tmp_dir, tokenizer)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_dir = Path(tmp_dir)
+        # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
+        split_kc(input_path, tmp_dir, tokenizer)
 
-    output_path.mkdir(exist_ok=True)
-    reader = KyotoReader(tmp_dir, cases, corefs, extract_nes=False)
-    for document in reader.process_all_documents():
-        with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
-            cPickle.dump(document, f)
-    shutil.rmtree(tmp_dir)
+        output_path.mkdir(exist_ok=True)
+        reader = KyotoReader(tmp_dir, cases, corefs, extract_nes=False)
+        for document in reader.process_all_documents():
+            with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
+                cPickle.dump(document, f)
     return len(reader.did2source)
 
 
