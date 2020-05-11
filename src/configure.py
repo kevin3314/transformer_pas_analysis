@@ -30,11 +30,13 @@ class Path:
     bert_model = {
         'local': {
             'base': f'{os.environ["HOME"]}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
+            'nict': f'{os.environ["HOME"]}/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
         },
         'server': {
             'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
             'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
             'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
+            'nict': '/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
         }
     }
 
@@ -44,14 +46,14 @@ def main() -> None:
                   if m[1].__module__ == module_arch.__name__]
     all_lr_schedulers = [m[0][4:] for m in inspect.getmembers(module_optim, inspect.isfunction)
                          if m[1].__module__ == module_optim.__name__ and m[0].startswith('get_')]
-    all_bert_models = [model for v in Path.bert_model.values() for model in v.keys()]
+    all_bert_models = list(set(model for v in Path.bert_model.values() for model in v.keys()))
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
     parser.add_argument('-d', '--dataset', type=str,
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
-                        help=f'model name (available: {", ".join(all_models)})')
+                        help='model name')
     parser.add_argument('-e', '--epoch', type=int, default=4, nargs='*',
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
@@ -70,12 +72,11 @@ def main() -> None:
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--lr-schedule', choices=all_lr_schedulers, type=str, default='linear_schedule_with_warmup',
-                        help=f'lr scheduler (available: {", ".join(all_lr_schedulers)})')
-    parser.add_argument('--warmup-proportion', default=0.1, type=float,
-                        help='Proportion of training to perform linear learning rate warmup for. '
-                             'E.g., 0.1 = 10% of training.')
-    parser.add_argument("--warmup-steps", default=None, type=int,
-                        help="Linear warmup over warmup_steps.")
+                        help='lr scheduler')
+    parser.add_argument('--warmup-proportion', type=float, default=0.1,
+                        help='Proportion of training to perform linear learning rate warmup for')
+    parser.add_argument('--warmup-steps', type=int, default=None,
+                        help='Linear warmup over warmup_steps.')
     parser.add_argument('--env', choices=['local', 'server'], type=str, default='server',
                         help='development environment')
     parser.add_argument('--additional-name', type=str, default=None,
@@ -85,7 +86,7 @@ def main() -> None:
     parser.add_argument('--bert', choices=all_bert_models, type=str, default='base',
                         help=f'BERT model name (available: {", ".join(all_lr_schedulers)})')
     parser.add_argument('--refinement-bert', '--rbert', choices=all_bert_models, default='base',
-                        help=f'BERT model name for RefinementModel (available: {", ".join(all_lr_schedulers)})')
+                        help='BERT model name for RefinementModel')
     parser.add_argument('--refinement-type', '--rtype', type=int, choices=[1, 2, 3], default=1,
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
