@@ -9,6 +9,7 @@ import itertools
 import inspect
 
 import model.model as module_arch
+import transformers.optimization as module_optim
 
 
 class Config:
@@ -41,14 +42,17 @@ class Path:
 def main() -> None:
     all_models = [m[0] for m in inspect.getmembers(module_arch, inspect.isclass)
                   if m[1].__module__ == module_arch.__name__]
+    all_lr_schedulers = [m[0][4:] for m in inspect.getmembers(module_optim, inspect.isfunction)
+                         if m[1].__module__ == module_optim.__name__ and m[0].startswith('get_')]
+    all_bert_models = [model for v in Path.bert_model.values() for model in v.keys()]
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str,
                         help='path to output directory')
     parser.add_argument('-d', '--dataset', type=str,
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
-                        help='model name')
-    parser.add_argument('-e', '--epoch', type=int, default=3, nargs='*',
+                        help=f'model name (available: {", ".join(all_models)})')
+    parser.add_argument('-e', '--epoch', type=int, default=4, nargs='*',
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
@@ -65,26 +69,24 @@ def main() -> None:
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
-    parser.add_argument('--lr-schedule', type=str, default='linear_schedule_with_warmup',
-                        choices=['constant_schedule', 'constant_schedule_with_warmup', 'linear_schedule_with_warmup',
-                                 'cosine_schedule_with_warmup', 'cosine_with_hard_restarts_schedule_with_warmup'],
-                        help='lr scheduler')
+    parser.add_argument('--lr-schedule', choices=all_lr_schedulers, type=str, default='linear_schedule_with_warmup',
+                        help=f'lr scheduler (available: {", ".join(all_lr_schedulers)})')
     parser.add_argument('--warmup-proportion', default=0.1, type=float,
                         help='Proportion of training to perform linear learning rate warmup for. '
                              'E.g., 0.1 = 10% of training.')
     parser.add_argument("--warmup-steps", default=None, type=int,
                         help="Linear warmup over warmup_steps.")
-    parser.add_argument('--env', choices=['local', 'server'], default='server',
+    parser.add_argument('--env', choices=['local', 'server'], type=str, default='server',
                         help='development environment')
     parser.add_argument('--additional-name', type=str, default=None,
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
-    parser.add_argument('--bert', choices=['base', 'large', 'large-wwm'], default='base',
-                        help='BERT model')
-    parser.add_argument('--refinement-bert', '--rbert', choices=['base', 'large', 'large-wwm'], default='base',
-                        help='BERT model type used for RefinementModel')
-    parser.add_argument('--refinement-type', '--rtype', type=int, default=1, choices=[1, 2, 3],
+    parser.add_argument('--bert', choices=all_bert_models, type=str, default='base',
+                        help=f'BERT model name (available: {", ".join(all_lr_schedulers)})')
+    parser.add_argument('--refinement-bert', '--rbert', choices=all_bert_models, default='base',
+                        help=f'BERT model name for RefinementModel (available: {", ".join(all_lr_schedulers)})')
+    parser.add_argument('--refinement-type', '--rtype', type=int, choices=[1, 2, 3], default=1,
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
