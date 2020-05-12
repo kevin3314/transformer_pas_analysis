@@ -166,7 +166,7 @@ class PASDataset(Dataset):
             else:
                 arg_candidates = []
             arg_candidates_set.append(arg_candidates)
-            if self.coreference and any(args for args, case in zip(arguments, cases) if case != '='):
+            if self.coreference and any(args for args, case in zip(arguments, cases) if case == '='):
                 ment_candidates = [orig_to_tok_index[dmid] for dmid in example.ment_candidates_set[orig_index]] + \
                                   [self.special_to_index[special] for special in (self.target_exophors + ['NA'])]
             else:
