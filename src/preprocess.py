@@ -7,6 +7,7 @@ import _pickle as cPickle
 from typing import List, Dict
 from collections import defaultdict
 
+from tqdm import tqdm
 from pyknp import BList
 from kyoto_reader import KyotoReader
 from transformers import BertTokenizer
@@ -32,7 +33,7 @@ BERT_MODELS = {
 def process_kwdlc(input_path: Path, output_path: Path, cases: List[str], corefs: List[str]) -> int:
     output_path.mkdir(exist_ok=True)
     reader = KyotoReader(input_path, cases, corefs, extract_nes=False)
-    for document in reader.process_all_documents():
+    for document in tqdm(reader.process_all_documents(), desc='kwdlc', total=len(reader.did2source)):
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
     return len(reader.did2source)
@@ -91,11 +92,12 @@ def process_kc(input_path: Path, output_path: Path, config: dict, tokenizer: Ber
         tmp_dir = Path(tmp_dir)
         # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
         max_subword_length = config['max_seq_length'] - 2 - NUM_SPECIAL_TOKENS
+        print('splitting kc...')
         split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
 
         output_path.mkdir(exist_ok=True)
         reader = KyotoReader(tmp_dir, config['target_cases'], config['target_corefs'], extract_nes=False)
-        for document in reader.process_all_documents():
+        for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader.did2source)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
     return len(reader.did2source)
@@ -103,6 +105,7 @@ def process_kc(input_path: Path, output_path: Path, config: dict, tokenizer: Ber
 
 def process_commonsense(input_path: Path, output_path: Path) -> int:
     examples = []
+    print('processing commonsense...')
     with input_path.open() as f:
         for line in f:
             label, string = line.strip().split(',')
@@ -153,36 +156,33 @@ def main():
     }
 
     if args.kwdlc is not None:
-        kwdlc_dir = Path(args.kwdlc).resolve()
+        input_dir = Path(args.kwdlc).resolve()
         output_dir: Path = args.out / 'kwdlc'
         output_dir.mkdir(exist_ok=True)
-        print('processing kwdlc...')
-        num_examples_train = process_kwdlc(kwdlc_dir / 'train', output_dir / 'train', target_cases, target_corefs)
-        num_examples_valid = process_kwdlc(kwdlc_dir / 'valid', output_dir / 'valid', target_cases, target_corefs)
-        num_examples_test = process_kwdlc(kwdlc_dir / 'test', output_dir / 'test', target_cases, target_corefs)
+        num_examples_train = process_kwdlc(input_dir / 'train', output_dir / 'train', target_cases, target_corefs)
+        num_examples_valid = process_kwdlc(input_dir / 'valid', output_dir / 'valid', target_cases, target_corefs)
+        num_examples_test = process_kwdlc(input_dir / 'test', output_dir / 'test', target_cases, target_corefs)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kwdlc'] = num_examples_dict
 
     if args.kc is not None:
-        kc_dir = Path(args.kc).resolve()
+        input_dir = Path(args.kc).resolve()
         output_dir: Path = args.out / 'kc'
         output_dir.mkdir(exist_ok=True)
         tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
-        print('processing kc...')
-        num_examples_train = process_kc(kc_dir / 'train', output_dir / 'train', config, tokenizer)
-        num_examples_valid = process_kc(kc_dir / 'valid', output_dir / 'valid', config, tokenizer)
-        num_examples_test = process_kc(kc_dir / 'test', output_dir / 'test', config, tokenizer)
+        num_examples_train = process_kc(input_dir / 'train', output_dir / 'train', config, tokenizer)
+        num_examples_valid = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer)
+        num_examples_test = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kc'] = num_examples_dict
 
     if args.commonsense is not None:
-        commonsense_dir = Path(args.commonsense).resolve()
+        input_dir = Path(args.commonsense).resolve()
         output_dir: Path = args.out / 'commonsense'
         output_dir.mkdir(exist_ok=True)
-        print('processing commonsense...')
-        num_examples_train = process_commonsense(commonsense_dir / 'train.csv', output_dir / 'train.pkl')
-        num_examples_valid = process_commonsense(commonsense_dir / 'valid.csv', output_dir / 'valid.pkl')
-        num_examples_test = process_commonsense(commonsense_dir / 'test.csv', output_dir / 'test.pkl')
+        num_examples_train = process_commonsense(input_dir / 'train.csv', output_dir / 'train.pkl')
+        num_examples_valid = process_commonsense(input_dir / 'valid.csv', output_dir / 'valid.pkl')
+        num_examples_test = process_commonsense(input_dir / 'test.csv', output_dir / 'test.pkl')
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['commonsense'] = num_examples_dict
 
