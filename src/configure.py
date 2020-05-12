@@ -1,15 +1,14 @@
-import os
-import re
 import json
 import math
 import copy
-import pathlib
 import argparse
 from typing import List
+from pathlib import Path
 import itertools
 import inspect
 
 import model.model as module_arch
+import transformers.optimization as module_optim
 
 
 class Config:
@@ -18,7 +17,7 @@ class Config:
         for key, value in kwargs.items():
             self.config.update({key: value})
 
-    def dump(self, config_dir: pathlib.Path) -> None:
+    def dump(self, config_dir: Path) -> None:
         config_dir.mkdir(exist_ok=True)
         config_path = config_dir / f'{self.config["name"]}.json'
         with config_path.open('w') as f:
@@ -26,36 +25,22 @@ class Config:
         print(config_path)
 
 
-class Path:
-    bert_model = {
-        'local': {
-            'base': f'{os.environ["HOME"]}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-        },
-        'server': {
-            'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-            'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
-            'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
-        }
-    }
-
-
 def main() -> None:
     all_models = [m[0] for m in inspect.getmembers(module_arch, inspect.isclass)
                   if m[1].__module__ == module_arch.__name__]
+    all_lr_schedulers = [m[0][4:] for m in inspect.getmembers(module_optim, inspect.isfunction)
+                         if m[1].__module__ == module_optim.__name__ and m[0].startswith('get_')]
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str,
+    parser.add_argument('-c', '--config', type=(lambda p: Path(p)),
                         help='path to output directory')
-    parser.add_argument('-d', '--dataset', type=str,
+    parser.add_argument('-d', '--dataset', type=(lambda p: Path(p)),
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
-    parser.add_argument('-e', '--epoch', type=int, default=3, nargs='*',
+    parser.add_argument('-e', '--epoch', type=int, default=4, nargs='*',
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
-    parser.add_argument('--max-seq-length', type=int, default=128,
-                        help='The maximum total input sequence length after WordPiece tokenization. Sequences '
-                             'longer than this will be truncated, and sequences shorter than this will be padded.')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
                         help='Perform coreference resolution.')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
@@ -66,26 +51,17 @@ def main() -> None:
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
                         help='learning rate')
-    parser.add_argument('--lr-schedule', type=str, default='linear_schedule_with_warmup',
-                        choices=['constant_schedule', 'constant_schedule_with_warmup', 'linear_schedule_with_warmup',
-                                 'cosine_schedule_with_warmup', 'cosine_with_hard_restarts_schedule_with_warmup'],
+    parser.add_argument('--lr-schedule', choices=all_lr_schedulers, type=str, default='linear_schedule_with_warmup',
                         help='lr scheduler')
-    parser.add_argument('--warmup-proportion', default=0.1, type=float,
-                        help='Proportion of training to perform linear learning rate warmup for. '
-                             'E.g., 0.1 = 10% of training.')
-    parser.add_argument("--warmup-steps", default=None, type=int,
-                        help="Linear warmup over warmup_steps.")
-    parser.add_argument('--env', choices=['local', 'server'], default='server',
-                        help='development environment')
+    parser.add_argument('--warmup-proportion', type=float, default=0.1,
+                        help='Proportion of training to perform linear learning rate warmup for')
+    parser.add_argument('--warmup-steps', type=int, default=None,
+                        help='Linear warmup over warmup_steps.')
     parser.add_argument('--additional-name', type=str, default=None,
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
-    parser.add_argument('--bert', choices=['base', 'large', 'large-wwm'], default='base',
-                        help='BERT model')
-    parser.add_argument('--refinement-bert', '--rbert', choices=['base', 'large', 'large-wwm'], default='base',
-                        help='BERT model type used for RefinementModel')
-    parser.add_argument('--refinement-type', '--rtype', type=int, default=1, choices=[1, 2, 3],
+    parser.add_argument('--refinement-type', '--rtype', type=int, choices=[1, 2, 3], default=1,
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
@@ -95,25 +71,28 @@ def main() -> None:
                         help='dependency type to train')
     parser.add_argument('--eventive-noun', '--noun', action='store_true', default=False,
                         help='analyze eventive noun as predicate')
+    parser.add_argument('--refinement-iter', '--riter', type=int, default=3,
+                        help='number of refinement iteration (IterativeRefinementModel)')
     args = parser.parse_args()
 
-    config_dir = pathlib.Path(args.config)
-    bert_model = Path.bert_model[args.env][args.bert]
-    data_root = pathlib.Path(args.dataset).resolve()
+    data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
     cases: List[str] = args.case_string.split(',') if args.case_string else []
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
-        name = f'{model}-{corpus}-{n_epoch}e-{args.bert}'
-        name += '-coref' if args.coreference else ''
-        name += '-' + ''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)
-        name += '-nocase' if 'ノ' in cases else ''
-        name += '-noun' if args.eventive_noun else ''
-        if 'Refinement' in model:
-            name += '-largeref' if args.refinement_bert in ('large', 'large-wwm') else ''
-            name += '-reftype' + str(args.refinement_type)
-        name += f'-{args.additional_name}' if args.additional_name is not None else ''
+        items = [model]
+        items += [str(args.refinement_iter)] if model == 'IterativeRefinementModel' else []
+        items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
+        items += ['coref'] if args.coreference else []
+        items += [''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)]
+        items += ['nocase'] if 'ノ' in cases else []
+        items += ['noun'] if args.eventive_noun else []
+        if model in ('RefinementModel', 'RefinementModel2'):
+            items += ['largeref'] if args.refinement_bert in ('large', 'large-wwm') else []
+            items += [f'reftype{args.refinement_type}']
+        items += [args.additional_name] if args.additional_name is not None else []
+        name = '-'.join(items)
 
         num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
@@ -126,28 +105,29 @@ def main() -> None:
         arch = {
             'type': model,
             'args': {
-                'bert_model': bert_model,
+                'bert_model': dataset_config['bert_path'],
                 'dropout': args.dropout,
                 'num_case': len(cases),
                 'coreference': args.coreference,
             },
         }
-        if 'Refinement' in model:
-            refinement_bert_model = Path.bert_model[args.env][args.refinement_bert]
+        if model in ('RefinementModel', 'RefinementModel2'):
             arch['args'].update({'refinement_type': args.refinement_type,
-                                 'refinement_bert_model': refinement_bert_model})
+                                 'refinement_bert_model': dataset_config['bert_path']})
+        if model == 'IterativeRefinementModel':
+            arch['args'].update({'num_iter': args.refinement_iter})
 
         dataset = {
             'type': 'PASDataset',
             'args': {
                 'path': None,
-                'max_seq_length': args.max_seq_length,
+                'max_seq_length': dataset_config['max_seq_length'],
                 'cases': cases,
                 'exophors': args.exophors.split(','),
                 'coreference': args.coreference,
                 'dataset_config': dataset_config,
                 'training': None,
-                'bert_model': bert_model,
+                'bert_model': dataset_config['bert_path'],
                 'kc': None,
                 'train_target': args.train_target,
                 'eventive_noun': args.eventive_noun,
@@ -186,9 +166,9 @@ def main() -> None:
                 'type': 'CommonsenseDataset',
                 'args': {
                     'path': None,
-                    'max_seq_length': args.max_seq_length,
+                    'max_seq_length': dataset_config['max_seq_length'],
                     'num_special_tokens': len(args.exophors.split(',')) + 1 + int(args.coreference),
-                    'bert_model': bert_model,
+                    'bert_model': dataset_config['bert_path'],
                 },
             }
             train_commonsense_dataset = copy.deepcopy(commonsense_dataset)
@@ -229,15 +209,6 @@ def main() -> None:
                 'weight_decay': 0.01,
             },
         }
-
-        if model == 'MultitaskDepModel':
-            loss = 'cross_entropy_pas_dep_loss'
-        elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', model):
-            loss = 'multi_cross_entropy_pas_loss'
-        elif model == 'CommonsenseModel':
-            loss = 'cross_entropy_pas_commonsense_loss'
-        else:
-            loss = 'cross_entropy_pas_loss'
 
         metrics = []
         if 'ガ' in cases:
@@ -330,12 +301,11 @@ def main() -> None:
             valid_data_loader=valid_data_loader,
             test_data_loader=test_data_loader,
             optimizer=optimizer,
-            loss=loss,
             metrics=metrics,
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(config_dir)
+        config.dump(args.config)
 
 
 if __name__ == '__main__':

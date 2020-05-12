@@ -7,6 +7,7 @@ from base import BaseModel
 
 class RefinementLayer1(BaseModel):
     """前段の予測のスコアを重みパラメータではなく、素直に与えるモデル"""
+
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
@@ -28,9 +29,9 @@ class RefinementLayer1(BaseModel):
         self.l_prd = nn.Linear(bert_hidden_size, self.hidden_size)
         self.l_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
 
-        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
-                                         for _ in range(self.num_case)])
-        self.outs = nn.ModuleList([nn.Linear(self.hidden_size, 1, bias=False) for _ in range(self.num_case)])
+        self.mid_layers = nn.ModuleList(nn.Linear(self.hidden_size + self.num_case, self.hidden_size)
+                                        for _ in range(self.num_case))
+        self.outs = nn.ModuleList(nn.Linear(self.hidden_size, 1, bias=False) for _ in range(self.num_case))
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -39,13 +40,13 @@ class RefinementLayer1(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
-        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask)
 
         # (b, seq, case, hid)
         h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
         h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
         h_a = h_a.view(batch_size, sequence_len, self.num_case, self.hidden_size)  # (b, seq, case, hid)
-        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(1) + h_a.unsqueeze(2)))  # (b, seq, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
 
         base_score = base_score.transpose(2, 3).contiguous()  # (b, seq, seq, case)
         base_score = base_score.unsqueeze(3).expand(-1, -1, -1, self.num_case, -1)  # (b, seq, seq, case, case)
@@ -91,7 +92,7 @@ class RefinementLayer2(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
-        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask)
         # (b, seq, case*hid) -> (b, seq, case, hid)
         h_p = self.W_prd(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, self.hidden_size)
         # (b, seq, case*hid) -> (b, seq, case, hid)
@@ -134,8 +135,8 @@ class RefinementLayer3(BaseModel):
         self.W_prd = nn.Linear(bert_hidden_size, self.hidden_size)
         self.U_arg = nn.Linear(bert_hidden_size, self.hidden_size * self.num_case)
 
-        self.mid_layers = nn.ModuleList([nn.Linear(self.hidden_size * (self.num_case + 2), self.hidden_size)
-                                         for _ in range(self.num_case)])
+        self.mid_layers = nn.ModuleList(nn.Linear(self.hidden_size * (self.num_case + 2), self.hidden_size)
+                                         for _ in range(self.num_case))
         self.output = nn.Linear(self.hidden_size, 1, bias=False)
 
     def forward(self,
@@ -145,7 +146,7 @@ class RefinementLayer3(BaseModel):
                 ) -> torch.Tensor:             # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         # (b, seq, hid)
-        sequence_output, _ = self.bert(input_ids,  attention_mask=attention_mask)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask)
 
         h_p = self.W_prd(self.dropout(sequence_output)).view(batch_size, sequence_len, 1, 1, self.hidden_size)
         # (b, seq, case*hid) -> (b, seq, case, hid)

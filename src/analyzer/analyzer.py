@@ -101,19 +101,19 @@ class Analyzer:
         arguments_sets: List[List[List[int]]] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(tqdm(data_loader, desc='PAS analysis')):
+                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
+                _, *output = self.model(*batch)
                 if self.config['arch']['type'] == 'MultitaskDepModel':
-                    scores = output[0]  # (b, seq, case, seq)
-                elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
-                    scores = output[-1]  # (b, seq, case, seq)
+                    pas_scores = output[0]  # (b, seq, case, seq)
+                elif re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+                    pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
-                    scores = output[0]  # (b, seq, case, seq)
+                    pas_scores = output[0]  # (b, seq, case, seq)
                 else:
-                    scores = output  # (b, seq, case, seq)
-                arguments_set = torch.argmax(scores, dim=3)  # (b, seq, case)
+                    pas_scores = output[0]  # (b, seq, case, seq)
+                arguments_set = torch.argmax(pas_scores, dim=3)  # (b, seq, case)
                 arguments_sets += arguments_set.tolist()
 
         return arguments_sets, dataset

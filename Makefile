@@ -19,7 +19,7 @@ SHELL = /bin/bash -eu
 PYTHON := $(shell which python3)
 
 ifdef CONFIG
-	RESULT := result/$(subst /,-,$(patsubst config/%.json,%,$(CONFIG)))
+	RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
 endif
 
 CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)

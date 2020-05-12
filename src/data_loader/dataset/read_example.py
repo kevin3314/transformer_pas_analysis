@@ -15,11 +15,12 @@ def read_example(document: Document,
                  coreference: bool,
                  kc: bool,
                  eventive_noun: bool,
+                 dataset_config: dict,
                  ) -> 'PasExample':
     load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
     save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
     bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun)
+    example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun, dataset_config)
     cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
     if cache_path.exists() and load_cache:
         with cache_path.open('rb') as f:
@@ -78,13 +79,13 @@ class PasExample:
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
                 for n in '１２３４５６７８９':
                     relax_exophors[exophor + n] = exophor
+        dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
+                                                                    for pred in document.get_predicates()}
         dmid = 0
         head_dmids = []
         for sentence in document:
             process: bool = process_all or (sentence is last_sent)
             head_dmids += self._get_head_dmids(sentence, document.mrph2dmid)
-            dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
-                                                                        for pred in document.get_predicates()}
             for tag in sentence.tag_list():
                 mrph_list: List[Morpheme] = tag.mrph_list()
                 if not mrph_list:
@@ -159,6 +160,9 @@ class PasExample:
                     string += '%N'
                 else:
                     assert arg.dep_type in ('intra', 'inter')
+                    # 文間後方照応はスキップ
+                    if arg.dep_type == 'inter' and arg.dmid > dmid:
+                        continue
                     string += '%O'
             # exophor
             else:

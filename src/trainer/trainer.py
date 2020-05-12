@@ -18,10 +18,10 @@ class Trainer(BaseTrainer):
     Note:
         Inherited from BaseTrainer.
     """
-    def __init__(self, model, loss, metrics, optimizer, config,
+    def __init__(self, model, metrics, optimizer, config,
                  data_loader, valid_kwdlc_data_loader, valid_kc_data_loader, valid_commonsense_data_loader,
                  lr_scheduler=None):
-        super().__init__(model, loss, metrics, optimizer, config)
+        super().__init__(model, metrics, optimizer, config)
         self.config = config
         self.data_loader = data_loader
         self.valid_kwdlc_data_loader = valid_kwdlc_data_loader
@@ -47,19 +47,20 @@ class Trainer(BaseTrainer):
 
         total_loss = 0
         for batch_idx, batch in enumerate(self.data_loader):
+            # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
             batch = tuple(t.to(self.device) for t in batch)
-            input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
             self.optimizer.zero_grad()
-            output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq) or tuple
-            loss = self.loss(output, target, deps, task)
+            loss, *_ = self.model(*batch)
+            if len(loss.size()) > 0:
+                loss = loss.mean()
             loss.backward()
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
-            self.writer.add_scalar('lr', self.lr_scheduler.get_lr()[0])
+            self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
             self.writer.add_scalar('loss', loss.item())
-            total_loss += loss.item() * input_ids.size(0)
+            total_loss += loss.item() * batch[0].size(0)
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
@@ -104,27 +105,25 @@ class Trainer(BaseTrainer):
         contingency_set: List[int] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
+                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
                 # (b, seq, case, seq) or tuple
-                output = self.model(input_ids, input_mask, segment_ids, ng_token_mask, deps)
-                if self.config['arch']['type'] == 'MultitaskDepModel':
-                    scores = output[0]  # (b, seq, case, seq)
-                elif re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
-                    scores = output[-1]  # (b, seq, case, seq)
+                loss, *output = self.model(*batch)
+                if len(loss.size()) > 0:
+                    loss = loss.mean()
+                if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+                    pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
-                    scores = output[0]  # (b, seq, case, seq)
+                    pas_scores = output[0]  # (b, seq, case, seq)
                     contingency_set += output[1].gt(0.5).int().tolist()
                 else:
-                    scores = output  # (b, seq, case, seq)
+                    pas_scores = output[0]  # (b, seq, case, seq)
 
                 if label in ('kwdlc', 'kc'):
-                    arguments_set += torch.argmax(scores, dim=3).tolist()  # (b, seq, case)
+                    arguments_set += torch.argmax(pas_scores, dim=3).tolist()  # (b, seq, case)
 
-                # computing loss, metrics on valid set
-                loss = self.loss(output, target, deps, task)
-                total_loss += loss.item() * input_ids.size(0)
+                total_loss += loss.item() * pas_scores.size(0)
 
                 self.writer.set_step((epoch - 1) * len(data_loader) + batch_idx, 'valid')
                 self.writer.add_scalar(f'loss_{label}', loss.item())

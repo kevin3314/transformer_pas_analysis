@@ -26,11 +26,11 @@ PAS analysis process is as follows:
 
 ## Requirements
 
-- Python 3.6.5
-- PyTorch 1.3.1
-- Transformers 2.1.1
+- Python 3.7
+- PyTorch 1.4.0
+- Transformers 2.8.0
 - pyknp 0.4.1
-<!-- - kyoto-reader 0.0.1 -->
+- kyoto-reader 1.0.0
 
 ## Quick Start
 
@@ -131,7 +131,7 @@ python src/preprocess.py \
 --kwdlc /somewhere/kwdlc \
 --kc /somewhere/kc \
 --out /somewhere/dataset \
---bert-model <path/to/pre-traind/BERT/model/directory>
+--bert large-wwm
 ```
 
 Don't care if many "sentence not found" messages are shown when processing kc.
@@ -144,12 +144,12 @@ The resultant files will be located at `config/`.
 
 ```zsh
 python src/configure.py \
--c config \
--d <path-to-dataset-directory> \
+-c <path-to-config-directory> \
+-d /somewhere/dataset \
 -e <num-epochs> \
 -b <batch-size> \
 --model <model-name> \
---corpus kwdlc
+--corpus all
 ```
 
 example:

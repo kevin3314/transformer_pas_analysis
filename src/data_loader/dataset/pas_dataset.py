@@ -75,7 +75,8 @@ class PASDataset(Dataset):
                                    exophors=exophors,
                                    coreference=coreference,
                                    kc=kc,
-                                   eventive_noun=eventive_noun)
+                                   eventive_noun=eventive_noun,
+                                   dataset_config=dataset_config)
             feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:
                 continue
@@ -157,10 +158,15 @@ class PASDataset(Dataset):
             deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
             deps[-1] += [0] * (max_seq_length - len(tok_to_orig_index))
 
-            arg_candidates = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]] + \
-                             [self.special_to_index[special] for special in (self.target_exophors + ['NULL'])]
+            # arguments が空のもの (助詞など) には arg_candidates を設定しない
+            cases = list(example.arguments_set[orig_index].keys())
+            if any(args for args, case in zip(arguments, cases) if case != '='):
+                arg_candidates = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]] + \
+                                 [self.special_to_index[special] for special in (self.target_exophors + ['NULL'])]
+            else:
+                arg_candidates = []
             arg_candidates_set.append(arg_candidates)
-            if self.coreference:
+            if self.coreference and any(args for args, case in zip(arguments, cases) if case == '='):
                 ment_candidates = [orig_to_tok_index[dmid] for dmid in example.ment_candidates_set[orig_index]] + \
                                   [self.special_to_index[special] for special in (self.target_exophors + ['NA'])]
             else:
@@ -328,4 +334,4 @@ class PASDataset(Dataset):
         ng_token_mask = np.stack(stacks, axis=1)         # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
-        return input_ids, input_mask, segment_ids, arguments_ids, ng_token_mask, deps, task
+        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task

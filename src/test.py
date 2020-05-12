@@ -1,7 +1,7 @@
 import re
 import argparse
 from pathlib import Path
-from typing import List, Union, Tuple, Callable
+from typing import List, Tuple, Callable
 
 import torch
 import numpy as np
@@ -9,7 +9,6 @@ from sklearn.metrics import f1_score
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
-import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from utils.parse_config import ConfigParser
@@ -20,10 +19,9 @@ from base.base_model import BaseModel
 
 
 class Tester:
-    def __init__(self, model, loss, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                 target, logger, predict_overt):
+    def __init__(self, model, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+                 target, logger, predict_overt, confidence_threshold, result_suffix):
         self.model: BaseModel = model
-        self.loss: Callable = loss
         self.metrics: List[Callable] = metrics
         self.config = config
         self.kwdlc_data_loader = kwdlc_data_loader
@@ -32,11 +30,12 @@ class Tester:
         self.target: str = target
         self.logger = logger
         self.predict_overt: bool = predict_overt
+        self.threshold: float = confidence_threshold
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
         self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
             else list(config.save_dir.glob('**/model_best.pth'))
-        self.save_dir: Path = config.save_dir / f'eval_{target}'
+        self.save_dir: Path = config.save_dir / f'eval_{target}{result_suffix}'
         self.save_dir.mkdir(exist_ok=True)
         eventive_noun = (kwdlc_data_loader and config[f'{target}_kwdlc_dataset']['args']['eventive_noun']) or \
                         (kc_data_loader and config[f'{target}_kc_dataset']['args']['eventive_noun'])
@@ -54,31 +53,37 @@ class Tester:
 
     def _test(self, data_loader, label: str):
         log = {}
-        total_output = (np.array(0), np.array(0))
-        output2 = None
+        total_output = None
         total_loss = 0.0
         for checkpoint in self.checkpoints:
             model = self._prepare_model(checkpoint)
-            output, loss = self._test_epoch(model, data_loader)
-            total_output = tuple(t + o for t, o in zip(total_output, output))
+            loss, *output = self._test_epoch(model, data_loader)
+            total_output = tuple(t + o for t, o in zip(total_output, output)) if total_output is not None else output
             total_loss += loss
 
-        if re.match(r'(CaseInteractionModel2|Refinement|Duplicate)', self.config['arch']['type']):
-            output_base, output = total_output
-            arguments_sets_base = np.argmax(output_base, axis=3).tolist()
-            result_base = self._eval_pas(arguments_sets_base, data_loader, corpus=label, suffix='_base')
-            log.update({f'{self.target}_{label}_{k}_base': v for k, v in result_base.items()})
-        elif self.config['arch']['type'] == 'CommonsenseModel':
-            output, output2 = total_output  # (N, seq, case, seq), (N, 2)
+        if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+            *pre_outputs, output = total_output
+            for i, pre_output in enumerate(pre_outputs):
+                arguments_sets = np.argmax(pre_output, axis=3).tolist()
+                result = self._eval_pas(arguments_sets, data_loader, corpus=label, suffix=f'_{i}')
+                log.update({f'{self.target}_{label}_{k}_{i}': v for k, v in result.items()})
         else:
-            output = total_output[0]
+            output = total_output[0]  # (N, seq, case, seq)
 
         if label in ('kwdlc', 'kc'):
+            output = Tester._softmax(output, axis=3)
+            null_idx = data_loader.dataset.special_to_index['NULL']
+            if data_loader.dataset.coreference:
+                output[:, :, :-1, null_idx] += (output[:, :, :-1] < self.threshold).all(axis=3).astype(np.int) * 1024
+                na_idx = data_loader.dataset.special_to_index['NA']
+                output[:, :, -1, na_idx] += (output[:, :, -1] < self.threshold).all(axis=2).astype(np.int) * 1024
+            else:
+                output[:, :, :, null_idx] += (output < self.threshold).all(axis=3).astype(np.int) * 1024
             arguments_set = np.argmax(output, axis=3).tolist()
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
             assert self.config['arch']['type'] == 'CommonsenseModel'
-            contingency_set = (output2 > 0.5).astype(np.int)  # (N)
+            contingency_set = (total_output[1] > 0.5).astype(np.int)  # (N)
             result = self._eval_commonsense(contingency_set, data_loader)
         else:
             raise ValueError(f'unknown label: {label}')
@@ -86,6 +91,12 @@ class Tester:
         log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
 
         return log
+
+    @staticmethod
+    def _softmax(x: np.ndarray, axis: int):
+        """Compute softmax values for each sets of scores in x."""
+        e_x = np.exp(x - np.max(x))
+        return e_x / (e_x.sum(axis=axis, keepdims=True) + 1e-8)
 
     def _prepare_model(self, checkpoint: Path):
         # prepare model for testing
@@ -98,31 +109,22 @@ class Tester:
             model = torch.nn.DataParallel(model, device_ids=self.device_ids)
         return model
 
-    def _test_epoch(self, model, data_loader) -> Tuple[Union[tuple], float]:
+    def _test_epoch(self, model, data_loader) -> Tuple[float, ...]:
         total_loss = 0.0
-        outputs = []
-        outputs2 = []
+        outputs: List[Tuple[np.ndarray, ...]] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
+                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
                 batch = tuple(t.to(self.device) for t in batch)
-                input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = batch
 
-                output_ = model(input_ids, input_mask, segment_ids, ng_token_mask, deps)  # (b, seq, case, seq)
-                if isinstance(output_, tuple):
-                    output, output2 = output_
-                    outputs2.append(output2.cpu().numpy())
-                else:
-                    output = output_
-                outputs.append(output.cpu().numpy())
+                loss, *output = model(*batch)
+                if len(loss.size()) > 0:
+                    loss = loss.mean()
+                outputs.append(tuple(o.cpu().numpy() for o in output))
 
-                # computing loss on test set
-                loss = self.loss(output_, target, deps, task)
-                total_loss += loss.item() * input_ids.size(0)
-        avg_loss = total_loss / data_loader.n_samples
-        if outputs2:
-            return (np.concatenate(outputs, axis=0), np.concatenate(outputs2, axis=0)), avg_loss
-        else:
-            return (np.concatenate(outputs, axis=0), ), avg_loss
+                total_loss += loss.item() * output[0].size(0)
+        avg_loss: float = total_loss / data_loader.n_samples
+        return (avg_loss, *(np.concatenate(outs, axis=0) for outs in zip(*outputs)))
 
     def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
@@ -190,12 +192,11 @@ def main(config, args):
     model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
     logger.info(model)
 
-    # get function handles of loss and metrics
-    loss_fn = getattr(module_loss, config['loss'])
+    # get function handles of metrics
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, loss_fn, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                    args.target, logger, args.predict_overt)
+    tester = Tester(model, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
+                    args.target, logger, args.predict_overt, args.confidence_threshold, args.result_suffix)
 
     log = tester.test()
 
@@ -215,10 +216,14 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('-c', '--config', default=None, type=str,
                         help='config file path (default: None)')
-    parser.add_argument('--target', default='test', type=str, choices=['valid', 'test'],
+    parser.add_argument('-t', '--target', default='test', type=str, choices=['valid', 'test'],
                         help='evaluation target')
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
+    parser.add_argument('--confidence-threshold', default=0.0, type=float,
+                        help='threshold for argument existence [0, 1] (default: 0.0)')
+    parser.add_argument('--result-suffix', default='', type=str,
+                        help='custom evaluation result directory name')
     parser.add_help = True
 
     parsed_args = parser.parse_args()

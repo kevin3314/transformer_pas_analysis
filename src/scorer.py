@@ -563,22 +563,22 @@ def main():
                         help='path to directory where system output KWDLC files exist (default: None)')
     parser.add_argument('--gold-dir', default=None, type=str,
                         help='path to directory where gold KWDLC files exist (default: None)')
-    parser.add_argument('--result-html', default=None, type=str,
-                        help='path to html file which prediction result is exported (default: None)')
-    parser.add_argument('--result-csv', default=None, type=str,
-                        help='path to csv file which prediction result is exported (default: None)')
-    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
-                        help='Case strings. Separate by ","')
+    parser.add_argument('--coreference', action='store_true', default=False,
+                        help='evaluate coreference resolution')
     parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
                         help='Coreference strings. Separate by ","')
+    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
+                        help='Case strings. Separate by ","')
     parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
                         help='Special tokens. Separate by ",".')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
-    parser.add_argument('--coreference', action='store_true', default=False,
-                        help='evaluate coreference resolution')
     parser.add_argument('--pas-target', choices=['pred', 'noun', 'all'], default='pred',
                         help='PAS analysis evaluation target (pred: predicates, noun: eventive noun)')
+    parser.add_argument('--result-html', default=None, type=str,
+                        help='path to html file which prediction result is exported (default: None)')
+    parser.add_argument('--result-csv', default=None, type=str,
+                        help='path to csv file which prediction result is exported (default: None)')
     args = parser.parse_args()
 
     reader_gold = KyotoReader(
