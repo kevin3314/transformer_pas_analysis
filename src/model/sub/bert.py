@@ -317,9 +317,8 @@ class ConditionalBertSelfAttention(nn.Module):
         batch_size, seq_len, num_case, _ = prediction.size()
         device = prediction.device
 
-        zero_added = torch.cat([torch.full((batch_size, seq_len, 1, seq_len), 0.5, device=device),
-                                prediction.float()],
-                               dim=2)  # (b, seq, case+1, seq)
+        zero_added = torch.cat([torch.full((batch_size, seq_len, 1, seq_len), 0.5, device=device), prediction.float()],
+                               dim=2)  # (b, seq, 1+case, seq)
         half_index1 = zero_added.argmax(dim=2)  # (b, seq, seq)
         transposed_half_index1 = half_index1.transpose(1, 2)  # (b, seq, seq)
         half_index2 = (transposed_half_index1 + num_case) * transposed_half_index1.bool()
