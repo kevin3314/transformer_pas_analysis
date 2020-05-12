@@ -82,7 +82,7 @@ def main() -> None:
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         items = [model]
-        items += [str(args.refinement_iter)] if model == 'IterativeRefinementModel' else []
+        items += [args.refinement_iter] if model in ('IterativeRefinementModel', 'SoftIterativeRefinementModel') else []
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
         items += ['coref'] if args.coreference else []
         items += [''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)]
@@ -92,7 +92,7 @@ def main() -> None:
             items += ['largeref'] if args.refinement_bert in ('large', 'large-wwm') else []
             items += [f'reftype{args.refinement_type}']
         items += [args.additional_name] if args.additional_name is not None else []
-        name = '-'.join(items)
+        name = '-'.join(str(x) for x in items)
 
         num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
@@ -114,7 +114,7 @@ def main() -> None:
         if model in ('RefinementModel', 'RefinementModel2'):
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': dataset_config['bert_path']})
-        if model == 'IterativeRefinementModel':
+        if model in ('IterativeRefinementModel', 'SoftIterativeRefinementModel'):
             arch['args'].update({'num_iter': args.refinement_iter})
 
         dataset = {

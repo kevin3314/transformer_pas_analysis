@@ -103,7 +103,7 @@ class ConditionalBertEmbeddings(nn.Module):
 
     def forward(self,
                 input_ids: torch.Tensor,                        # (b, seq)
-                pas_prediction: torch.Tensor,                   # (b, seq, case, seq)
+                pre_output: torch.Tensor,                       # (b, seq, case, seq)
                 token_type_ids: Optional[torch.Tensor] = None,  # (b, seq)
                 position_ids: Optional[torch.Tensor] = None,    # (b, seq)
                 inputs_embeds: Optional[torch.Tensor] = None,   # (b, seq)
@@ -131,7 +131,7 @@ class ConditionalBertEmbeddings(nn.Module):
 
         # (b, seq, hid) -> (b, seq, case, hid)
         h_a2 = self.l_arg(inputs_embeds).view(batch_size, sequence_len, self.num_case, -1)
-        embeddings += torch.einsum('bjch,bicj->bih', h_a2, pas_prediction.float())  # (b, seq, hid)
+        embeddings += torch.einsum('bjch,bicj->bih', h_a2, pre_output.float())  # (b, seq, hid)
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -235,9 +235,9 @@ class ConditionalBertSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.rel_embeddings1 = kwargs['rel_embeddings1']
+        self.rel_embeddings1: nn.Embedding = kwargs['rel_embeddings1']
         self.LayerNorm = BertLayerNorm(self.attention_head_size, eps=config.layer_norm_eps)
-        self.rel_embeddings2 = kwargs['rel_embeddings2']
+        self.rel_embeddings2: nn.Embedding = kwargs['rel_embeddings2']
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -252,7 +252,7 @@ class ConditionalBertSelfAttention(nn.Module):
                 head_mask: torch.Tensor,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                pas_prediction: torch.Tensor,  # (b, seq, case, seq)
+                pre_output: torch.Tensor,  # (b, seq, case, seq)
                 ):
         mixed_query_layer = self.query(hidden_states)
 
@@ -271,18 +271,18 @@ class ConditionalBertSelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer)  # (b, heads, seq, hsize)
         value_layer = self.transpose_for_scores(mixed_value_layer)  # (b, heads, seq, hsize)
 
-        rel_index = self._get_relation_index(pas_prediction)  # (b, seq, seq)
+        rel_weights = self._get_relation_weights(pre_output)  # (b, seq, 1+case*2, seq)
         # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
-        rel_embeds1: torch.Tensor = self.rel_embeddings1(rel_index)\
+        rel_embeds1 = torch.einsum('cs,bicj->bijs', self.rel_embeddings1.weight, rel_weights) \
             .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
         # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
-        rel_embeds2: torch.Tensor = self.rel_embeddings2(rel_index)\
+        rel_embeds2 = torch.einsum('cs,bicj->bijs', self.rel_embeddings2.weight, rel_weights) \
             .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # (b, heads, seq, seq)
         # (b, heads, seq, seq)
-        rel_attention_scores = torch.sum(query_layer.unsqueeze(3) * self.LayerNorm(rel_embeds1), dim=4)
+        rel_attention_scores = torch.einsum('bhis,bhijs->bhij', query_layer, self.LayerNorm(rel_embeds1))
         attention_scores += rel_attention_scores  # (b, heads, seq, seq)
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)  # (b, heads, seq, seq)
         if attention_mask is not None:
@@ -301,7 +301,7 @@ class ConditionalBertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)  # (b, heads, seq, hsize)
-        rel_context_layer = torch.sum(attention_probs.unsqueeze(dim=4) * rel_embeds2, dim=3)  # (b, heads, seq, hsize)
+        rel_context_layer = torch.einsum('bhij,bhijs->bhis', attention_probs, rel_embeds2)  # (b, heads, seq, hsize)
         context_layer += rel_context_layer
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()  # (b, seq, heads, hsize)
@@ -312,18 +312,18 @@ class ConditionalBertSelfAttention(nn.Module):
         return outputs
 
     @staticmethod
-    def _get_relation_index(prediction: torch.Tensor,  # (b, seq, case, seq)
-                            ) -> torch.Tensor:  # (b, seq, seq)
-        batch_size, seq_len, num_case, _ = prediction.size()
-        device = prediction.device
+    def _get_relation_weights(pre_output: torch.Tensor,  # (b, seq, case, seq)
+                            ) -> torch.Tensor:  # (b, seq, case, seq)
+        batch_size, seq_len, num_case, _ = pre_output.size()
+        device = pre_output.device
 
-        zero_added = torch.cat([torch.full((batch_size, seq_len, 1, seq_len), 0.5, device=device), prediction.float()],
-                               dim=2)  # (b, seq, 1+case, seq)
-        half_index1 = zero_added.argmax(dim=2)  # (b, seq, seq)
-        transposed_half_index1 = half_index1.transpose(1, 2)  # (b, seq, seq)
-        half_index2 = (transposed_half_index1 + num_case) * transposed_half_index1.bool()
-        full_index = half_index1 + half_index2 * ~half_index1.bool()
-        return full_index
+        bi_prediction = torch.cat([
+            torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
+            pre_output,
+            pre_output.transpose(1, 3)
+            ], dim=2)  # (b, seq, 1+case*2, seq)
+        rel_weights = bi_prediction.softmax(dim=2)  # (b, seq, 1+case*2, seq)
+        return rel_weights
 
 
 class BertSelfOutput(nn.Module):
