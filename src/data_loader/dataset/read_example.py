@@ -15,11 +15,12 @@ def read_example(document: Document,
                  coreference: bool,
                  kc: bool,
                  eventive_noun: bool,
+                 dataset_config: dict,
                  ) -> 'PasExample':
     load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
     save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
     bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun)
+    example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun, dataset_config)
     cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
     if cache_path.exists() and load_cache:
         with cache_path.open('rb') as f:

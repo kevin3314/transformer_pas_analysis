@@ -75,7 +75,8 @@ class PASDataset(Dataset):
                                    exophors=exophors,
                                    coreference=coreference,
                                    kc=kc,
-                                   eventive_noun=eventive_noun)
+                                   eventive_noun=eventive_noun,
+                                   dataset_config=dataset_config)
             feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:
                 continue
