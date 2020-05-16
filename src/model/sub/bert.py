@@ -252,7 +252,7 @@ class ConditionalBertSelfAttention(nn.Module):
                 head_mask: torch.Tensor,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                pre_output: torch.Tensor,  # (b, seq, case, seq)
+                rel_weights: torch.Tensor,  # (b, seq, 1+case*2, seq)
                 ):
         mixed_query_layer = self.query(hidden_states)
 
@@ -271,7 +271,6 @@ class ConditionalBertSelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer)  # (b, heads, seq, hsize)
         value_layer = self.transpose_for_scores(mixed_value_layer)  # (b, heads, seq, hsize)
 
-        rel_weights = self._get_relation_weights(pre_output)  # (b, seq, 1+case*2, seq)
         # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
         rel_embeds1 = torch.einsum('cs,bicj->bijs', self.rel_embeddings1.weight, rel_weights) \
             .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
@@ -310,20 +309,6 @@ class ConditionalBertSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
         return outputs
-
-    @staticmethod
-    def _get_relation_weights(pre_output: torch.Tensor,  # (b, seq, case, seq)
-                            ) -> torch.Tensor:  # (b, seq, case, seq)
-        batch_size, seq_len, num_case, _ = pre_output.size()
-        device = pre_output.device
-
-        bi_prediction = torch.cat([
-            torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
-            pre_output,
-            pre_output.transpose(1, 3)
-            ], dim=2)  # (b, seq, 1+case*2, seq)
-        rel_weights = bi_prediction.softmax(dim=2)  # (b, seq, 1+case*2, seq)
-        return rel_weights
 
 
 class BertSelfOutput(nn.Module):

@@ -73,6 +73,10 @@ def main() -> None:
                         help='analyze eventive noun as predicate')
     parser.add_argument('--refinement-iter', '--riter', type=int, default=3,
                         help='number of refinement iteration (IterativeRefinementModel)')
+    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default='atn',
+                        help='how to insert pre-output to model (IterativeRefinementModel)')
+    parser.add_argument('--output-aggr', choices=['hard', 'soft', 'confidence'], default='hard',
+                        help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
     args = parser.parse_args()
 
     data_root: Path = args.dataset.resolve()
@@ -82,16 +86,24 @@ def main() -> None:
 
     for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
         items = [model]
-        items += [args.refinement_iter] if model in ('IterativeRefinementModel', 'SoftIterativeRefinementModel') else []
+        if 'IterativeRefinement' in model:
+            items.append(args.refinement_iter)
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
-        items += ['coref'] if args.coreference else []
-        items += [''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)]
-        items += ['nocase'] if 'ノ' in cases else []
-        items += ['noun'] if args.eventive_noun else []
+        if args.coreference:
+            items.append('coref')
+        items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
+        if 'ノ' in cases:
+            items.append('nocase')
+        if args.eventive_noun:
+            items.append('noun')
         if model in ('RefinementModel', 'RefinementModel2'):
-            items += ['largeref'] if args.refinement_bert in ('large', 'large-wwm') else []
-            items += [f'reftype{args.refinement_type}']
-        items += [args.additional_name] if args.additional_name is not None else []
+            items.append(f'{args.refinement_bert}{args.refinement_type}')
+        if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
+            items.append(args.conditional_model)
+            if args.conditional_model == 'atn':
+                items.append(args.output_aggr)
+        if args.additional_name:
+            items.append(args.additional_name)
         name = '-'.join(str(x) for x in items)
 
         num_train_examples = 0
@@ -114,8 +126,12 @@ def main() -> None:
         if model in ('RefinementModel', 'RefinementModel2'):
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': dataset_config['bert_path']})
-        if model in ('IterativeRefinementModel', 'SoftIterativeRefinementModel'):
+        if 'IterativeRefinement' in model:
             arch['args'].update({'num_iter': args.refinement_iter})
+        if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
+            arch['args'].update({'conditional_model': args.conditional_model})
+            if args.conditional_model == 'atn':
+                arch['args'].update({'output_aggr': args.output_aggr})
 
         dataset = {
             'type': 'PASDataset',
