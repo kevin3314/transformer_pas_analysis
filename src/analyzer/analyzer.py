@@ -5,6 +5,7 @@ from typing import Dict, Tuple, Union, Optional
 import configparser
 from pathlib import Path
 from datetime import datetime
+import shutil
 
 import jaconv
 from pyknp import Juman, KNP
@@ -26,8 +27,8 @@ class Analyzer:
         cfg = configparser.ConfigParser()
         here = Path(__file__).parent
         cfg.read(here / 'config.ini')
-        self.juman = cfg.get('default', 'juman_command')
-        self.knp = cfg.get('default', 'knp_command')
+        self.juman = cfg.get('default', 'juman_command') if cfg.get('default', 'juman_command') else shutil.which('jumanpp')
+        self.knp = cfg.get('default', 'knp_command') if cfg.get('default', 'knp_command') else shutil.which('knp')
         self.knp_host = cfg.get('default', 'knp_host')
         self.knp_port = cfg.getint('default', 'knp_port')
         self.juman_option = cfg.get('default', 'juman_option')
