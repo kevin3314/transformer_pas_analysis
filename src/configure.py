@@ -77,6 +77,8 @@ def main() -> None:
                         help='how to insert pre-output to model (IterativeRefinementModel)')
     parser.add_argument('--output-aggr', choices=['hard', 'soft', 'confidence'], default='hard',
                         help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='debug mode')
     args = parser.parse_args()
 
     data_root: Path = args.dataset.resolve()
@@ -102,6 +104,8 @@ def main() -> None:
             items.append(args.conditional_model)
             if args.conditional_model == 'atn':
                 items.append(args.output_aggr)
+        if args.debug:
+            items.append('debug')
         if args.additional_name:
             items.append(args.additional_name)
         name = '-'.join(str(x) for x in items)
@@ -209,7 +213,7 @@ def main() -> None:
         }
 
         train_data_loader = copy.deepcopy(data_loader)
-        train_data_loader['args']['shuffle'] = True
+        train_data_loader['args']['shuffle'] = (not args.debug)
 
         valid_data_loader = copy.deepcopy(data_loader)
         valid_data_loader['args']['shuffle'] = False
