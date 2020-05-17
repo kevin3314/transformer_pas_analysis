@@ -534,9 +534,10 @@ class IterativeRefinementModel(BaseModel):
                 *_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
         for _ in range(self.num_iter):
             # (b, seq, case, seq)
-            pre_output = outputs[-1].detach() if outputs else torch.full_like(target, -1024.0, dtype=torch.float)
+            pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
             loss, output = self.conditional_model(input_ids=input_ids,
                                                   attention_mask=attention_mask,
                                                   segment_ids=segment_ids,
