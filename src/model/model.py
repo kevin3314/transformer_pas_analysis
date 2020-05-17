@@ -506,7 +506,7 @@ class HalfGoldConditionalModel(BaseModel):
                                               segment_ids=segment_ids,
                                               ng_token_mask=ng_token_mask,
                                               target=target,
-                                              pre_output=half_gold)
+                                              pre_output=(~half_gold).float() * -1024.0)
 
         return loss, output
 
