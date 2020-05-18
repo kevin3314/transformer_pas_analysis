@@ -12,16 +12,18 @@ import transformers.optimization as module_optim
 
 
 class Config:
-    def __init__(self, **kwargs) -> None:
-        self.config = {}
-        for key, value in kwargs.items():
-            self.config.update({key: value})
-
-    def dump(self, config_dir: Path) -> None:
+    def __init__(self, config_dir: Path) -> None:
         config_dir.mkdir(exist_ok=True)
-        config_path = config_dir / f'{self.config["name"]}.json'
+        self.config_dir = config_dir
+        self.log = []
+
+    def write(self, **config) -> None:
+        config_path = self.config_dir / f'{config["name"]}.json'
+        if config_path in self.log:
+            return
         with config_path.open('w') as f:
-            json.dump(self.config, f, indent=2, ensure_ascii=False)
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        self.log.append(config_path)
         print(config_path)
 
 
@@ -31,13 +33,13 @@ def main() -> None:
     all_lr_schedulers = [m[0][4:] for m in inspect.getmembers(module_optim, inspect.isfunction)
                          if m[1].__module__ == module_optim.__name__ and m[0].startswith('get_')]
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=(lambda p: Path(p)),
+    parser.add_argument('-c', '--config', type=(lambda p: Path(p)), default='config',
                         help='path to output directory')
     parser.add_argument('-d', '--dataset', type=(lambda p: Path(p)),
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
-    parser.add_argument('-e', '--epoch', type=int, default=4, nargs='*',
+    parser.add_argument('-e', '--epoch', type=int, default=[4], nargs='*',
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
@@ -65,31 +67,34 @@ def main() -> None:
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
-    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
+    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['all'], nargs='*',
                         help='corpus to use in training')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
                         help='dependency type to train')
     parser.add_argument('--eventive-noun', '--noun', action='store_true', default=False,
                         help='analyze eventive noun as predicate')
-    parser.add_argument('--refinement-iter', '--riter', type=int, default=3,
+    parser.add_argument('--refinement-iter', '--riter', type=int, default=[3], nargs='*',
                         help='number of refinement iteration (IterativeRefinementModel)')
-    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default='atn',
+    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default=['atn'], nargs='*',
                         help='how to insert pre-output to model (IterativeRefinementModel)')
-    parser.add_argument('--output-aggr', choices=['hard', 'soft', 'confidence'], default='hard',
+    parser.add_argument('--output-aggr', choices=['hard', 'soft', 'confidence'], default=['hard'], nargs='*',
                         help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='debug mode')
     args = parser.parse_args()
 
+    config = Config(args.config)
     data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
     cases: List[str] = args.case_string.split(',') if args.case_string else []
 
-    for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
+    for model, corpus, n_epoch, conditional_model, output_aggr, refinement_iter in \
+            itertools.product(args.model, args.corpus, args.epoch, args.conditional_model, args.output_aggr,
+                              args.refinement_iter):
         items = [model]
         if 'IterativeRefinement' in model:
-            items.append(args.refinement_iter)
+            items.append(refinement_iter)
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
         if args.coreference:
             items.append('coref')
@@ -101,9 +106,9 @@ def main() -> None:
         if model in ('RefinementModel', 'RefinementModel2'):
             items.append(f'{args.refinement_bert}{args.refinement_type}')
         if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
-            items.append(args.conditional_model)
-            if args.conditional_model == 'atn':
-                items.append(args.output_aggr)
+            items.append(conditional_model)
+            if conditional_model == 'atn':
+                items.append(output_aggr)
         if args.debug:
             items.append('debug')
         if args.additional_name:
@@ -131,11 +136,11 @@ def main() -> None:
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': dataset_config['bert_path']})
         if 'IterativeRefinement' in model:
-            arch['args'].update({'num_iter': args.refinement_iter})
+            arch['args'].update({'num_iter': refinement_iter})
         if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
-            arch['args'].update({'conditional_model': args.conditional_model})
-            if args.conditional_model == 'atn':
-                arch['args'].update({'output_aggr': args.output_aggr})
+            arch['args'].update({'conditional_model': conditional_model})
+            if conditional_model == 'atn':
+                arch['args'].update({'output_aggr': output_aggr})
 
         dataset = {
             'type': 'PASDataset',
@@ -304,7 +309,7 @@ def main() -> None:
             'tensorboard': True,
         }
 
-        config = Config(
+        config.write(
             name=name,
             n_gpu=args.gpus,
             arch=arch,
@@ -325,7 +330,6 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(args.config)
 
 
 if __name__ == '__main__':
