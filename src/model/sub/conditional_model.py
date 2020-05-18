@@ -230,3 +230,31 @@ class AttentionConditionalModel(BaseModel):
         ], dim=2)  # (b, seq, 1+case*2, seq)
         rel_weights = bi_prediction.softmax(dim=2)  # (b, seq, 1+case*2, seq)
         return rel_weights
+
+    @staticmethod
+    def _confidence_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
+                                mask: torch.Tensor,  # (b, seq, case, seq)
+                                ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)
+        """前段の予測結果を confidence で重み付けして与える"""
+        batch_size, seq_len, num_case, _ = pre_output.size()
+        device = pre_output.device
+
+        eye = torch.eye(seq_len, dtype=torch.bool, device=device)  # (seq)
+        hard_output = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
+        confidence = pre_output.softmax(dim=3)  # (b, seq, case, seq)
+        weighted_hard_output = hard_output * confidence
+
+        bi_weighted_hard_output = torch.cat([
+            weighted_hard_output,
+            weighted_hard_output.transpose(1, 3)
+        ], dim=2)  # (b, seq, case*2, seq)
+
+        bi_weighted_hard_output_sum = bi_weighted_hard_output.sum(dim=2, keepdim=True)  # (b, seq, 1, seq)
+        bi_weighted_hard_output_sum[bi_weighted_hard_output_sum.gt(1)] = 1  # clipping
+
+        rel_weights = torch.cat([
+            torch.tensor(1.0) - bi_weighted_hard_output_sum,
+            bi_weighted_hard_output,
+        ], dim=2)
+
+        return rel_weights
