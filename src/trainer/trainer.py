@@ -10,6 +10,7 @@ from sklearn.metrics import f1_score
 from base import BaseTrainer
 from writer.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
+import data_loader.data_loaders as module_loader
 
 
 class Trainer(BaseTrainer):
@@ -18,17 +19,26 @@ class Trainer(BaseTrainer):
     Note:
         Inherited from BaseTrainer.
     """
-    def __init__(self, model, metrics, optimizer, config,
-                 data_loader, valid_kwdlc_data_loader, valid_kc_data_loader, valid_commonsense_data_loader,
+    def __init__(self, model, metrics, optimizer, config, train_dataset,
+                 valid_kwdlc_dataset, valid_kc_dataset, valid_commonsense_dataset,
                  lr_scheduler=None):
-        super().__init__(model, metrics, optimizer, config)
+        super().__init__(model, metrics, optimizer, config, train_dataset)
         self.config = config
-        self.data_loader = data_loader
-        self.valid_kwdlc_data_loader = valid_kwdlc_data_loader
-        self.valid_kc_data_loader = valid_kc_data_loader
-        self.valid_commonsense_data_loader = valid_commonsense_data_loader
+        self.config['valid_data_loader']['args']['batch_size'] = self.data_loader.batch_size
+        self.valid_kwdlc_data_loader = None
+        self.valid_kc_data_loader = None
+        self.valid_commonsense_data_loader = None
+        if valid_kwdlc_dataset is not None:
+            self.config['valid_data_loader']['args']['batch_size'] = self.data_loader.batch_size
+            self.valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kwdlc_dataset)
+        if valid_kc_dataset is not None:
+            self.valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, valid_kc_dataset)
+        if valid_commonsense_dataset is not None:
+            self.valid_commonsense_data_loader = config.init_obj('valid_data_loader', module_loader,
+                                                                 valid_commonsense_dataset)
+
         self.lr_scheduler = lr_scheduler
-        self.log_step = math.ceil(data_loader.n_samples / np.sqrt(data_loader.batch_size) / 200)
+        self.log_step = math.ceil(self.data_loader.n_samples / np.sqrt(self.data_loader.batch_size) / 200)
 
     def _train_epoch(self, epoch):
         """
@@ -44,35 +54,44 @@ class Trainer(BaseTrainer):
             The metrics in log must have the key 'metrics'.
         """
         self.model.train()
+        self.optimizer.zero_grad()
 
         total_loss = 0
-        for batch_idx, batch in enumerate(self.data_loader):
+        for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
             batch = tuple(t.to(self.device) for t in batch)
 
-            self.optimizer.zero_grad()
             loss, *_ = self.model(*batch)
-            if len(loss.size()) > 0:
-                loss = loss.mean()
-            loss.backward()
-            self.optimizer.step()
 
-            self.writer.set_step((epoch - 1) * len(self.data_loader) + batch_idx)
+            if len(loss.size()) > 0:
+                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
+            self.writer.set_step((epoch - 1) * len(self.data_loader) + step)
             self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
             self.writer.add_scalar('loss', loss.item())
             total_loss += loss.item() * batch[0].size(0)
 
-            if batch_idx % self.log_step == 0:
+            if step % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
                     epoch,
-                    batch_idx * self.data_loader.batch_size,
+                    step * self.data_loader.batch_size,
                     self.data_loader.n_samples,
-                    100.0 * batch_idx / len(self.data_loader),
+                    100.0 * step / len(self.data_loader),
                     datetime.datetime.now().strftime('%H:%M:%S'),
                     loss.item()))
 
-            if self.lr_scheduler is not None:
-                self.lr_scheduler.step()
+            if step < (len(self.data_loader) // self.gradient_accumulation_steps) * self.gradient_accumulation_steps:
+                gradient_accumulation_steps = self.gradient_accumulation_steps
+            else:
+                gradient_accumulation_steps = len(self.data_loader) % self.gradient_accumulation_steps
+            if gradient_accumulation_steps > 1:
+                loss = loss / gradient_accumulation_steps
+            loss.backward()
+            if (step + 1) % gradient_accumulation_steps == 0:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step()
 
         log = {
             'loss': total_loss / self.data_loader.n_samples,
@@ -104,12 +123,12 @@ class Trainer(BaseTrainer):
         arguments_set: List[List[List[int]]] = []
         contingency_set: List[int] = []
         with torch.no_grad():
-            for batch_idx, batch in enumerate(data_loader):
+            for step, batch in enumerate(data_loader):
                 # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
                 batch = tuple(t.to(self.device) for t in batch)
 
-                # (b, seq, case, seq) or tuple
                 loss, *output = self.model(*batch)
+
                 if len(loss.size()) > 0:
                     loss = loss.mean()
                 if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
@@ -125,14 +144,14 @@ class Trainer(BaseTrainer):
 
                 total_loss += loss.item() * pas_scores.size(0)
 
-                self.writer.set_step((epoch - 1) * len(data_loader) + batch_idx, 'valid')
+                self.writer.set_step((epoch - 1) * len(data_loader) + step, 'valid')
                 self.writer.add_scalar(f'loss_{label}', loss.item())
 
-                if batch_idx % self.log_step == 0:
+                if step % self.log_step == 0:
                     self.logger.debug('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
-                        batch_idx * data_loader.batch_size,
+                        step * data_loader.batch_size,
                         data_loader.n_samples,
-                        100.0 * batch_idx / len(data_loader),
+                        100.0 * step / len(data_loader),
                         datetime.datetime.now().strftime('%H:%M:%S')))
 
         log = {f'loss': total_loss / data_loader.n_samples}

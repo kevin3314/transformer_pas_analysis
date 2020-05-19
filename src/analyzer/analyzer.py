@@ -105,6 +105,7 @@ class Analyzer:
                 batch = tuple(t.to(self.device) for t in batch)
 
                 _, *output = self.model(*batch)
+
                 if self.config['arch']['type'] == 'MultitaskDepModel':
                     pas_scores = output[0]  # (b, seq, case, seq)
                 elif re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):

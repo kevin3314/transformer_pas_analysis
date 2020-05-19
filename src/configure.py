@@ -43,6 +43,8 @@ def main() -> None:
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='number of batch size')
+    parser.add_argument('--eval-batch-size', type=int, default=None,
+                        help='number of batch size for evaluation (default: same as that of training)')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
                         help='Perform coreference resolution.')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
@@ -210,7 +212,7 @@ def main() -> None:
         data_loader = {
             'type': 'PASDataLoader',
             'args': {
-                'batch_size': args.batch_size,
+                'batch_size': None,
                 'shuffle': None,
                 'validation_split': 0.0,
                 'num_workers': 2,
@@ -221,9 +223,11 @@ def main() -> None:
         train_data_loader['args']['shuffle'] = (not args.debug)
 
         valid_data_loader = copy.deepcopy(data_loader)
+        valid_data_loader['args']['batch_size'] = args.eval_batch_size if args.eval_batch_size else args.batch_size
         valid_data_loader['args']['shuffle'] = False
 
         test_data_loader = copy.deepcopy(data_loader)
+        test_data_loader['args']['batch_size'] = args.eval_batch_size if args.eval_batch_size else args.batch_size
         test_data_loader['args']['shuffle'] = False
 
         optimizer = {
@@ -301,6 +305,7 @@ def main() -> None:
             mnt_metric = 'val_kc_' + mnt_metric
         trainer = {
             'epochs': n_epoch,
+            'batch_size': args.batch_size,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,
