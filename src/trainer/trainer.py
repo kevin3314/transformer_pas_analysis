@@ -60,16 +60,18 @@ class Trainer(BaseTrainer):
         for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
             batch = tuple(t.to(self.device) for t in batch)
+            current_step = epoch * len(self.data_loader) + step
 
-            loss, *_ = self.model(*batch)
+            loss, *_ = self.model(*batch, progress=current_step / self.total_step)
 
             if len(loss.size()) > 0:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
+            total_loss += loss.item() * batch[0].size(0)
 
             self.writer.set_step((epoch - 1) * len(self.data_loader) + step)
             self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
             self.writer.add_scalar('loss', loss.item())
-            total_loss += loss.item() * batch[0].size(0)
+            self.writer.add_scalar('progress', current_step / self.total_step)
 
             if step % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(

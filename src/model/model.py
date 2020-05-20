@@ -46,7 +46,8 @@ class BaselineModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -96,7 +97,8 @@ class BaselineModelOld(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -144,7 +146,8 @@ class RefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
         _, base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, target)
@@ -184,7 +187,8 @@ class RefinementModel2(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         mask = get_mask(attention_mask, ng_token_mask)
         # (b, seq, case, seq)
@@ -218,7 +222,8 @@ class DuplicateModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
         _, base_logits = self.baseline_model1(input_ids, attention_mask, segment_ids, ng_token_mask, target)
@@ -260,7 +265,8 @@ class GoldDepModel(BaseModel):
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -322,7 +328,8 @@ class MultitaskDepModel(BaseModel):
                 ng_token_mask: torch.Tensor,   # (b, seq, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -391,7 +398,8 @@ class CaseInteractionModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -457,6 +465,8 @@ class CommonsenseModel(BaseModel):
                 target: torch.Tensor,          # (b, seq, case, seq)
                 _,
                 task: torch.Tensor,            # (b)
+                *args,
+                **kwargs
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -498,7 +508,8 @@ class HalfGoldConditionalModel(BaseModel):
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 pre_output: torch.Tensor,      # (b, seq, case, seq)
-                *_
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         half_gold = target.bool() & torch.rand_like(target, dtype=torch.float).lt(0.5)  # (b, seq, case, seq)
         loss, output = self.conditional_model(input_ids=input_ids,
@@ -531,7 +542,9 @@ class IterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_
+                progress: float,               # learning progress (0 ~ 1)
+                *_,
+                **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
         mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
@@ -544,6 +557,55 @@ class IterativeRefinementModel(BaseModel):
                                                   ng_token_mask=ng_token_mask,
                                                   target=target,
                                                   pre_output=pre_output)
+            outputs.append(output)
+            losses.append(loss)
+        loss = torch.stack(losses).mean()
+
+        return (loss, *outputs)
+
+
+class AnnealingIterativeRefinementModel(BaseModel):
+    """学習初期は前回の予測としてでたらめなものが入力され，うまく refinement 機構が学習されないと考えられる．
+    そのため，初期は正解を与え，学習が進むにつれ自身の出力を与えるようにする"""
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        conditional_model = kwargs.pop('conditional_model')
+        self.num_iter = kwargs.pop('num_iter')
+        if conditional_model == 'emb':
+            self.conditional_model = EmbeddingConditionalModel(**kwargs)
+        elif conditional_model == 'atn':
+            self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'out':
+            self.conditional_model = OutputConditionalModel(**kwargs)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *args,
+                **kwargs,
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        outputs, losses = [], []
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        for _ in range(self.num_iter):
+            # (b, seq, 1, 1)
+            if self.training:
+                progress = kwargs['progress']  # learning progress (0 ~ 1)
+                gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(progress).view(*input_ids.size(), 1, 1)
+            else:
+                gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1, 1)
+            # (b, seq, case, seq)
+            pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
+            annealed_pre_output = (~target * -1024.0) * ~gold_mask + pre_output * gold_mask
+            loss, output = self.conditional_model(input_ids=input_ids,
+                                                  attention_mask=attention_mask,
+                                                  segment_ids=segment_ids,
+                                                  ng_token_mask=ng_token_mask,
+                                                  target=target,
+                                                  pre_output=annealed_pre_output)
             outputs.append(output)
             losses.append(loss)
         loss = torch.stack(losses).mean()

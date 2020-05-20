@@ -209,12 +209,12 @@ class AttentionConditionalModel(BaseModel):
         device = pre_output.device
 
         eye = torch.eye(seq_len, dtype=torch.bool, device=device)  # (seq)
-        hard_pre_output = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
-        pre_output = (~hard_pre_output).float() * -1024.0  # (b, seq, case, seq)
+        pre_prediction = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
+        neg_pre_prediction = (~pre_prediction).float() * -1024.0  # (b, seq, case, seq)
         bi_prediction = torch.cat([
             torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
-            pre_output,
-            pre_output.transpose(1, 3)
+            neg_pre_prediction,
+            neg_pre_prediction.transpose(1, 3)
             ], dim=2)  # (b, seq, 1+case*2, seq)
         rel_weights = bi_prediction.softmax(dim=2)  # (b, seq, 1+case*2, seq)
         return rel_weights

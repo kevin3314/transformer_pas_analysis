@@ -17,6 +17,8 @@ class BaseTrainer:
     def __init__(self, model, metrics, optimizer, config, train_dataset):
         self.config = config
         cfg_trainer: dict = config['trainer']
+        self.epochs: int = cfg_trainer['epochs']
+        self.save_start_epoch: int = cfg_trainer.get('save_start_epoch', 1)
         self.logger = config.get_logger('trainer', cfg_trainer['verbosity'])
 
         # setup GPU device if available, move model into configured device
@@ -38,15 +40,14 @@ class BaseTrainer:
             self.config['train_data_loader']['args']['batch_size'] = batches_per_backward
             self.batches_per_device = math.ceil(batches_per_backward / self.num_devices)
         self.data_loader = self.config.init_obj('train_data_loader', module_loader, train_dataset)
+        self.total_step = len(self.data_loader) * self.epochs
+        self.total_optimization_step = math.ceil(len(self.data_loader) / self.gradient_accumulation_steps) * self.epochs
 
         self.metrics = metrics
         self.optimizer = optimizer
 
-        self.epochs: int = cfg_trainer['epochs']
-        self.save_start_epoch: int = cfg_trainer.get('save_start_epoch', 1)
-        self.monitor: str = cfg_trainer.get('monitor', 'off')
-
         # configuration to monitor model performance and save best
+        self.monitor: str = cfg_trainer.get('monitor', 'off')
         if self.monitor == 'off':
             self.mnt_mode = 'off'
             self.mnt_best = 0
@@ -86,8 +87,7 @@ class BaseTrainer:
         self.logger.info("  Instantaneous batch size per device = %d", self.batches_per_device)
         self.logger.info("  Total train batch size (w. parallel & accumulation) = %d", self.data_loader.batch_size)
         self.logger.info("  Gradient Accumulation steps = %d", self.gradient_accumulation_steps)
-        self.logger.info("  Total optimization steps = %d",
-                         math.ceil(len(self.data_loader) / self.gradient_accumulation_steps) * self.epochs)
+        self.logger.info("  Total optimization steps = %d", self.total_optimization_step)
         not_improved_count = 0
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)

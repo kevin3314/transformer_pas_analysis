@@ -7,7 +7,6 @@ import torch
 from torch.utils.data import ConcatDataset
 import numpy as np
 
-import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
 import model.metric as module_metric
 import model.model as module_arch
