@@ -41,8 +41,10 @@ def main() -> None:
                         help='model name')
     parser.add_argument('-e', '--epoch', type=int, default=[4], nargs='*',
                         help='number of training epochs')
-    parser.add_argument('-b', '--batch-size', type=int, default=32,
+    parser.add_argument('-b', '--batch-size', type=int, default=16,
                         help='number of batch size')
+    parser.add_argument('--max-bpg', type=int, default=None,
+                        help='max batch size per GPU')
     parser.add_argument('--eval-batch-size', type=int, default=None,
                         help='number of batch size for evaluation (default: same as that of training)')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
@@ -306,6 +308,7 @@ def main() -> None:
         trainer = {
             'epochs': n_epoch,
             'batch_size': args.batch_size,
+            'max_bpg': args.max_bpg if args.max_bpg is not None else args.batch_size,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,

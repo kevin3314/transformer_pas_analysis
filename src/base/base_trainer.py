@@ -26,8 +26,7 @@ class BaseTrainer:
         if self.num_devices > 1:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
 
-        # max_bpg = self.config['trainer']['max_bpg']
-        max_bpg = 100
+        max_bpg = self.config['trainer']['max_bpg']
         batches_per_backward = cfg_trainer['batch_size']
         if math.ceil(batches_per_backward / self.num_devices) > max_bpg:
             self.gradient_accumulation_steps = math.ceil(batches_per_backward / (max_bpg * self.num_devices))
