@@ -45,6 +45,8 @@ class OutputConditionalModel(BaseModel):
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
+        eye = torch.eye(sequence_len, dtype=torch.bool, device=input_ids.device)  # (seq)
+        pre_prediction = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
                                        attention_mask=attention_mask,
@@ -59,7 +61,7 @@ class OutputConditionalModel(BaseModel):
         # (b, seq, hid) -> (b, seq, case, hid)
         h_a2 = self.l_arg2(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, -1)
         # (b, seq, hid) -> (b, seq, 1, 1, hid)
-        h_pa += torch.einsum('bjch,bicj->bih', h_a2, pre_output).view(batch_size, sequence_len, 1, 1, -1)
+        h_pa += torch.einsum('bjch,bicj->bih', h_a2, pre_prediction).view(batch_size, sequence_len, 1, 1, -1)
 
         h_pa = torch.tanh(self.dropout(h_pa))  # (b, seq, seq, case, hid)
         outputs = [out(h_pa[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
@@ -108,11 +110,13 @@ class EmbeddingConditionalModel(BaseModel):
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
+        eye = torch.eye(sequence_len, dtype=torch.bool, device=input_ids.device)  # (seq)
+        pre_prediction = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
                                        attention_mask=attention_mask,
                                        token_type_ids=segment_ids,
-                                       pre_output=pre_output)
+                                       pre_output=pre_prediction)
 
         # -> (b, seq, hid) -> (b, seq, case, hid)
         h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
