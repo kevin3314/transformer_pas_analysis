@@ -60,7 +60,7 @@ class Trainer(BaseTrainer):
         for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
             batch = tuple(t.to(self.device) for t in batch)
-            current_step = epoch * len(self.data_loader) + step
+            current_step = (epoch - 1) * len(self.data_loader) + step
 
             loss, *_ = self.model(*batch, progress=current_step / self.total_step)
 
