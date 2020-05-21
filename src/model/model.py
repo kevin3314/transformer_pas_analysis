@@ -542,7 +542,6 @@ class IterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                progress: float,               # learning progress (0 ~ 1)
                 *_,
                 **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
