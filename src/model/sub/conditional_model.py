@@ -145,14 +145,7 @@ class AttentionConditionalModel(BaseModel):
                  ) -> None:
         super().__init__()
         self.num_case = num_case + int(coreference)
-        if output_aggr == 'hard':
-            self.output_aggr = self._hard_output_aggr
-        elif output_aggr == 'soft':
-            self.output_aggr = self._soft_output_aggr
-        elif output_aggr == 'confidence':
-            self.output_aggr = self._confidence_output_aggr
-        else:
-            raise ValueError(f'unknown output aggregation function: {output_aggr}')
+        self.output_aggr = getattr(self, f'_{output_aggr}_output_aggr')
         config = BertConfig.from_pretrained(bert_model)
         self.rel_embeddings1 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
         self.rel_embeddings2 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
