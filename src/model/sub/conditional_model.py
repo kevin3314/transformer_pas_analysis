@@ -227,8 +227,8 @@ class AttentionConditionalModel(BaseModel):
             neg_pre_prediction,
             neg_pre_prediction.transpose(1, 3)
             ], dim=2)  # (b, seq, 1+case*2, seq)
-        eye = torch.eye(1 + num_case * 2)
-        rel_weights = eye[bi_prediction.argmax(dim=2)].transpose(2, 3)  # (b, seq, 1+case*2, seq)
+        eye = torch.eye(1 + num_case * 2, dtype=torch.bool, device=device)
+        rel_weights = eye[bi_prediction.argmax(dim=2)].transpose(2, 3).float()  # (b, seq, 1+case*2, seq)
         return rel_weights
 
     @staticmethod
