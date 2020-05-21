@@ -213,6 +213,25 @@ class AttentionConditionalModel(BaseModel):
         return rel_weights
 
     @staticmethod
+    def _hard2_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
+                           mask: torch.Tensor,  # (b, seq, case, seq)
+                           ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)
+        batch_size, seq_len, num_case, _ = pre_output.size()
+        device = pre_output.device
+
+        eye = torch.eye(seq_len, dtype=torch.bool, device=device)  # (seq)
+        pre_prediction = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
+        neg_pre_prediction = (~pre_prediction).float() * -1024.0  # (b, seq, case, seq)
+        bi_prediction = torch.cat([
+            torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
+            neg_pre_prediction,
+            neg_pre_prediction.transpose(1, 3)
+            ], dim=2)  # (b, seq, 1+case*2, seq)
+        eye = torch.eye(1 + num_case * 2)
+        rel_weights = eye[bi_prediction.argmax(dim=2)].transpose(2, 3)  # (b, seq, 1+case*2, seq)
+        return rel_weights
+
+    @staticmethod
     def _soft_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
                           *_
                           ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)

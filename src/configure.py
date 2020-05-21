@@ -81,7 +81,7 @@ def main() -> None:
                         help='number of refinement iteration (IterativeRefinementModel)')
     parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default=['atn'], nargs='*',
                         help='how to insert pre-output to model (IterativeRefinementModel)')
-    parser.add_argument('--output-aggr', choices=['hard', 'soft', 'confidence'], default=['hard'], nargs='*',
+    parser.add_argument('--output-aggr', choices=['hard', 'hard2', 'soft', 'confidence'], default=['hard'], nargs='*',
                         help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='debug mode')
