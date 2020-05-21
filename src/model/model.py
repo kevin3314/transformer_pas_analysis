@@ -598,8 +598,10 @@ class AnnealingIterativeRefinementModel(BaseModel):
             else:
                 gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1, 1)
             # (b, seq, case, seq)
-            pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
-            annealed_pre_output = (~target * -1024.0) * ~gold_mask + pre_output * gold_mask
+            if outputs:
+                annealed_pre_output = (~target * -1024.0) * ~gold_mask + outputs[-1].detach() * gold_mask
+            else:
+                annealed_pre_output = (~mask).float() * -1024.0
             loss, output = self.conditional_model(input_ids=input_ids,
                                                   attention_mask=attention_mask,
                                                   segment_ids=segment_ids,
