@@ -563,6 +563,46 @@ class IterativeRefinementModel(BaseModel):
         return (loss, *outputs)
 
 
+class NoRelInitIterativeRefinementModel(BaseModel):
+    """複数回の推論で予測を refine していく"""
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        conditional_model = kwargs.pop('conditional_model')
+        self.num_iter = kwargs.pop('num_iter')
+        if conditional_model == 'emb':
+            self.conditional_model = EmbeddingConditionalModel(**kwargs)
+        elif conditional_model == 'atn':
+            self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'out':
+            self.conditional_model = OutputConditionalModel(**kwargs)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_,
+                **__
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        outputs, losses = [], []
+        for _ in range(self.num_iter):
+            # (b, seq, case, seq)
+            pre_output = outputs[-1].detach() if outputs else torch.full_like(target, -1024.0, dtype=torch.float)
+            loss, output = self.conditional_model(input_ids=input_ids,
+                                                  attention_mask=attention_mask,
+                                                  segment_ids=segment_ids,
+                                                  ng_token_mask=ng_token_mask,
+                                                  target=target,
+                                                  pre_output=pre_output)
+            outputs.append(output)
+            losses.append(loss)
+        loss = torch.stack(losses).mean()
+
+        return (loss, *outputs)
+
+
 class AnnealingIterativeRefinementModel(BaseModel):
     """学習初期は前回の予測としてでたらめなものが入力され，うまく refinement 機構が学習されないと考えられる．
     そのため，初期は正解を与え，学習が進むにつれ自身の出力を与えるようにする"""
