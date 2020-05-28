@@ -512,12 +512,12 @@ class HalfGoldConditionalModel(BaseModel):
                 **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         half_gold = target.bool() & torch.rand_like(target, dtype=torch.float).lt(0.5)  # (b, seq, case, seq)
-        loss, output = self.conditional_model(input_ids=input_ids,
-                                              attention_mask=attention_mask,
-                                              segment_ids=segment_ids,
-                                              ng_token_mask=ng_token_mask,
-                                              target=target,
-                                              pre_output=(~half_gold).float() * -1024.0)
+        output = self.conditional_model(input_ids=input_ids,
+                                        attention_mask=attention_mask,
+                                        segment_ids=segment_ids,
+                                        ng_token_mask=ng_token_mask,
+                                        pre_output=(~half_gold).float() * -1024.0)
+        loss = cross_entropy_pas_loss(output, target)
 
         return loss, output
 
@@ -550,12 +550,12 @@ class IterativeRefinementModel(BaseModel):
         for _ in range(self.num_iter):
             # (b, seq, case, seq)
             pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
-            loss, output = self.conditional_model(input_ids=input_ids,
-                                                  attention_mask=attention_mask,
-                                                  segment_ids=segment_ids,
-                                                  ng_token_mask=ng_token_mask,
-                                                  target=target,
-                                                  pre_output=pre_output)
+            output = self.conditional_model(input_ids=input_ids,
+                                            attention_mask=attention_mask,
+                                            segment_ids=segment_ids,
+                                            ng_token_mask=ng_token_mask,
+                                            pre_output=pre_output)
+            loss = cross_entropy_pas_loss(output, target)
             outputs.append(output)
             losses.append(loss)
         loss = torch.stack(losses).mean()
@@ -590,12 +590,12 @@ class NoRelInitIterativeRefinementModel(BaseModel):
         for _ in range(self.num_iter):
             # (b, seq, case, seq)
             pre_output = outputs[-1].detach() if outputs else torch.full_like(target, -1024.0, dtype=torch.float)
-            loss, output = self.conditional_model(input_ids=input_ids,
-                                                  attention_mask=attention_mask,
-                                                  segment_ids=segment_ids,
-                                                  ng_token_mask=ng_token_mask,
-                                                  target=target,
-                                                  pre_output=pre_output)
+            output = self.conditional_model(input_ids=input_ids,
+                                            attention_mask=attention_mask,
+                                            segment_ids=segment_ids,
+                                            ng_token_mask=ng_token_mask,
+                                            pre_output=pre_output)
+            loss = cross_entropy_pas_loss(output, target)
             outputs.append(output)
             losses.append(loss)
         loss = torch.stack(losses).mean()
@@ -641,12 +641,12 @@ class AnnealingIterativeRefinementModel(BaseModel):
                 annealed_pre_output = (~target * -1024.0) * ~gold_mask + outputs[-1].detach() * gold_mask
             else:
                 annealed_pre_output = (~mask).float() * -1024.0
-            loss, output = self.conditional_model(input_ids=input_ids,
-                                                  attention_mask=attention_mask,
-                                                  segment_ids=segment_ids,
-                                                  ng_token_mask=ng_token_mask,
-                                                  target=target,
-                                                  pre_output=annealed_pre_output)
+            output = self.conditional_model(input_ids=input_ids,
+                                            attention_mask=attention_mask,
+                                            segment_ids=segment_ids,
+                                            ng_token_mask=ng_token_mask,
+                                            pre_output=annealed_pre_output)
+            loss = cross_entropy_pas_loss(output, target)
             outputs.append(output)
             losses.append(loss)
         loss = torch.stack(losses).mean()

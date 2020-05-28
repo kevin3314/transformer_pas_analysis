@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 import torch.nn as nn
 # from transformers import BertModel
@@ -8,7 +6,6 @@ from transformers import BertConfig
 from base import BaseModel
 from .mask import get_mask
 from .bert import BertModel
-from ..loss import cross_entropy_pas_loss
 
 
 class OutputConditionalModel(BaseModel):
@@ -40,9 +37,8 @@ class OutputConditionalModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
                 pre_output: torch.Tensor,      # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+                ) -> torch.Tensor:  # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
         eye = torch.eye(sequence_len, dtype=torch.bool, device=input_ids.device)  # (seq)
@@ -68,9 +64,7 @@ class OutputConditionalModel(BaseModel):
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
         output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        loss = cross_entropy_pas_loss(output, target)
-
-        return loss, output
+        return output
 
 
 class EmbeddingConditionalModel(BaseModel):
@@ -105,9 +99,8 @@ class EmbeddingConditionalModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
                 pre_output: torch.Tensor,      # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+                ) -> torch.Tensor:  # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
         eye = torch.eye(sequence_len, dtype=torch.bool, device=input_ids.device)  # (seq)
@@ -127,9 +120,7 @@ class EmbeddingConditionalModel(BaseModel):
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
         output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        loss = cross_entropy_pas_loss(output, target)
-
-        return loss, output
+        return output
 
 
 class AttentionConditionalModel(BaseModel):
@@ -169,9 +160,8 @@ class AttentionConditionalModel(BaseModel):
                 attention_mask: torch.Tensor,  # (b, seq)
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
                 pre_output: torch.Tensor,      # (b, seq, case, seq)
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+                ) -> torch.Tensor:  # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
         rel_weights = self.output_aggr(pre_output, mask)
@@ -190,9 +180,7 @@ class AttentionConditionalModel(BaseModel):
         output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
         output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
-        loss = cross_entropy_pas_loss(output, target)
-
-        return loss, output
+        return output
 
     @staticmethod
     def _hard_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
