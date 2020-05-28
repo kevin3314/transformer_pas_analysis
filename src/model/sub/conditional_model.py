@@ -133,6 +133,7 @@ class AttentionConditionalModel(BaseModel):
                  num_case: int,
                  coreference: bool,
                  output_aggr: str,
+                 atn_target: str = 'kv',
                  ) -> None:
         super().__init__()
         self.num_case = num_case + int(coreference)
@@ -140,12 +141,14 @@ class AttentionConditionalModel(BaseModel):
         config = BertConfig.from_pretrained(bert_model)
         self.rel_embeddings1 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
         self.rel_embeddings2 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
-        self.bert: BertModel = BertModel.from_pretrained(
-            bert_model,
-            conditional_self_attention=True,
-            rel_embeddings1=self.rel_embeddings1,
-            rel_embeddings2=self.rel_embeddings2,
-        )
+        kwargs = {'conditional_self_attention': True,
+                  'rel_embeddings1': None,
+                  'rel_embeddings2': None}
+        if 'k' in atn_target:
+            kwargs['rel_embeddings1'] = self.rel_embeddings1
+        if 'v' in atn_target:
+            kwargs['rel_embeddings2'] = self.rel_embeddings2
+        self.bert: BertModel = BertModel.from_pretrained(bert_model, **kwargs)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 

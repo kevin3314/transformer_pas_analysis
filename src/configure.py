@@ -83,6 +83,8 @@ def main() -> None:
                         help='how to insert pre-output to model (IterativeRefinementModel)')
     parser.add_argument('--output-aggr', choices=['hard', 'hard2', 'soft', 'confidence'], default=['hard'], nargs='*',
                         help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
+    parser.add_argument('--atn-target', choices=['k', 'v', 'kv'], default=['kv'], nargs='*',
+                        help='rel embedding addition target (IterativeRefinementModel with AttentionConditionalModel)')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='debug mode')
     args = parser.parse_args()
@@ -93,9 +95,9 @@ def main() -> None:
         dataset_config = json.load(f)
     cases: List[str] = args.case_string.split(',') if args.case_string else []
 
-    for model, corpus, n_epoch, conditional_model, output_aggr, refinement_iter in \
+    for model, corpus, n_epoch, conditional_model, output_aggr, refinement_iter, atn_target in \
             itertools.product(args.model, args.corpus, args.epoch, args.conditional_model, args.output_aggr,
-                              args.refinement_iter):
+                              args.refinement_iter, args.atn_target):
         items = [model]
         if 'IterativeRefinement' in model:
             items.append(refinement_iter)
@@ -113,6 +115,7 @@ def main() -> None:
             items.append(conditional_model)
             if conditional_model == 'atn':
                 items.append(output_aggr)
+                items.append(atn_target)
         if args.debug:
             items.append('debug')
         if args.additional_name:
@@ -144,7 +147,7 @@ def main() -> None:
         if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
             arch['args'].update({'conditional_model': conditional_model})
             if conditional_model == 'atn':
-                arch['args'].update({'output_aggr': output_aggr})
+                arch['args'].update({'output_aggr': output_aggr, 'atn_target': atn_target})
 
         dataset = {
             'type': 'PASDataset',

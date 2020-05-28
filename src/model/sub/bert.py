@@ -235,9 +235,9 @@ class ConditionalBertSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.rel_embeddings1: nn.Embedding = kwargs['rel_embeddings1']
+        self.rel_embeddings1: Optional[nn.Embedding] = kwargs['rel_embeddings1']
         self.LayerNorm = BertLayerNorm(self.attention_head_size, eps=config.layer_norm_eps)
-        self.rel_embeddings2: nn.Embedding = kwargs['rel_embeddings2']
+        self.rel_embeddings2: Optional[nn.Embedding] = kwargs['rel_embeddings2']
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -271,18 +271,17 @@ class ConditionalBertSelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer)  # (b, heads, seq, hsize)
         value_layer = self.transpose_for_scores(mixed_value_layer)  # (b, heads, seq, hsize)
 
-        # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
-        rel_embeds1 = torch.einsum('cs,bicj->bijs', self.rel_embeddings1.weight, rel_weights) \
-            .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
-        # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
-        rel_embeds2 = torch.einsum('cs,bicj->bijs', self.rel_embeddings2.weight, rel_weights) \
-            .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
-
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # (b, heads, seq, seq)
-        # (b, heads, seq, seq)
-        rel_attention_scores = torch.einsum('bhis,bhijs->bhij', query_layer, self.LayerNorm(rel_embeds1))
-        attention_scores += rel_attention_scores  # (b, heads, seq, seq)
+
+        if self.rel_embeddings1 is not None:
+            # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
+            rel_embeds1 = torch.einsum('cs,bicj->bijs', self.rel_embeddings1.weight, rel_weights) \
+                .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
+            # (b, heads, seq, seq)
+            rel_attention_scores = torch.einsum('bhis,bhijs->bhij', query_layer, self.LayerNorm(rel_embeds1))
+            attention_scores += rel_attention_scores  # (b, heads, seq, seq)
+
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)  # (b, heads, seq, seq)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
@@ -300,8 +299,13 @@ class ConditionalBertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)  # (b, heads, seq, hsize)
-        rel_context_layer = torch.einsum('bhij,bhijs->bhis', attention_probs, rel_embeds2)  # (b, heads, seq, hsize)
-        context_layer += rel_context_layer
+
+        if self.rel_embeddings2 is not None:
+            # (b, seq, seq, hsize) -> (b, heads, seq, seq, hsize)
+            rel_embeds2 = torch.einsum('cs,bicj->bijs', self.rel_embeddings2.weight, rel_weights) \
+                .unsqueeze(1).expand(-1, self.num_attention_heads, -1, -1, -1)
+            rel_context_layer = torch.einsum('bhij,bhijs->bhis', attention_probs, rel_embeds2)  # (b, heads, seq, hsize)
+            context_layer += rel_context_layer
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()  # (b, seq, heads, hsize)
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
