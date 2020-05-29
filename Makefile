@@ -49,7 +49,7 @@ test: $(AGGR_SCORE_FILE)
 $(AGGR_SCORE_FILE): $(RESULT_FILES)
 	mkdir -p $(dir $@)
 	cat <(ls $(RESULT)/*/eval_$(EVAL_SET)/$(CSV_NAME) | head -1 | xargs head -1) \
-	<(ls $(RESULT)/*/eval_$(EVAL_SET)/$(CSV_NAME) | xargs grep -h $(CASE)) \
+	<(ls $(RESULT)/*/eval_$(EVAL_SET)/$(CSV_NAME) | xargs grep -h $(CASE),) \
 	| tr -d ' ' | sed -r 's/^[^,]+,//' > $@ || rm -f $@
 
 $(RESULT_FILES): %/eval_$(EVAL_SET)/$(CSV_NAME): %/model_best.pth
