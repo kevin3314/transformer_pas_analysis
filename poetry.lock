@@ -378,6 +378,14 @@ signals = ["blinker"]
 signedtoken = ["cryptography", "pyjwt (>=1.0.0)"]
 
 [[package]]
+category = "main"
+description = "A set that remembers its order, and allows looking up its items by their index in that order."
+name = "ordered-set"
+optional = false
+python-versions = ">=3.5"
+version = "4.0.1"
+
+[[package]]
 category = "dev"
 description = "Core utilities for Python packages"
 name = "packaging"
@@ -885,7 +893,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["jaraco.itertools", "func-timeout"]
 
 [metadata]
-content-hash = "cbdb59736b95854b6cee7c496da207e14af90681fc185fa5543133f01d3633f9"
+content-hash = "13b800ba5b768d8cbd7f49cc3aa668ab3fe6e4cf12c699b78979fa0eb4b790aa"
 python-versions = "^3.7"
 
 [metadata.files]
@@ -1092,6 +1100,9 @@ numpy = [
 oauthlib = [
     {file = "oauthlib-3.1.0-py2.py3-none-any.whl", hash = "sha256:df884cd6cbe20e32633f1db1072e9356f53638e4361bef4e8b03c9127c9328ea"},
     {file = "oauthlib-3.1.0.tar.gz", hash = "sha256:bee41cc35fcca6e988463cacc3bcb8a96224f470ca547e697b604cc697b2f889"},
+]
+ordered-set = [
+    {file = "ordered-set-4.0.1.tar.gz", hash = "sha256:a31008c57f9c9776b12eb8841b1f61d1e4d70dfbbe8875ccfa2403c54af3d51b"},
 ]
 packaging = [
     {file = "packaging-20.3-py2.py3-none-any.whl", hash = "sha256:82f77b9bee21c1bafbf35a84905d604d5d1223801d639cf3ed140bd651c08752"},
