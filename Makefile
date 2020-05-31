@@ -8,12 +8,12 @@ TRAIN_NUM := 1
 EVAL_SET := test
 # which case to calculate confidence interval (ga, wo, ni, ga2, no, or all_case)
 CASE := all_case
-
 TARGET := kwdlc_pred
-CSV_NAME := $(TARGET).csv
 
+CSV_NAME := $(TARGET).csv
 SHELL = /bin/bash -eu
-PYTHON := $(shell which python3)
+PYTHON := $(shell which python)
+AGGR_DIR_NAME := aggregates
 
 ifdef CONFIG
 	RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
@@ -23,9 +23,9 @@ CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
 NUM_TRAINED := $(words $(CHECKPOINTS))
 RESULT_FILES := $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/eval_$(EVAL_SET)/$(CSV_NAME),$(CHECKPOINTS))
 ifeq ($(CASE),all_case)
-	AGGR_SCORE_FILE := $(RESULT)/eval_aggr_$(EVAL_SET)/$(CSV_NAME)
+	AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(CSV_NAME)
 else
-	AGGR_SCORE_FILE := $(RESULT)/eval_aggr_$(EVAL_SET)/$(basename $(CSV_NAME))_$(CASE).csv
+	AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(TARGET)_$(CASE).csv
 endif
 ENS_RESULT_FILE := $(RESULT)/eval_$(EVAL_SET)/$(CSV_NAME)
 
@@ -48,8 +48,7 @@ test: $(AGGR_SCORE_FILE)
 
 $(AGGR_SCORE_FILE): $(RESULT_FILES)
 	mkdir -p $(dir $@)
-	cat <(ls $(RESULT)/*/eval_$(EVAL_SET)/$(CSV_NAME) | head -1 | xargs head -1) \
-	<(ls $(RESULT)/*/eval_$(EVAL_SET)/$(CSV_NAME) | xargs grep -h $(CASE),) \
+	cat <(head -1 $<) <(ls $(RESULT)/*/eval_$(EVAL_SET)/$(CSV_NAME) | xargs grep -h $(CASE),) \
 	| tr -d ' ' | sed -r 's/^[^,]+,//' > $@ || rm -f $@
 
 $(RESULT_FILES): %/eval_$(EVAL_SET)/$(CSV_NAME): %/model_best.pth
