@@ -19,15 +19,17 @@ ifdef CONFIG
 	RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
 endif
 
+TRAIN_DONES := $(patsubst %,$(RESULT)/.train.done.%,$(shell seq $(TRAIN_NUM)))
 CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
-NUM_TRAINED := $(words $(CHECKPOINTS))
 RESULT_FILES := $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/eval_$(EVAL_SET)/$(CSV_NAME),$(CHECKPOINTS))
 ifeq ($(CASE),all_case)
 	AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(CSV_NAME)
 else
 	AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(TARGET)_$(CASE).csv
 endif
+AGGR_TFEVENTS_DONE := $(RESULT)/.aggr_tfevents.done
 ENS_RESULT_FILE := $(RESULT)/eval_$(EVAL_SET)/$(CSV_NAME)
+
 
 # train and test
 .PHONY: all
@@ -35,11 +37,15 @@ all: train
 	$(MAKE) test EVAL_SET=test
 
 # train (and validation)
-N := $(shell expr $(TRAIN_NUM) - $(NUM_TRAINED))
 .PHONY: train
-train:
-	for i in $$(seq $(N)); do $(PYTHON) src/train.py -c $(CONFIG) -d $(GPUS) --seed $${RANDOM}; done
+train: $(TRAIN_DONES) $(AGGR_TFEVENTS_DONE)
+
+$(TRAIN_DONES):
+	$(PYTHON) src/train.py -c $(CONFIG) -d $(GPUS) --seed $${RANDOM} && touch $@
 	$(MAKE) test EVAL_SET=valid
+
+$(AGGR_TFEVENTS_DONE): $(TRAIN_DONES)
+	$(PYTHON) scripts/aggregator.py -r $(RESULT) --aggr-name $(AGGR_DIR_NAME) && touch $@
 
 # test
 .PHONY: test
