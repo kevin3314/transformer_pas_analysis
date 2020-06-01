@@ -731,7 +731,7 @@ class MaskedLossIterativeRefinementModel(BaseModel):
                                             segment_ids=segment_ids,
                                             ng_token_mask=ng_token_mask,
                                             pre_output=pre_output)
-            loss_mask = ~(eye[output.argmax(dim=3)] & target)  # (b, seq, case, seq)
+            loss_mask = ~(eye[output.detach().argmax(dim=3)] & target.bool())  # (b, seq, case, seq)
             loss = weighted_cross_entropy_pas_loss(output, target, loss_mask.float())
             outputs.append(output)
             losses.append(loss)
