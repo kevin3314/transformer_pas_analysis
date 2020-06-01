@@ -41,7 +41,8 @@ class BaseTrainer:
             self.batches_per_device = math.ceil(batches_per_backward / self.num_devices)
         self.data_loader = self.config.init_obj('train_data_loader', module_loader, train_dataset)
         self.total_step = len(self.data_loader) * self.epochs
-        self.total_optimization_step = math.ceil(len(self.data_loader) / self.gradient_accumulation_steps) * self.epochs
+        self.optimization_step_per_epoch = math.ceil(len(self.data_loader) / self.gradient_accumulation_steps)
+        self.total_optimization_step = self.optimization_step_per_epoch * self.epochs
 
         self.metrics = metrics
         self.optimizer = optimizer

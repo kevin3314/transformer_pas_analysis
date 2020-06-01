@@ -66,12 +66,8 @@ class Trainer(BaseTrainer):
 
             if len(loss.size()) > 0:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
-            total_loss += loss.item() * batch[0].size(0)
-
-            self.writer.set_step((epoch - 1) * len(self.data_loader) + step)
-            self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
-            self.writer.add_scalar('loss', loss.item())
-            self.writer.add_scalar('progress', current_step / self.total_step)
+            loss_value = loss.item()
+            total_loss += loss_value * batch[0].size(0)
 
             if step % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
@@ -80,7 +76,7 @@ class Trainer(BaseTrainer):
                     self.data_loader.n_samples,
                     100.0 * step / len(self.data_loader),
                     datetime.datetime.now().strftime('%H:%M:%S'),
-                    loss.item()))
+                    loss_value))
 
             if step < (len(self.data_loader) // self.gradient_accumulation_steps) * self.gradient_accumulation_steps:
                 gradient_accumulation_steps = self.gradient_accumulation_steps
@@ -90,6 +86,12 @@ class Trainer(BaseTrainer):
                 loss = loss / gradient_accumulation_steps
             loss.backward()
             if (step + 1) % gradient_accumulation_steps == 0:
+                self.writer.set_step(
+                    (epoch - 1) * self.optimization_step_per_epoch + (step + 1) // gradient_accumulation_steps)
+                self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
+                self.writer.add_scalar('loss', loss_value)
+                self.writer.add_scalar('progress', current_step / self.total_step)
+
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 if self.lr_scheduler is not None:
