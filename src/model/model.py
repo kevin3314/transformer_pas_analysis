@@ -695,3 +695,46 @@ class WeightedIterativeRefinementModel(BaseModel):
         loss = torch.stack(losses).mean()
 
         return (loss, *outputs)
+
+
+class MaskedLossIterativeRefinementModel(BaseModel):
+    """モデルの予測が正解だった場合 loss を計算しない"""
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        conditional_model = kwargs.pop('conditional_model')
+        self.num_iter = kwargs.pop('num_iter')
+        if conditional_model == 'emb':
+            self.conditional_model = EmbeddingConditionalModel(**kwargs)
+        elif conditional_model == 'atn':
+            self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'out':
+            self.conditional_model = OutputConditionalModel(**kwargs)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_,
+                **__
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        eye = torch.eye(input_ids.size(1), dtype=torch.bool, device=input_ids.device)  # (seq)
+        outputs, losses = [], []
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        for _ in range(self.num_iter):
+            # (b, seq, case, seq)
+            pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
+            output = self.conditional_model(input_ids=input_ids,
+                                            attention_mask=attention_mask,
+                                            segment_ids=segment_ids,
+                                            ng_token_mask=ng_token_mask,
+                                            pre_output=pre_output)
+            loss_mask = ~(eye[output.argmax(dim=3)] & target)  # (b, seq, case, seq)
+            loss = weighted_cross_entropy_pas_loss(output, target, loss_mask.float())
+            outputs.append(output)
+            losses.append(loss)
+        loss = torch.stack(losses).mean()
+
+        return (loss, *outputs)

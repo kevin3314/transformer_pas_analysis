@@ -20,7 +20,7 @@ def weighted_cross_entropy_pas_loss(output: torch.Tensor,  # (b, seq, case, seq)
                                     ) -> torch.Tensor:  # ()
     log_softmax = torch.log_softmax(output, dim=3)  # (b, seq, case, seq)
     eps = 1e-6
-    return torch.sum(-log_softmax * target * weight) / (torch.sum(target) + eps)
+    return torch.sum(-log_softmax * target * weight) / (torch.sum(target * weight) + eps)
 
 
 def multi_cross_entropy_pas_loss(output: Tuple[torch.Tensor, torch.Tensor],  # (b, seq, case, seq)
