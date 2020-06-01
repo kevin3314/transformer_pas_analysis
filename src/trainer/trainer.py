@@ -87,7 +87,7 @@ class Trainer(BaseTrainer):
             loss.backward()
             if (step + 1) % gradient_accumulation_steps == 0:
                 self.writer.set_step(
-                    (epoch - 1) * self.optimization_step_per_epoch + (step + 1) // gradient_accumulation_steps)
+                    (epoch - 1) * self.optimization_step_per_epoch + (step + 1) // gradient_accumulation_steps - 1)
                 self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
                 self.writer.add_scalar('loss', loss_value)
                 self.writer.add_scalar('progress', current_step / self.total_step)
