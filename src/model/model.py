@@ -160,48 +160,6 @@ class RefinementModel(BaseModel):
         return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
-class RefinementModel2(BaseModel):
-    """最終結果に前段の出力を使わない"""
-    def __init__(self,
-                 bert_model: str,
-                 vocab_size: int,
-                 dropout: float,
-                 num_case: int,
-                 coreference: bool,
-                 refinement_type: int,  # 1 or 2 or 3
-                 refinement_bert_model: str,
-                 ) -> None:
-        super().__init__()
-
-        self.baseline_model = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
-        args = (refinement_bert_model, vocab_size, dropout, num_case, coreference)
-        if refinement_type == 1:
-            self.refinement_layer = RefinementLayer1(*args)
-        elif refinement_type == 2:
-            self.refinement_layer = RefinementLayer2(*args)
-        elif refinement_type == 3:
-            self.refinement_layer = RefinementLayer3(*args)
-
-    def forward(self,
-                input_ids: torch.Tensor,       # (b, seq)
-                attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
-                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
-        mask = get_mask(attention_mask, ng_token_mask)
-        # (b, seq, case, seq)
-        _, base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, target)
-        refined_logits = self.refinement_layer(input_ids, attention_mask, base_logits.detach().softmax(dim=3))
-        refined_logits += (~mask).float() * -1024.0
-
-        loss = multi_cross_entropy_pas_loss((base_logits, refined_logits), target)
-
-        return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
-
-
 class DuplicateModel(BaseModel):
     """RefinementModel の前段の logits を後段に与えないモデル"""
 
