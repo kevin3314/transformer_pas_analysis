@@ -29,16 +29,13 @@ class BaseTrainer:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
 
         max_bpg = self.config['trainer']['max_bpg']
-        batches_per_backward = cfg_trainer['batch_size']
-        if math.ceil(batches_per_backward / self.num_devices) > max_bpg:
-            self.gradient_accumulation_steps = math.ceil(batches_per_backward / (max_bpg * self.num_devices))
-            self.config['train_data_loader']['args']['batch_size'] = max_bpg * self.num_devices
-            self.config['valid_data_loader']['args']['batch_size'] = max_bpg * self.num_devices
-            self.batches_per_device = max_bpg
-        else:
-            self.gradient_accumulation_steps = 1
-            self.config['train_data_loader']['args']['batch_size'] = batches_per_backward
-            self.batches_per_device = math.ceil(batches_per_backward / self.num_devices)
+        self.batches_per_optim = cfg_trainer['batch_size']
+        self.gradient_accumulation_steps = math.ceil(self.batches_per_optim / (max_bpg * self.num_devices))
+        batches_per_step = min(self.batches_per_optim, max_bpg * self.num_devices)
+        if self.gradient_accumulation_steps > 1:
+            self.config['valid_data_loader']['args']['batch_size'] = batches_per_step
+        self.batches_per_device = math.ceil(batches_per_step / self.num_devices)
+        self.config['train_data_loader']['args']['batch_size'] = batches_per_step
         self.data_loader = self.config.init_obj('train_data_loader', module_loader, train_dataset)
         self.total_step = len(self.data_loader) * self.epochs
         self.optimization_step_per_epoch = math.ceil(len(self.data_loader) / self.gradient_accumulation_steps)
@@ -86,7 +83,7 @@ class BaseTrainer:
         self.logger.info("  Num examples = %d", self.data_loader.n_samples)
         self.logger.info("  Num Epochs = %d", self.epochs)
         self.logger.info("  Instantaneous batch size per device = %d", self.batches_per_device)
-        self.logger.info("  Total train batch size (w. parallel & accumulation) = %d", self.data_loader.batch_size)
+        self.logger.info("  Total train batch size (w. parallel & accumulation) = %d", self.batches_per_optim)
         self.logger.info("  Gradient Accumulation steps = %d", self.gradient_accumulation_steps)
         self.logger.info("  Total optimization steps = %d", self.total_optimization_step)
         not_improved_count = 0
