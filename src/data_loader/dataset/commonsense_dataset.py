@@ -118,7 +118,8 @@ class CommonsenseDataset(Dataset):
         input_mask = np.array(feature.input_mask)           # (seq)
         segment_ids = np.array(feature.segment_ids)         # (seq)
         label = np.full((1, 1, 1), feature.label)           # (1, 1, 1)
+        overt_mask = np.full((1, 1, 1), False)              # (1, 1, 1)
         ng_token_mask = np.zeros((1, 1, 1), dtype=np.bool)  # (1, 1, 1)
         deps = np.zeros((1, 1), dtype=np.int)               # (1, 1)
         task = np.array(TASK_ID['ci'])                      # ()
-        return input_ids, input_mask, segment_ids, ng_token_mask, label, deps, task
+        return input_ids, input_mask, segment_ids, ng_token_mask, label, deps, task, overt_mask

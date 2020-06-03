@@ -21,6 +21,7 @@ class InputFeatures(NamedTuple):
     input_mask: List[bool]  # for training
     segment_ids: List[int]  # for training
     arguments_set: List[List[List[int]]]  # for training
+    overt_mask: List[List[List[int]]]  # for training
     ng_arg_mask: List[List[bool]]  # for training
     ng_ment_mask: List[List[bool]]  # for training
     deps: List[List[int]]  # for training
@@ -102,6 +103,7 @@ class PASDataset(Dataset):
         arguments_set: List[List[List[int]]] = []
         arg_candidates_set: List[List[int]] = []
         ment_candidates_set: List[List[int]] = []
+        overts_set: List[List[List[int]]] = []
         deps: List[List[int]] = []
 
         # subword loop
@@ -112,12 +114,14 @@ class PASDataset(Dataset):
             # subsequent subword or [CLS] token or [SEP] token
             if token.startswith("##") or orig_index is None:
                 arguments_set.append([[] for _ in range(num_case_w_coreference)])
+                overts_set.append([[] for _ in range(num_case_w_coreference)])
                 arg_candidates_set.append([])
                 ment_candidates_set.append([])
                 deps.append([0] * max_seq_length)
                 continue
 
             arguments: List[List[int]] = [[] for _ in range(num_case_w_coreference)]
+            overts: List[List[int]] = [[] for _ in range(num_case_w_coreference)]
             for i, (case, arg_strings) in enumerate(example.arguments_set[orig_index].items()):
                 if not arg_strings:
                     continue
@@ -142,6 +146,8 @@ class PASDataset(Dataset):
                             arguments[i].append(self.special_to_index[arg_string])
                         else:
                             # normal
+                            if arg_string.endswith('%C'):
+                                overts[i].append(orig_to_tok_index[int(arg_string[:-2])])
                             if (arg_string.endswith('%C') and self.train_overt is False) or \
                                     (arg_string.endswith('%N') and self.train_case is False) or \
                                     (arg_string.endswith('%O') and self.train_zero is False):
@@ -153,6 +159,7 @@ class PASDataset(Dataset):
                             arguments[i].append(orig_to_tok_index[int(arg_string)])
 
             arguments_set.append(arguments)
+            overts_set.append(overts)
 
             ddep = example.ddeps[orig_index]
             deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
@@ -184,6 +191,7 @@ class PASDataset(Dataset):
             input_mask.append(False)
             segment_ids.append(0)
             arguments_set.append([[] for _ in range(num_case_w_coreference)])
+            overts_set.append([[] for _ in range(num_case_w_coreference)])
             arg_candidates_set.append([])
             ment_candidates_set.append([])
             deps.append([0] * max_seq_length)
@@ -194,6 +202,7 @@ class PASDataset(Dataset):
             input_mask.append(True)
             segment_ids.append(0)
             arguments_set.append([[] for _ in range(num_case_w_coreference)])
+            overts_set.append([[] for _ in range(num_case_w_coreference)])
             arg_candidates_set.append([])
             ment_candidates_set.append([])
             deps.append([0] * max_seq_length)
@@ -202,6 +211,7 @@ class PASDataset(Dataset):
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
         assert len(arguments_set) == max_seq_length
+        assert len(overts_set) == max_seq_length
         assert len(arg_candidates_set) == max_seq_length
         assert len(ment_candidates_set) == max_seq_length
         assert len(deps) == max_seq_length
@@ -215,6 +225,8 @@ class PASDataset(Dataset):
             segment_ids=segment_ids,
             arguments_set=[[[int(x in args) for x in range(max_seq_length)] for args in arguments]
                            for arguments in arguments_set],
+            overt_mask=[[[(x in overt) for x in range(max_seq_length)] for overt in overts]
+                           for overts in overts_set],
             ng_arg_mask=[[(x in candidates) for x in range(max_seq_length)]
                          for candidates in arg_candidates_set],  # False -> mask, True -> keep
             ng_ment_mask=[[(x in candidates) for x in range(max_seq_length)]
@@ -328,10 +340,11 @@ class PASDataset(Dataset):
         input_mask = np.array(feature.input_mask)        # (seq)
         segment_ids = np.array(feature.segment_ids)      # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
+        overt_mask = np.array(feature.overt_mask)        # (seq, case, seq)
         ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
         ng_ment_mask = np.array(feature.ng_ment_mask)    # (seq, seq)
         stacks = [ng_arg_mask] * len(self.target_cases) + ([ng_ment_mask] if self.coreference else [])
         ng_token_mask = np.stack(stacks, axis=1)         # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
-        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task
+        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask
