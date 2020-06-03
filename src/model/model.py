@@ -730,7 +730,7 @@ class WeightedAnnealingIterativeRefinementModel(BaseModel):
                 gold_ratio = 0.5 - progress * 0.5
                 gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).view(*input_ids.size(), 1, 1)
             else:
-                gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1, 1)
+                gold_mask = torch.full_like(input_ids, False, dtype=torch.bool).view(*input_ids.size(), 1, 1)
             # (b, seq, case, seq)
             if outputs:
                 annealed_pre_output = (~target * -1024.0) * gold_mask + outputs[-1].detach() * ~gold_mask
