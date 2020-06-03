@@ -646,7 +646,7 @@ class WeightedIterativeRefinementModel(BaseModel):
                                             segment_ids=segment_ids,
                                             ng_token_mask=ng_token_mask,
                                             pre_output=pre_output)
-            loss_weight = (1.0 - output.softmax(dim=3))  # (b, seq, case, seq)
+            loss_weight = (1.0 - output.detach().softmax(dim=3))  # (b, seq, case, seq)
             loss = weighted_cross_entropy_pas_loss(output, target, loss_weight)
             outputs.append(output)
             losses.append(loss)
@@ -741,7 +741,7 @@ class WeightedAnnealingIterativeRefinementModel(BaseModel):
                                             segment_ids=segment_ids,
                                             ng_token_mask=ng_token_mask,
                                             pre_output=annealed_pre_output)
-            loss_weight = (1.0 - output.softmax(dim=3))  # (b, seq, case, seq)
+            loss_weight = (1.0 - output.detach().softmax(dim=3))  # (b, seq, case, seq)
             loss = weighted_cross_entropy_pas_loss(output, target, loss_weight)
             outputs.append(output)
             losses.append(loss)
