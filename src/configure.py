@@ -111,7 +111,7 @@ def main() -> None:
             items.append('noun')
         if model in ('RefinementModel', 'RefinementModel2'):
             items.append(f'{args.refinement_bert}{args.refinement_type}')
-        if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
+        if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             items.append(conditional_model)
             if conditional_model == 'atn':
                 items.append(output_aggr)
@@ -144,7 +144,7 @@ def main() -> None:
                                  'refinement_bert_model': dataset_config['bert_path']})
         if 'IterativeRefinement' in model:
             arch['args'].update({'num_iter': refinement_iter})
-        if model == 'HalfGoldConditionalModel' or 'IterativeRefinement' in model:
+        if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             arch['args'].update({'conditional_model': conditional_model})
             if conditional_model == 'atn':
                 arch['args'].update({'output_aggr': output_aggr, 'atn_target': atn_target})
