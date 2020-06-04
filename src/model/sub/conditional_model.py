@@ -57,7 +57,7 @@ class OutputConditionalModel(BaseModel):
         # (b, seq, hid) -> (b, seq, case, hid)
         h_a2 = self.l_arg2(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, -1)
         # (b, seq, hid) -> (b, seq, 1, 1, hid)
-        h_pa += torch.einsum('bjch,bicj->bih', h_a2, pre_prediction).view(batch_size, sequence_len, 1, 1, -1)
+        h_pa += torch.einsum('bjch,bicj->bih', h_a2, pre_prediction.float()).view(batch_size, sequence_len, 1, 1, -1)
 
         h_pa = torch.tanh(self.dropout(h_pa))  # (b, seq, seq, case, hid)
         outputs = [out(h_pa[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
