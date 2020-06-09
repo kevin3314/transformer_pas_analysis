@@ -480,6 +480,38 @@ class HalfGoldConditionalModel(BaseModel):
         return loss, output
 
 
+class FullGoldConditionalModel(BaseModel):
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        conditional_model = kwargs.pop('conditional_model')
+        if conditional_model == 'emb':
+            self.conditional_model = EmbeddingConditionalModel(**kwargs)
+        elif conditional_model == 'atn':
+            self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'out':
+            self.conditional_model = OutputConditionalModel(**kwargs)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_,
+                **__
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        full_gold = target.bool()  # (b, seq, case, seq)
+        output = self.conditional_model(input_ids=input_ids,
+                                        attention_mask=attention_mask,
+                                        segment_ids=segment_ids,
+                                        ng_token_mask=ng_token_mask,
+                                        pre_output=(~full_gold).float() * -1024.0)
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
+
+
 class IterativeRefinementModel(BaseModel):
     """複数回の推論で予測を refine していく"""
 
