@@ -322,10 +322,9 @@ pyknp = "*"
 testing = ["pytest"]
 
 [package.source]
-reference = "a989b64734d98ff4817cfe93bf0e180f8ae341ad"
+reference = "5fda53cfc9fc49296a420ce60fb362413db80e1d"
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
-
 [[package]]
 category = "main"
 description = "Python implementation of Markdown."
