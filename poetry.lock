@@ -322,7 +322,7 @@ pyknp = "*"
 testing = ["pytest"]
 
 [package.source]
-reference = "5fda53cfc9fc49296a420ce60fb362413db80e1d"
+reference = "1cf9a4f9717537d94069d5ca876ea37434964192"
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
 [[package]]
