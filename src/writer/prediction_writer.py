@@ -65,7 +65,7 @@ class PredictionKNPWriter:
                 for line in document.knp_string.strip().split('\n'):
                     if line.startswith('+ '):
                         line = self.rel_pat.sub('', line)  # remove gold data
-                    output_knp_lines.append(line.strip())
+                    output_knp_lines.append(line)
             document_pred = Document('\n'.join(output_knp_lines) + '\n',
                                      document.doc_id,
                                      document.cases,
