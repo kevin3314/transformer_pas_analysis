@@ -110,7 +110,7 @@ def main() -> None:
         if args.eventive_noun:
             items.append('noun')
         if model in ('RefinementModel', 'RefinementModel2'):
-            items.append(f'{args.refinement_bert}{args.refinement_type}')
+            items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             items.append(conditional_model)
             if conditional_model == 'atn':
