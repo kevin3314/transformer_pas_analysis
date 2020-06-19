@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional, NamedTuple
+from typing import List, Dict, Optional, NamedTuple, Tuple
 from pathlib import Path
 from collections import defaultdict
 
@@ -126,32 +126,22 @@ class PASDataset(Dataset):
                     if case == '=':
                         # coreference (arg_string: 著者, 23, NA, ...)
                         if arg_string in self.special_to_index:
-                            # special token
                             arguments[i].append(self.special_to_index[arg_string])
                         else:
-                            # normal
-                            if int(arg_string) not in example.ment_candidates_set[orig_index]:
-                                self.logger.debug(f'mention: {arg_string} of {token} is not in candidates and ignored')
-                                continue
                             arguments[i].append(orig_to_tok_index[int(arg_string)])
                     else:
-                        # arg_string: 著者, 8%C, 15%O, NULL, ...
+                        # pas (arg_string: 著者, 8%C, 15%O, NULL, ...)
                         if arg_string in self.special_to_index:
-                            # special token
                             if self.train_zero is False:
                                 continue
                             arguments[i].append(self.special_to_index[arg_string])
                         else:
-                            # normal
                             arg_index, flag = int(arg_string[:-2]), arg_string[-1]
                             if flag == 'C':
                                 overts[i].append(orig_to_tok_index[arg_index])
                             if (flag == 'C' and self.train_overt is False) or \
                                (flag == 'N' and self.train_case is False) or \
                                (flag == 'O' and self.train_zero is False):
-                                continue
-                            if arg_index not in example.arg_candidates_set[orig_index]:
-                                self.logger.debug(f'argument: {arg_index} of {token} is not in candidates and ignored')
                                 continue
                             arguments[i].append(orig_to_tok_index[arg_index])
 
@@ -162,10 +152,10 @@ class PASDataset(Dataset):
             deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
             deps[-1] += [0] * (max_seq_length - len(tok_to_orig_index))
 
-            # arguments が空のもの (助詞など) には candidates を設定しない
+            # arguments_set が空のもの (助詞など) には candidates を設定しない
             candidates: List[List[int]] = []
-            for args, case in zip(arguments, example.arguments_set[orig_index].keys()):
-                if args:
+            for case, arg_strings in example.arguments_set[orig_index].items():
+                if arg_strings:
                     if case != '=':
                         cands = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]]
                         specials = self.target_exophors + ['NULL']
@@ -229,7 +219,7 @@ class PASDataset(Dataset):
 
         return feature
 
-    def _get_tokenized_tokens(self, words: List[str]) -> tuple:
+    def _get_tokenized_tokens(self, words: List[str]) -> Tuple[List[str], List[Optional[int]], List[int]]:
         all_tokens = []
         tok_to_orig_index: List[Optional[int]] = []
         orig_to_tok_index: List[int] = []
