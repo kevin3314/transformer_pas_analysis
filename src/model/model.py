@@ -874,8 +874,8 @@ class CandidateAwareModel(BaseModel):
         atn_target = 'kv'
         self.num_case = num_case + int(coreference)
         config = BertConfig.from_pretrained(bert_model)
-        self.rel_embeddings1 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
-        self.rel_embeddings2 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
+        self.rel_embeddings1 = nn.Embedding(2, int(config.hidden_size / config.num_attention_heads))
+        self.rel_embeddings2 = nn.Embedding(2, int(config.hidden_size / config.num_attention_heads))
         kwargs = {'conditional_self_attention': True,
                   'rel_embeddings1': None,
                   'rel_embeddings2': None}
@@ -907,12 +907,9 @@ class CandidateAwareModel(BaseModel):
         # (b, seq, case, seq) -> (b, seq, 1, seq)
         mask = get_mask(attention_mask, ng_token_mask).any(dim=2, keepdim=True)
         candidate_mask = (mask | mask.transpose(1, 3)).any(dim=3, keepdim=True)  # (b, seq, 1, 1)
-        # (b, seq, case*2-1, 1)
-        zeros = torch.zeros((batch_size, sequence_len, self.num_case * 2 - 1, 1), dtype=torch.bool, device=device)
-        extended_mask = torch.cat([~candidate_mask, candidate_mask, zeros], dim=2)  # (b, seq, case*2+1, 1)
-        zeros = torch.zeros((batch_size, sequence_len, self.num_case * 2 + 1, sequence_len - 1),
-                            dtype=torch.bool, device=device)
-        extended_mask = torch.cat([zeros, extended_mask], dim=3)  # (b, seq, case*2+1, seq)
+        extended_mask = torch.cat([~candidate_mask, candidate_mask], dim=2)  # (b, seq, 2, 1)
+        zeros = torch.zeros((batch_size, sequence_len, 2, sequence_len - 1), dtype=torch.bool, device=device)
+        extended_mask = torch.cat([zeros, extended_mask], dim=3)  # (b, seq, 2, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
                                        attention_mask=attention_mask,
