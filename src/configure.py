@@ -12,16 +12,18 @@ import transformers.optimization as module_optim
 
 
 class Config:
-    def __init__(self, **kwargs) -> None:
-        self.config = {}
-        for key, value in kwargs.items():
-            self.config.update({key: value})
-
-    def dump(self, config_dir: Path) -> None:
+    def __init__(self, config_dir: Path) -> None:
         config_dir.mkdir(exist_ok=True)
-        config_path = config_dir / f'{self.config["name"]}.json'
+        self.config_dir = config_dir
+        self.log = []
+
+    def write(self, **config) -> None:
+        config_path = self.config_dir / f'{config["name"]}.json'
+        if config_path in self.log:
+            return
         with config_path.open('w') as f:
-            json.dump(self.config, f, indent=2, ensure_ascii=False)
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        self.log.append(config_path)
         print(config_path)
 
 
@@ -31,16 +33,20 @@ def main() -> None:
     all_lr_schedulers = [m[0][4:] for m in inspect.getmembers(module_optim, inspect.isfunction)
                          if m[1].__module__ == module_optim.__name__ and m[0].startswith('get_')]
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=(lambda p: Path(p)),
+    parser.add_argument('-c', '--config', type=(lambda p: Path(p)), default='config',
                         help='path to output directory')
     parser.add_argument('-d', '--dataset', type=(lambda p: Path(p)),
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
-    parser.add_argument('-e', '--epoch', type=int, default=4, nargs='*',
+    parser.add_argument('-e', '--epoch', type=int, default=[4], nargs='*',
                         help='number of training epochs')
-    parser.add_argument('-b', '--batch-size', type=int, default=32,
+    parser.add_argument('-b', '--batch-size', type=int, default=16,
                         help='number of batch size')
+    parser.add_argument('--max-bpg', type=int, default=None,
+                        help='max batch size per GPU')
+    parser.add_argument('--eval-batch-size', type=int, default=None,
+                        help='number of batch size for evaluation (default: same as that of training)')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
                         help='Perform coreference resolution.')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
@@ -65,34 +71,56 @@ def main() -> None:
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
-    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['kwdlc', 'kc', 'all'], nargs='*',
+    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['all'], nargs='*',
                         help='corpus to use in training')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
                         help='dependency type to train')
     parser.add_argument('--eventive-noun', '--noun', action='store_true', default=False,
                         help='analyze eventive noun as predicate')
-    parser.add_argument('--refinement-iter', '--riter', type=int, default=3,
+    parser.add_argument('--refinement-iter', '--riter', type=int, default=[3], nargs='*',
                         help='number of refinement iteration (IterativeRefinementModel)')
+    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default=['atn'], nargs='*',
+                        help='how to insert pre-output to model (IterativeRefinementModel)')
+    parser.add_argument('--output-aggr', choices=['hard', 'hard2', 'soft', 'confidence'], default=['hard'], nargs='*',
+                        help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
+    parser.add_argument('--atn-target', choices=['k', 'v', 'kv'], default=['kv'], nargs='*',
+                        help='rel embedding addition target (IterativeRefinementModel with AttentionConditionalModel)')
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='debug mode')
     args = parser.parse_args()
 
+    config = Config(args.config)
     data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
     cases: List[str] = args.case_string.split(',') if args.case_string else []
 
-    for model, corpus, n_epoch in itertools.product(args.model, args.corpus, args.epoch):
+    for model, corpus, n_epoch, conditional_model, output_aggr, refinement_iter, atn_target in \
+            itertools.product(args.model, args.corpus, args.epoch, args.conditional_model, args.output_aggr,
+                              args.refinement_iter, args.atn_target):
         items = [model]
-        items += [str(args.refinement_iter)] if model == 'IterativeRefinementModel' else []
+        if 'IterativeRefinement' in model:
+            items.append(refinement_iter)
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
-        items += ['coref'] if args.coreference else []
-        items += [''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target)]
-        items += ['nocase'] if 'ノ' in cases else []
-        items += ['noun'] if args.eventive_noun else []
+        if args.coreference:
+            items.append('coref')
+        items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
+        if 'ノ' in cases:
+            items.append('nocase')
+        if args.eventive_noun:
+            items.append('noun')
         if model in ('RefinementModel', 'RefinementModel2'):
-            items += ['largeref'] if args.refinement_bert in ('large', 'large-wwm') else []
-            items += [f'reftype{args.refinement_type}']
-        items += [args.additional_name] if args.additional_name is not None else []
-        name = '-'.join(items)
+            items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
+        if 'ConditionalModel' in model or 'IterativeRefinement' in model:
+            items.append(conditional_model)
+            if conditional_model == 'atn':
+                items.append(output_aggr)
+                items.append(atn_target)
+        if args.debug:
+            items.append('debug')
+        if args.additional_name:
+            items.append(args.additional_name)
+        name = '-'.join(str(x) for x in items)
 
         num_train_examples = 0
         if corpus in ('kwdlc', 'all'):
@@ -114,8 +142,12 @@ def main() -> None:
         if model in ('RefinementModel', 'RefinementModel2'):
             arch['args'].update({'refinement_type': args.refinement_type,
                                  'refinement_bert_model': dataset_config['bert_path']})
-        if model == 'IterativeRefinementModel':
-            arch['args'].update({'num_iter': args.refinement_iter})
+        if 'IterativeRefinement' in model:
+            arch['args'].update({'num_iter': refinement_iter})
+        if 'ConditionalModel' in model or 'IterativeRefinement' in model:
+            arch['args'].update({'conditional_model': conditional_model})
+            if conditional_model == 'atn':
+                arch['args'].update({'output_aggr': output_aggr, 'atn_target': atn_target})
 
         dataset = {
             'type': 'PASDataset',
@@ -185,7 +217,7 @@ def main() -> None:
         data_loader = {
             'type': 'PASDataLoader',
             'args': {
-                'batch_size': args.batch_size,
+                'batch_size': None,
                 'shuffle': None,
                 'validation_split': 0.0,
                 'num_workers': 2,
@@ -193,12 +225,14 @@ def main() -> None:
         }
 
         train_data_loader = copy.deepcopy(data_loader)
-        train_data_loader['args']['shuffle'] = True
+        train_data_loader['args']['shuffle'] = (not args.debug)
 
         valid_data_loader = copy.deepcopy(data_loader)
+        valid_data_loader['args']['batch_size'] = args.eval_batch_size if args.eval_batch_size else args.batch_size
         valid_data_loader['args']['shuffle'] = False
 
         test_data_loader = copy.deepcopy(data_loader)
+        test_data_loader['args']['batch_size'] = args.eval_batch_size if args.eval_batch_size else args.batch_size
         test_data_loader['args']['shuffle'] = False
 
         optimizer = {
@@ -276,6 +310,8 @@ def main() -> None:
             mnt_metric = 'val_kc_' + mnt_metric
         trainer = {
             'epochs': n_epoch,
+            'batch_size': args.batch_size,
+            'max_bpg': args.max_bpg if args.max_bpg is not None else args.batch_size,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
             'verbosity': 2,
@@ -284,7 +320,7 @@ def main() -> None:
             'tensorboard': True,
         }
 
-        config = Config(
+        config.write(
             name=name,
             n_gpu=args.gpus,
             arch=arch,
@@ -305,7 +341,6 @@ def main() -> None:
             lr_scheduler=lr_scheduler,
             trainer=trainer,
         )
-        config.dump(args.config)
 
 
 if __name__ == '__main__':

@@ -65,7 +65,7 @@ class PredictionKNPWriter:
                 for line in document.knp_string.strip().split('\n'):
                     if line.startswith('+ '):
                         line = self.rel_pat.sub('', line)  # remove gold data
-                    output_knp_lines.append(line.strip())
+                    output_knp_lines.append(line)
             document_pred = Document('\n'.join(output_knp_lines) + '\n',
                                      document.doc_id,
                                      document.cases,
@@ -101,7 +101,7 @@ class PredictionKNPWriter:
         output_knp_lines = []
         for line in knp_string.strip().split('\n'):
             if not line.startswith('+ '):
-                output_knp_lines.append(line.strip())
+                output_knp_lines.append(line)
                 if line == 'EOS':
                     sent_idx += 1
                 continue
@@ -110,7 +110,7 @@ class PredictionKNPWriter:
             match = self.case_analysis_pat.search(line)
             overt_dict = self._extract_overt_from_case_analysis_result(dtid, match, sent_idx, document)
 
-            rel_removed: str = self.rel_pat.sub('', line.strip())  # remove gold data
+            rel_removed: str = self.rel_pat.sub('', line)  # remove gold data
             assert '<rel ' not in rel_removed
             match = self.tag_pat.match(rel_removed)
             if match is not None:
@@ -124,7 +124,7 @@ class PredictionKNPWriter:
                 rel_inserted_line = rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:]
                 output_knp_lines.append(rel_inserted_line)
             else:
-                self.logger.warning(f'invalid format line: {line.strip()}')
+                self.logger.warning(f'invalid format line: {line}')
                 output_knp_lines.append(rel_removed)
 
             dtid += 1
@@ -227,7 +227,7 @@ class PredictionKNPWriter:
         output_knp_lines = []
         for line in knp_lines:
             if not line.startswith('+ '):
-                output_knp_lines.append(line.strip())
+                output_knp_lines.append(line)
                 continue
             if dtid in dtid2pas:
                 pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid.get(dtid, 'dummy:dummy'), sid2index)

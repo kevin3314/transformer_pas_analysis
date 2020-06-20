@@ -25,9 +25,9 @@ class PASDataLoader(BaseDataLoader):
 
 
 def broadcast_collate_fn(batch: List[Tuple[np.ndarray, ...]]) -> Tuple[torch.Tensor, ...]:
-    input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task = zip(*batch)
+    input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask = zip(*batch)
     target = np.broadcast_arrays(*target)
     ng_token_mask = np.broadcast_arrays(*ng_token_mask)
     deps = np.broadcast_arrays(*deps)
-    transposed = (input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task)
+    transposed = (input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask)
     return tuple(torch.as_tensor(np.stack(elem, axis=0)) for elem in transposed)

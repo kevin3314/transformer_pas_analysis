@@ -7,7 +7,6 @@ import torch
 from torch.utils.data import ConcatDataset
 import numpy as np
 
-import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
 import model.metric as module_metric
 import model.model as module_arch
@@ -33,19 +32,16 @@ def main(config: ConfigParser, args: argparse.Namespace):
         train_datasets.append(config.init_obj('train_kc_dataset', module_dataset, logger=logger))
     if config['train_commonsense_dataset'] is not None:
         train_datasets.append(config.init_obj('train_commonsense_dataset', module_dataset, logger=logger))
-    train_data_loader = config.init_obj('train_data_loader', module_loader, ConcatDataset(train_datasets))
-    valid_kwdlc_data_loader = None
+    train_dataset = ConcatDataset(train_datasets)
+    valid_kwdlc_dataset = None
     if config['valid_kwdlc_dataset']['args']['path'] is not None:
-        dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
-        valid_kwdlc_data_loader = config.init_obj('valid_data_loader', module_loader, dataset)
-    valid_kc_data_loader = None
+        valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
+    valid_kc_dataset = None
     if config['valid_kc_dataset']['args']['path'] is not None:
-        dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
-        valid_kc_data_loader = config.init_obj('valid_data_loader', module_loader, dataset)
-    valid_commonsense_data_loader = None
+        valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
+    valid_commonsense_dataset = None
     if config['valid_commonsense_dataset'] is not None:
-        dataset = config.init_obj('valid_commonsense_dataset', module_dataset, logger=logger)
-        valid_commonsense_data_loader = config.init_obj('valid_data_loader', module_loader, dataset)
+        valid_commonsense_dataset = config.init_obj('valid_commonsense_dataset', module_dataset, logger=logger)
 
     # build model architecture, then print to console
     model: BaseModel = config.init_obj('arch', module_arch, vocab_size=train_datasets[0].expanded_vocab_size)
@@ -68,10 +64,10 @@ def main(config: ConfigParser, args: argparse.Namespace):
 
     trainer = Trainer(model, metrics, optimizer,
                       config=config,
-                      data_loader=train_data_loader,
-                      valid_kwdlc_data_loader=valid_kwdlc_data_loader,
-                      valid_kc_data_loader=valid_kc_data_loader,
-                      valid_commonsense_data_loader=valid_commonsense_data_loader,
+                      train_dataset=train_dataset,
+                      valid_kwdlc_dataset=valid_kwdlc_dataset,
+                      valid_kc_dataset=valid_kc_dataset,
+                      valid_commonsense_dataset=valid_commonsense_dataset,
                       lr_scheduler=lr_scheduler)
 
     trainer.train()

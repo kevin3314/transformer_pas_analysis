@@ -1,3 +1,4 @@
+import math
 from abc import abstractmethod
 from logger import TensorboardWriter
 from pathlib import Path
@@ -6,31 +7,45 @@ import torch
 from numpy import inf
 
 from utils import prepare_device
+import data_loader.data_loaders as module_loader
 
 
 class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, metrics, optimizer, config):
+    def __init__(self, model, metrics, optimizer, config, train_dataset):
         self.config = config
-        self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
+        cfg_trainer: dict = config['trainer']
+        self.epochs: int = cfg_trainer['epochs']
+        self.save_start_epoch: int = cfg_trainer.get('save_start_epoch', 1)
+        self.logger = config.get_logger('trainer', cfg_trainer['verbosity'])
 
         # setup GPU device if available, move model into configured device
         self.device, device_ids = prepare_device(config['n_gpu'], self.logger)
+        self.num_devices = max(len(device_ids), 1)
         self.model = model.to(self.device)
-        if len(device_ids) > 1:
+        if self.num_devices > 1:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
+
+        max_bpg = self.config['trainer']['max_bpg']
+        self.batches_per_optim = cfg_trainer['batch_size']
+        self.gradient_accumulation_steps = math.ceil(self.batches_per_optim / (max_bpg * self.num_devices))
+        batches_per_step = min(self.batches_per_optim, max_bpg * self.num_devices)
+        if self.gradient_accumulation_steps > 1:
+            self.config['valid_data_loader']['args']['batch_size'] = batches_per_step
+        self.batches_per_device = math.ceil(batches_per_step / self.num_devices)
+        self.config['train_data_loader']['args']['batch_size'] = batches_per_step
+        self.data_loader = self.config.init_obj('train_data_loader', module_loader, train_dataset)
+        self.total_step = len(self.data_loader) * self.epochs
+        self.optimization_step_per_epoch = math.ceil(len(self.data_loader) / self.gradient_accumulation_steps)
+        self.total_optimization_step = self.optimization_step_per_epoch * self.epochs
 
         self.metrics = metrics
         self.optimizer = optimizer
 
-        cfg_trainer: dict = config['trainer']
-        self.epochs: int = cfg_trainer['epochs']
-        self.save_start_epoch: int = cfg_trainer.get('save_start_epoch', 1)
-        self.monitor: str = cfg_trainer.get('monitor', 'off')
-
         # configuration to monitor model performance and save best
+        self.monitor: str = cfg_trainer.get('monitor', 'off')
         if self.monitor == 'off':
             self.mnt_mode = 'off'
             self.mnt_best = 0
@@ -64,6 +79,13 @@ class BaseTrainer:
         """
         Full training logic
         """
+        self.logger.info("***** Running training *****")
+        self.logger.info("  Num examples = %d", self.data_loader.n_samples)
+        self.logger.info("  Num Epochs = %d", self.epochs)
+        self.logger.info("  Instantaneous batch size per device = %d", self.batches_per_device)
+        self.logger.info("  Total train batch size (w. parallel & accumulation) = %d", self.batches_per_optim)
+        self.logger.info("  Gradient Accumulation steps = %d", self.gradient_accumulation_steps)
+        self.logger.info("  Total optimization steps = %d", self.total_optimization_step)
         not_improved_count = 0
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)

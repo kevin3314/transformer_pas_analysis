@@ -118,10 +118,10 @@ class Tester:
                 batch = tuple(t.to(self.device) for t in batch)
 
                 loss, *output = model(*batch)
+
                 if len(loss.size()) > 0:
                     loss = loss.mean()
                 outputs.append(tuple(o.cpu().numpy() for o in output))
-
                 total_loss += loss.item() * output[0].size(0)
         avg_loss: float = total_loss / data_loader.n_samples
         return (avg_loss, *(np.concatenate(outs, axis=0) for outs in zip(*outputs)))

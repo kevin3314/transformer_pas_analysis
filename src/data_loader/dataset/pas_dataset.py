@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional, NamedTuple
+from typing import List, Dict, Optional, NamedTuple, Tuple
 from pathlib import Path
 from collections import defaultdict
 
@@ -21,8 +21,8 @@ class InputFeatures(NamedTuple):
     input_mask: List[bool]  # for training
     segment_ids: List[int]  # for training
     arguments_set: List[List[List[int]]]  # for training
-    ng_arg_mask: List[List[bool]]  # for training
-    ng_ment_mask: List[List[bool]]  # for training
+    overt_mask: List[List[List[int]]]  # for training
+    ng_token_mask: List[List[List[bool]]]  # for training
     deps: List[List[int]]  # for training
 
 
@@ -100,8 +100,8 @@ class PASDataset(Dataset):
         tokens: List[str] = []
         segment_ids: List[int] = []
         arguments_set: List[List[List[int]]] = []
-        arg_candidates_set: List[List[int]] = []
-        ment_candidates_set: List[List[int]] = []
+        candidates_set: List[List[List[int]]] = []
+        overts_set: List[List[List[int]]] = []
         deps: List[List[int]] = []
 
         # subword loop
@@ -112,12 +112,13 @@ class PASDataset(Dataset):
             # subsequent subword or [CLS] token or [SEP] token
             if token.startswith("##") or orig_index is None:
                 arguments_set.append([[] for _ in range(num_case_w_coreference)])
-                arg_candidates_set.append([])
-                ment_candidates_set.append([])
+                overts_set.append([[] for _ in range(num_case_w_coreference)])
+                candidates_set.append([[] for _ in range(num_case_w_coreference)])
                 deps.append([0] * max_seq_length)
                 continue
 
             arguments: List[List[int]] = [[] for _ in range(num_case_w_coreference)]
+            overts: List[List[int]] = [[] for _ in range(num_case_w_coreference)]
             for i, (case, arg_strings) in enumerate(example.arguments_set[orig_index].items()):
                 if not arg_strings:
                     continue
@@ -125,53 +126,47 @@ class PASDataset(Dataset):
                     if case == '=':
                         # coreference (arg_string: 著者, 23, NA, ...)
                         if arg_string in self.special_to_index:
-                            # special token
                             arguments[i].append(self.special_to_index[arg_string])
                         else:
-                            # normal
-                            if int(arg_string) not in example.ment_candidates_set[orig_index]:
-                                self.logger.debug(f'mention: {arg_string} of {token} is not in candidates and ignored')
-                                continue
                             arguments[i].append(orig_to_tok_index[int(arg_string)])
                     else:
-                        # arg_string: 著者, 8%C, 15%O, NULL, ...
+                        # pas (arg_string: 著者, 8%C, 15%O, NULL, ...)
                         if arg_string in self.special_to_index:
-                            # special token
                             if self.train_zero is False:
                                 continue
                             arguments[i].append(self.special_to_index[arg_string])
                         else:
-                            # normal
-                            if (arg_string.endswith('%C') and self.train_overt is False) or \
-                                    (arg_string.endswith('%N') and self.train_case is False) or \
-                                    (arg_string.endswith('%O') and self.train_zero is False):
+                            arg_index, flag = int(arg_string[:-2]), arg_string[-1]
+                            if flag == 'C':
+                                overts[i].append(orig_to_tok_index[arg_index])
+                            if (flag == 'C' and self.train_overt is False) or \
+                               (flag == 'N' and self.train_case is False) or \
+                               (flag == 'O' and self.train_zero is False):
                                 continue
-                            arg_string = arg_string[:-2]  # strip "%X"
-                            if int(arg_string) not in example.arg_candidates_set[orig_index]:
-                                self.logger.debug(f'argument: {arg_string} of {token} is not in candidates and ignored')
-                                continue
-                            arguments[i].append(orig_to_tok_index[int(arg_string)])
+                            arguments[i].append(orig_to_tok_index[arg_index])
 
             arguments_set.append(arguments)
+            overts_set.append(overts)
 
             ddep = example.ddeps[orig_index]
             deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in tok_to_orig_index])
             deps[-1] += [0] * (max_seq_length - len(tok_to_orig_index))
 
-            # arguments が空のもの (助詞など) には arg_candidates を設定しない
-            cases = list(example.arguments_set[orig_index].keys())
-            if any(args for args, case in zip(arguments, cases) if case != '='):
-                arg_candidates = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]] + \
-                                 [self.special_to_index[special] for special in (self.target_exophors + ['NULL'])]
-            else:
-                arg_candidates = []
-            arg_candidates_set.append(arg_candidates)
-            if self.coreference and any(args for args, case in zip(arguments, cases) if case == '='):
-                ment_candidates = [orig_to_tok_index[dmid] for dmid in example.ment_candidates_set[orig_index]] + \
-                                  [self.special_to_index[special] for special in (self.target_exophors + ['NA'])]
-            else:
-                ment_candidates = []
-            ment_candidates_set.append(ment_candidates)
+            # arguments_set が空のもの (助詞など) には candidates を設定しない
+            candidates: List[List[int]] = []
+            for case, arg_strings in example.arguments_set[orig_index].items():
+                if arg_strings:
+                    if case != '=':
+                        cands = [orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]]
+                        specials = self.target_exophors + ['NULL']
+                    else:
+                        cands = [orig_to_tok_index[dmid] for dmid in example.ment_candidates_set[orig_index]]
+                        specials = self.target_exophors + ['NA']
+                    cands += [self.special_to_index[special] for special in specials]
+                else:
+                    cands = []
+                candidates.append(cands)
+            candidates_set.append(candidates)
 
         input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
 
@@ -184,8 +179,8 @@ class PASDataset(Dataset):
             input_mask.append(False)
             segment_ids.append(0)
             arguments_set.append([[] for _ in range(num_case_w_coreference)])
-            arg_candidates_set.append([])
-            ment_candidates_set.append([])
+            overts_set.append([[] for _ in range(num_case_w_coreference)])
+            candidates_set.append([[] for _ in range(num_case_w_coreference)])
             deps.append([0] * max_seq_length)
 
         # add special tokens
@@ -194,16 +189,16 @@ class PASDataset(Dataset):
             input_mask.append(True)
             segment_ids.append(0)
             arguments_set.append([[] for _ in range(num_case_w_coreference)])
-            arg_candidates_set.append([])
-            ment_candidates_set.append([])
+            overts_set.append([[] for _ in range(num_case_w_coreference)])
+            candidates_set.append([[] for _ in range(num_case_w_coreference)])
             deps.append([0] * max_seq_length)
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
         assert len(arguments_set) == max_seq_length
-        assert len(arg_candidates_set) == max_seq_length
-        assert len(ment_candidates_set) == max_seq_length
+        assert len(overts_set) == max_seq_length
+        assert len(candidates_set) == max_seq_length
         assert len(deps) == max_seq_length
 
         feature = InputFeatures(
@@ -215,16 +210,16 @@ class PASDataset(Dataset):
             segment_ids=segment_ids,
             arguments_set=[[[int(x in args) for x in range(max_seq_length)] for args in arguments]
                            for arguments in arguments_set],
-            ng_arg_mask=[[(x in candidates) for x in range(max_seq_length)]
-                         for candidates in arg_candidates_set],  # False -> mask, True -> keep
-            ng_ment_mask=[[(x in candidates) for x in range(max_seq_length)]
-                          for candidates in ment_candidates_set],  # False -> mask, True -> keep
+            overt_mask=[[[(x in overt) for x in range(max_seq_length)] for overt in overts]
+                           for overts in overts_set],
+            ng_token_mask=[[[(x in cands) for x in range(max_seq_length)] for cands in candidates]
+                           for candidates in candidates_set],  # False -> mask, True -> keep
             deps=deps,
         )
 
         return feature
 
-    def _get_tokenized_tokens(self, words: List[str]) -> tuple:
+    def _get_tokenized_tokens(self, words: List[str]) -> Tuple[List[str], List[Optional[int]], List[int]]:
         all_tokens = []
         tok_to_orig_index: List[Optional[int]] = []
         orig_to_tok_index: List[int] = []
@@ -328,10 +323,8 @@ class PASDataset(Dataset):
         input_mask = np.array(feature.input_mask)        # (seq)
         segment_ids = np.array(feature.segment_ids)      # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
-        ng_arg_mask = np.array(feature.ng_arg_mask)      # (seq, seq)
-        ng_ment_mask = np.array(feature.ng_ment_mask)    # (seq, seq)
-        stacks = [ng_arg_mask] * len(self.target_cases) + ([ng_ment_mask] if self.coreference else [])
-        ng_token_mask = np.stack(stacks, axis=1)         # (seq, case, seq)
+        overt_mask = np.array(feature.overt_mask)        # (seq, case, seq)
+        ng_token_mask = np.array(feature.ng_token_mask)  # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
-        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task
+        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask

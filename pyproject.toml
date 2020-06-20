@@ -19,6 +19,7 @@ scikit-learn = "^0.22.1"
 jaconv = "^0.2.4"
 tensorboard = "^2.2.1"
 pandas = "^1.0.3"
+ordered-set = "^4.0.1"
 
 [tool.poetry.dev-dependencies]
 ipython = "^7.12.0"

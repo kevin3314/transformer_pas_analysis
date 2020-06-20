@@ -32,6 +32,12 @@ PAS analysis process is as follows:
 - pyknp 0.4.1
 - kyoto-reader 1.0.0
 
+## Setup Environment
+
+You can choose either of virtualenv or poetry.
+- virtualenv: create virtualenv and `pip install -r requirements.txt`
+- poetry: run `poetry install`
+
 ## Quick Start
 
 ```zsh

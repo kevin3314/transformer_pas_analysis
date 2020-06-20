@@ -1,5 +1,6 @@
 import os
 import hashlib
+import logging
 from typing import List, Dict
 from pathlib import Path
 import _pickle as cPickle
@@ -7,6 +8,8 @@ from collections import OrderedDict
 
 from pyknp import BList, Tag, Morpheme
 from kyoto_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
+
+logger = logging.getLogger(__file__)
 
 
 def read_example(document: Document,
@@ -103,31 +106,32 @@ class PasExample:
                     arg_candidates = ment_candidates = []
                     if mrph is target_mrph and process is True:
                         if '用言' in tag.features or (eventive_noun and '非用言格解析' in tag.features):
+                            arg_candidates = [x for x in head_dmids if x != dmid]
                             for case in basic_cases:
                                 dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
-                                arguments[case] = self._get_args(dmid, dmid2args, relax_exophors)
-                            arg_candidates = [x for x in head_dmids if x != dmid]
+                                arguments[case] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
 
                         if 'ノ' in cases:
+                            arg_candidates = [x for x in head_dmids if x != dmid]
                             if '体言' in tag.features and '非用言格解析' not in tag.features:
                                 dmid2args = {dmid: arguments['ノ'] for dmid, arguments in dmid2arguments.items()}
-                                arguments['ノ'] = self._get_args(dmid, dmid2args, relax_exophors)
-                            arg_candidates = [x for x in head_dmids if x != dmid]
+                                arguments['ノ'] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
 
                         if coreference:
                             if '体言' in tag.features:
-                                arguments['='] = self._get_mentions(tag, document, relax_exophors)
                                 ment_candidates = [x for x in head_dmids if x < dmid]
+                                arguments['='] = self._get_mentions(tag, document, relax_exophors, ment_candidates)
 
                     self.arguments_set.append(arguments)
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
                     dmid += 1
 
-    @staticmethod
-    def _get_args(dmid: int,
+    def _get_args(self,
+                  dmid: int,
                   dmid2args: Dict[int, List[BaseArgument]],
                   relax_exophors: Dict[str, str],
+                  candidates: List[int],
                   ) -> List[str]:
         """述語の dmid と その項 dmid2args から、項の文字列を得る
         返り値が空リストの場合、この項について loss は計算されない
@@ -153,16 +157,16 @@ class PasExample:
         arg_strings: List[str] = []
         for arg in args:
             if isinstance(arg, Argument):
-                string = str(arg.dmid)
+                if arg.dmid not in candidates:
+                    logger.debug(f'argument: {arg.midasi} in {self.doc_id} is not in candidates and ignored')
+                    continue
+                string = str(arg.dmid)  # arg.dmid が内容語形態素を指しているという前提(kyoto-reader と密結合で良くない)
                 if arg.dep_type == 'overt':
                     string += '%C'
                 elif arg.dep_type == 'dep':
                     string += '%N'
                 else:
                     assert arg.dep_type in ('intra', 'inter')
-                    # 文間後方照応はスキップ
-                    if arg.dep_type == 'inter' and arg.dmid > dmid:
-                        continue
                     string += '%O'
             # exophor
             else:
@@ -170,20 +174,23 @@ class PasExample:
             arg_strings.append(string)
         return arg_strings
 
-    @staticmethod
-    def _get_mentions(tag: Tag,
+    def _get_mentions(self,
+                      tag: Tag,
                       document: Document,
-                      relax_exophors: Dict[str, str]
+                      relax_exophors: Dict[str, str],
+                      candidates: List[int],
                       ) -> List[str]:
         ment_strings: List[str] = []
         dtid = document.tag2dtid[tag]
         if dtid in document.mentions:
             src_mention = document.mentions[dtid]
             tgt_mentions = document.get_siblings(src_mention)
-            preceding_mentions = sorted([m for m in tgt_mentions if m.dtid < dtid], key=lambda m: m.dtid)
             exophors = [document.entities[eid].exophor for eid in src_mention.eids
                         if document.entities[eid].is_special]
-            for mention in preceding_mentions:
+            for mention in tgt_mentions:
+                if mention.dmid not in candidates:
+                    logger.debug(f'mention: {mention.midasi} in {self.doc_id} is not in candidates and ignored')
+                    continue
                 ment_strings.append(str(mention.dmid))
             for exophor in exophors:
                 if exophor in relax_exophors:

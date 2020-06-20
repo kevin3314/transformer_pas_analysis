@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from collections import OrderedDict, Callable
+from collections import OrderedDict
+from collections.abc import Callable
 
 import torch
 

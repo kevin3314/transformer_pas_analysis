@@ -178,14 +178,12 @@ class Scorer:
                     continue
                 arg.exophor = self.relax_exophors[arg.exophor]  # 「不特定:人１」なども「不特定:人」として扱う
             else:
-                if Scorer._is_inter_sentential_cataphor(arg, predicate):  # filter out cataphoras
+                assert isinstance(arg, Argument)
+                # filter out self-anaphora and cataphoras
+                if predicate.dtid == arg.dtid or (predicate.dtid < arg.dtid and arg.sid != predicate.sid):
                     continue
             filtered_args.append(arg)
         return filtered_args
-
-    @staticmethod
-    def _is_inter_sentential_cataphor(arg: BaseArgument, predicate: Predicate):
-        return isinstance(arg, Argument) and predicate.dtid < arg.dtid and arg.sid != predicate.sid
 
     def _evaluate_bridging(self, doc_id: str, document_pred: Document, document_gold: Document):
         dtid2anaphor_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_pred[doc_id]}
