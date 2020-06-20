@@ -3,6 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 # from transformers import BertModel
+from transformers import BertConfig
 
 from base import BaseModel
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
@@ -856,5 +857,77 @@ class OvertGivenConditionalModel(BaseModel):
                                         ng_token_mask=ng_token_mask,
                                         pre_output=(~overt_mask).float() * -1024.0)
         loss = weighted_cross_entropy_pas_loss(output, target, (~overt_mask).float())
+
+        return loss, output
+
+
+class CandidateAwareModel(BaseModel):
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+        atn_target = 'kv'
+        self.num_case = num_case + int(coreference)
+        config = BertConfig.from_pretrained(bert_model)
+        self.rel_embeddings1 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
+        self.rel_embeddings2 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
+        kwargs = {'conditional_self_attention': True,
+                  'rel_embeddings1': None,
+                  'rel_embeddings2': None}
+        if 'k' in atn_target:
+            kwargs['rel_embeddings1'] = self.rel_embeddings1
+        if 'v' in atn_target:
+            kwargs['rel_embeddings2'] = self.rel_embeddings2
+        self.bert: BertModel = BertModel.from_pretrained(bert_model, **kwargs)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_,
+                **__
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        device = input_ids.device
+        # (b, seq, case, seq) -> (b, seq, 1, seq)
+        mask = get_mask(attention_mask, ng_token_mask).any(dim=2, keepdim=True)
+        candidate_mask = (mask | mask.transpose(1, 3)).any(dim=3, keepdim=True)  # (b, seq, 1, 1)
+        # (b, seq, case*2-1, 1)
+        zeros = torch.zeros((batch_size, sequence_len, self.num_case * 2 - 1, 1), dtype=torch.bool, device=device)
+        extended_mask = torch.cat([~candidate_mask, candidate_mask, zeros], dim=2)  # (b, seq, case*2+1, 1)
+        zeros = torch.zeros((batch_size, sequence_len, self.num_case * 2 + 1, sequence_len - 1),
+                            dtype=torch.bool, device=device)
+        extended_mask = torch.cat([zeros, extended_mask], dim=3)  # (b, seq, case*2+1, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,
+                                       attention_mask=attention_mask,
+                                       token_type_ids=segment_ids,
+                                       rel_weights=extended_mask.float())
+
+        # -> (b, seq, hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, -1)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        loss = cross_entropy_pas_loss(output, target)
 
         return loss, output
