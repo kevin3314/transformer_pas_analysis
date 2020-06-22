@@ -33,9 +33,8 @@ class Scorer:
                  pas_target: str = 'pred'):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
-        self.cases_w_no: List[str] = target_cases
         self.cases: List[str] = [c for c in target_cases if c != 'ノ']
-        self.bridging: bool = 'ノ' in self.cases_w_no
+        self.bridging: bool = 'ノ' in target_cases
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
@@ -44,8 +43,10 @@ class Scorer:
         self.comp_result: Dict[tuple, str] = {}
         self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
             (case, OrderedDict((anal, Measure()) for anal in Scorer.DEPTYPE2ANALYSIS.values()))
-            for case in self.cases_w_no)
+            for case in self.cases)
         self.measure_coref: Measure = Measure()
+        self.measures_bridging: Dict[str, Measure] = OrderedDict(
+            (anal, Measure()) for anal in Scorer.DEPTYPE2ANALYSIS.values())
         self.relax_exophors: Dict[str, str] = {}
         for exophor in target_exophors:
             self.relax_exophors[exophor] = exophor
@@ -216,10 +217,10 @@ class Scorer:
                 analysis = Scorer.DEPTYPE2ANALYSIS[antecedent_pred.dep_type]
                 if antecedent_pred in antecedents_gold_relaxed:
                     self.comp_result[key] = analysis
-                    self.measures['ノ'][analysis].correct += 1
+                    self.measures_bridging[analysis].correct += 1
                 else:
                     self.comp_result[key] = 'wrong'
-                self.measures['ノ'][analysis].denom_pred += 1
+                self.measures_bridging[analysis].denom_pred += 1
 
             # calculate recall
             if antecedents_gold or (self.comp_result.get(key, None) in Scorer.DEPTYPE2ANALYSIS.values()):
@@ -237,7 +238,7 @@ class Scorer:
                         assert self.comp_result[key] == 'wrong'
                     else:
                         self.comp_result[key] = 'wrong'
-                self.measures['ノ'][analysis].denom_gold += 1
+                self.measures_bridging[analysis].denom_gold += 1
 
     def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
         dtid2mention_pred: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_pred[doc_id]}
@@ -298,25 +299,35 @@ class Scorer:
             case_result = OrderedDefaultDict(lambda: Measure())
             for analysis, measure in measures.items():
                 case_result[analysis] = measure
-                if case != 'ノ':
-                    all_case_result[analysis] += measure
+                all_case_result[analysis] += measure
             case_result['zero_all'] = case_result['zero_intra_sentential'] + \
                                       case_result['zero_inter_sentential'] + \
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            if case != 'ノ':
-                all_case_result['zero_all'] += case_result['zero_all']
-                all_case_result['all'] += case_result['all']
+            all_case_result['zero_all'] += case_result['zero_all']
+            all_case_result['all'] += case_result['all']
             result[case] = case_result
+
         if self.coreference:
             all_case_result['coreference'] = self.measure_coref
+
+        if self.bridging:
+            case_result = OrderedDefaultDict(lambda: Measure())
+            for analysis, measure in self.measures_bridging.items():
+                case_result[analysis] = measure
+            case_result['zero_all'] = case_result['zero_intra_sentential'] + \
+                                      case_result['zero_inter_sentential'] + \
+                                      case_result['zero_exophora']
+            case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
+            all_case_result['bridging'] = case_result['all']
+
         result['all_case'] = all_case_result
         return result
 
     def export_txt(self, destination: Union[str, Path, TextIO]):
         lines = []
         for case, measures in self.result_dict().items():
-            if case in self.cases_w_no:
+            if case in self.cases:
                 lines.append(f'{case}格')
             else:
                 lines.append(f'{case}')
@@ -334,7 +345,7 @@ class Scorer:
             destination.write(text)
 
     def export_csv(self, destination: Union[str, Path, TextIO], sep: str = ','):
-        case_ja2en = {'ガ': 'ga', 'ヲ': 'wo', 'ニ': 'ni', 'ガ２': 'ga2', 'ノ': 'no', 'all_case': 'all_case'}
+        case_ja2en = {'ガ': 'ga', 'ヲ': 'wo', 'ニ': 'ni', 'ガ２': 'ga2', 'all_case': 'all_case'}
         text = ''
         result_dict = self.result_dict()
         text += 'case' + sep
