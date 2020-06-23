@@ -11,6 +11,7 @@ from pyknp import BList
 from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 
 from utils.util import OrderedDefaultDict
+from utils.constants import CASE2YOMI
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -345,13 +346,12 @@ class Scorer:
             destination.write(text)
 
     def export_csv(self, destination: Union[str, Path, TextIO], sep: str = ','):
-        case_ja2en = {'ガ': 'ga', 'ヲ': 'wo', 'ニ': 'ni', 'ガ２': 'ga2', 'all_case': 'all_case'}
         text = ''
         result_dict = self.result_dict()
         text += 'case' + sep
         text += sep.join(result_dict['all_case'].keys()) + '\n'
         for case, measures in result_dict.items():
-            text += case_ja2en[case] + sep
+            text += CASE2YOMI.get(case, case) + sep
             text += sep.join(f'{measure.f1:.5}' for measure in measures.values())
             text += '\n'
 
@@ -606,6 +606,7 @@ def main():
     documents_pred = list(reader_pred.process_all_documents())
     documents_gold = list(reader_gold.process_all_documents())
 
+    assert set(args.case_string.split(',')) <= set(CASE2YOMI.keys())
     scorer = Scorer(documents_pred, documents_gold,
                     target_cases=args.case_string.split(','),
                     target_exophors=args.exophors.split(','),

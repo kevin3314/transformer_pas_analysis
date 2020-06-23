@@ -104,7 +104,8 @@ def main() -> None:
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
         if args.coreference:
             items.append('coref')
-        items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
+        if set(cases) - {'ノ'}:
+            items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
         if 'ノ' in cases:
             items.append('nocase')
         if args.eventive_noun:
