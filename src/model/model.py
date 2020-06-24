@@ -928,3 +928,77 @@ class CandidateAwareModel(BaseModel):
         loss = cross_entropy_pas_loss(output, target)
 
         return loss, output
+
+
+class CoreferenceAwareModel(BaseModel):
+    """
+    出力層で共参照の結果を与える
+    soft な重みで、それぞれの格の重みで変換
+    """
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        assert coreference is True
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.out = nn.Linear(bert_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *args,
+                **kwargs
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, seq_len = input_ids.size()
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+
+        if self.training:
+            progress = kwargs['progress']  # learning progress (0 ~ 1)
+            gold_ratio = 0.5 - progress * 0.5
+            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
+        else:
+            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+
+        # assuming coreference is the last case
+        # (b, seq, seq, hid)
+        h_coref = torch.tanh(self.dropout(h_p[:, :, -1, :].unsqueeze(2) + h_a[:, :, -1, :].unsqueeze(1)))
+        # ここで，self.out ではなく別の重みを使うのもあり
+        out_coref = self.out(h_coref).squeeze(-1)  # (b, seq, seq)
+        out_coref += (~mask[:, :, -1, :]).float() * -1024.0
+        annealed_out_coref = (~target[:, :, -1, :] * -1024.0) * gold_mask + out_coref * ~gold_mask  # (b, seq, seq)
+
+        context = torch.einsum('bjch,bij->bich', h_a, annealed_out_coref.softmax(dim=2))  # (b, seq, case, hid)
+        h_a += context
+
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
