@@ -978,9 +978,9 @@ class CoreferenceAwareModel(BaseModel):
         if self.training:
             progress = kwargs['progress']  # learning progress (0 ~ 1)
             gold_ratio = 0.5 - progress * 0.5
-            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
         else:
-            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
@@ -1052,9 +1052,9 @@ class CoreferenceAwareModel2(BaseModel):
         if self.training:
             progress = kwargs['progress']  # learning progress (0 ~ 1)
             gold_ratio = 0.5 - progress * 0.5
-            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
         else:
-            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
@@ -1131,9 +1131,9 @@ class CoreferenceAwareModel3(BaseModel):
         if self.training:
             progress = kwargs['progress']  # learning progress (0 ~ 1)
             gold_ratio = 0.5 - progress * 0.5
-            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
         else:
-            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
@@ -1208,9 +1208,9 @@ class CoreferenceAwareModel4(BaseModel):
         if self.training:
             progress = kwargs['progress']  # learning progress (0 ~ 1)
             gold_ratio = 0.5 - progress * 0.5
-            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
         else:
-            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
@@ -1284,9 +1284,9 @@ class CoreferenceAwareModel5(BaseModel):
         if self.training:
             progress = kwargs['progress']  # learning progress (0 ~ 1)
             gold_ratio = 0.5 - progress * 0.5
-            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
         else:
-            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
@@ -1362,9 +1362,9 @@ class CoreferenceAwareModel6(BaseModel):
         if self.training:
             progress = kwargs['progress']  # learning progress (0 ~ 1)
             gold_ratio = 0.5 - progress * 0.5
-            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
         else:
-            gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1)
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
