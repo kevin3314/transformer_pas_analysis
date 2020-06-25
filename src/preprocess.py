@@ -48,7 +48,6 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
     did2cumlens: Dict[str, List[int]] = {}
     sid2knp: Dict[str, str] = {}
 
-    # print(f'reading from {input_dir}...')
     for knp_file in input_dir.glob('*.knp'):
         with knp_file.open() as fin:
             did = knp_file.stem
@@ -65,7 +64,6 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                     sid2knp[blist.sid] = buff
                     buff = ''
 
-    # print(f'writing to {output_dir}...')
     for did, sids in did2sids.items():
         cum: List[int] = did2cumlens[did]
         end = 1
@@ -87,19 +85,22 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
             end += 1
 
 
-def process_kc(input_path: Path, output_path: Path, config: dict, tokenizer: BertTokenizer) -> int:
+def process_kc(input_path: Path, output_path: Path, config: dict, tokenizer: BertTokenizer, split: bool = False) -> int:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_dir = Path(tmp_dir)
-        # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
-        max_subword_length = config['max_seq_length'] - 2 - NUM_SPECIAL_TOKENS
-        print('splitting kc...')
-        split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
+        if split:
+            tmp_dir = Path(tmp_dir)
+            # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
+            max_subword_length = config['max_seq_length'] - 2 - NUM_SPECIAL_TOKENS
+            print('splitting kc...')
+            split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
+            input_path = tmp_dir
 
         output_path.mkdir(exist_ok=True)
-        reader = KyotoReader(tmp_dir, config['target_cases'], config['target_corefs'], extract_nes=False)
+        reader = KyotoReader(input_path, config['target_cases'], config['target_corefs'], extract_nes=False)
         for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader.did2source)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
+
     return len(reader.did2source)
 
 
@@ -170,11 +171,16 @@ def main():
         output_dir: Path = args.out / 'kc'
         output_dir.mkdir(exist_ok=True)
         tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
-        num_examples_train = process_kc(input_dir / 'train', output_dir / 'train', config, tokenizer)
-        num_examples_valid = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer)
-        num_examples_test = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer)
+        num_examples_train = process_kc(input_dir / 'train', output_dir / 'train', config, tokenizer, split=True)
+        num_examples_valid = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer, split=True)
+        num_examples_test = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer, split=True)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kc'] = num_examples_dict
+
+        joined_output_dir: Path = args.out / 'kc_joined'
+        joined_output_dir.mkdir(exist_ok=True)
+        _ = process_kc(input_dir / 'valid', joined_output_dir / 'valid', config, tokenizer, split=False)
+        _ = process_kc(input_dir / 'test', joined_output_dir / 'test', config, tokenizer, split=False)
 
     if args.commonsense is not None:
         input_dir = Path(args.commonsense).resolve()
