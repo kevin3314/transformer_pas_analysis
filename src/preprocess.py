@@ -147,14 +147,22 @@ def main():
     target_cases: List[str] = args.case_string.split(',')
     target_corefs: List[str] = args.coref_string.split(',')
     bert_model = BERT_MODELS[args.env][args.bert]
-    config = {
-        'target_cases': target_cases,
-        'target_corefs': target_corefs,
-        'num_examples': {},
-        'max_seq_length': args.max_seq_length,
-        'bert_name': args.bert,
-        'bert_path': bert_model,
-    }
+    config_path: Path = args.out / 'config.json'
+    if config_path.exists():
+        with config_path.open() as f:
+            config = json.load(f)
+    else:
+        config = {}
+    config.update(
+        {
+            'target_cases': target_cases,
+            'target_corefs': target_corefs,
+            'num_examples': {},
+            'max_seq_length': args.max_seq_length,
+            'bert_name': args.bert,
+            'bert_path': bert_model,
+        }
+    )
 
     if args.kwdlc is not None:
         input_dir = Path(args.kwdlc).resolve()
@@ -192,7 +200,7 @@ def main():
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['commonsense'] = num_examples_dict
 
-    with args.out.joinpath('config.json').open(mode='wt') as f:
+    with config_path.open(mode='wt') as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
 
