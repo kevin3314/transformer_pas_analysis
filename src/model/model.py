@@ -1307,7 +1307,7 @@ class CoreferenceAwareModel5(BaseModel):
         output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
         output += (~mask).float() * -1024.0
 
-        loss_coref = cross_entropy_pas_loss(out_coref.unsqueeze(2), target[:, :, -1, :])
+        loss_coref = cross_entropy_pas_loss(out_coref.unsqueeze(2), target[:, :, -1, :].unsqueeze(2))
         loss = cross_entropy_pas_loss(output, target)
 
         return loss + loss_coref, output
@@ -1369,7 +1369,6 @@ class CoreferenceAwareModel6(BaseModel):
         # assuming coreference is the last case
         # (b, seq, seq, hid)
         h_coref = torch.tanh(self.dropout(h_p[:, :, -1, :].unsqueeze(2) + h_a[:, :, -1, :].unsqueeze(1)))
-        # ここで，self.out ではなく別の重みを使うのもありだが，out_coref.detach()してる限り学習されない
         out_coref = self.out2(h_coref).squeeze(-1)  # (b, seq, seq)
         out_coref += (~mask[:, :, -1, :]).float() * -1024.0
         annealed_out_coref = (~target[:, :, -1, :] * -1024.0) * gold_mask + out_coref.detach() * ~gold_mask  # (b, seq, seq)
@@ -1385,7 +1384,7 @@ class CoreferenceAwareModel6(BaseModel):
         output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
         output += (~mask).float() * -1024.0
 
-        loss_coref = cross_entropy_pas_loss(out_coref.unsqueeze(2), target[:, :, -1, :])
+        loss_coref = cross_entropy_pas_loss(out_coref.unsqueeze(2), target[:, :, -1, :].unsqueeze(2))
         loss = cross_entropy_pas_loss(output, target)
 
         return loss + loss_coref, output
