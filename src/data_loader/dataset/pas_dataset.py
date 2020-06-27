@@ -39,6 +39,7 @@ class PASDataset(Dataset):
                  kc: bool,
                  train_target: List[str],
                  eventive_noun: bool,
+                 disable_pas: bool = False,
                  knp_string: Optional[str] = None,
                  logger=None,
                  ) -> None:
@@ -85,6 +86,7 @@ class PASDataset(Dataset):
                                    coreference=coreference,
                                    kc=kc,
                                    eventive_noun=eventive_noun,
+                                   disable_pas=(disable_pas and training),
                                    dataset_config=dataset_config)
             feature = self._convert_example_to_feature(example, max_seq_length)
             if feature is None:

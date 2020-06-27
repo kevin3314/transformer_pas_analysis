@@ -87,6 +87,8 @@ def main() -> None:
                         help='rel embedding addition target (IterativeRefinementModel with AttentionConditionalModel)')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='debug mode')
+    parser.add_argument('--disable-pas', action='store_true', default=False,
+                        help='do not perform predicate argument structure analysis')
     args = parser.parse_args()
 
     config = Config(args.config)
@@ -102,6 +104,8 @@ def main() -> None:
         if 'IterativeRefinement' in model:
             items.append(refinement_iter)
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
+        if args.disable_pas:
+            items.append('nopas')
         if args.coreference:
             items.append('coref')
         if set(cases) - {'ノ'}:
@@ -164,6 +168,7 @@ def main() -> None:
                 'kc': None,
                 'train_target': args.train_target,
                 'eventive_noun': args.eventive_noun,
+                'disable_pas': args.disable_pas
             },
         }
 
