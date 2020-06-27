@@ -99,9 +99,12 @@ class Scorer:
             if self.coreference:
                 self._evaluate_coref(doc_id, document_pred, document_gold)
 
+    # FIXME: これはいらなくなったはず
     def _process(self, sid: str, doc_id: str) -> bool:
         """return if given sentence is analysis target"""
-        process_all = (self.kc is False) or (doc_id.split('-')[-1] == '00')
+        if self.kc is False:
+            return True
+        process_all = (len(doc_id.split('-')) == 2) and (doc_id.split('-')[1] == '00')
         sentences = self.did2document_pred[doc_id].sentences
         last_sid = sentences[-1].sid if sentences else None
         return process_all or (sid == last_sid)
