@@ -1516,8 +1516,8 @@ class CoreferenceSeparatedModel2(BaseModel):
         _, out_coref = self.coreference_model(input_ids=input_ids,
                                               attention_mask=attention_mask,
                                               segment_ids=segment_ids,
-                                              ng_token_mask=ng_token_mask[:, :, -1, :],
-                                              target=target[:, :, -1, :])
+                                              ng_token_mask=ng_token_mask[:, :, -1, :].unsqueeze(2),
+                                              target=target[:, :, -1, :].unsqueeze(2))
         out_coref = out_coref.detach().squeeze(2)  # (b, seq, seq)
 
         hid_context = self.l_context(self.dropout(sequence_output))  # (b, seq, hid)
