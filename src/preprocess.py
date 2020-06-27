@@ -157,12 +157,14 @@ def main():
         {
             'target_cases': target_cases,
             'target_corefs': target_corefs,
-            'num_examples': {},
+            # 'num_examples': {},
             'max_seq_length': args.max_seq_length,
             'bert_name': args.bert,
             'bert_path': bert_model,
         }
     )
+    if 'num_examples' not in config:
+        config['num_examples'] = {}
 
     if args.kwdlc is not None:
         input_dir = Path(args.kwdlc).resolve()
