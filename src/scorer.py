@@ -104,7 +104,7 @@ class Scorer:
         """return if given sentence is analysis target"""
         if self.kc is False:
             return True
-        process_all = (len(doc_id.split('-')) == 2) and (doc_id.split('-')[1] == '00')
+        process_all = (len(doc_id.split('-')) == 2) and (doc_id.split('-')[1] != '00')
         sentences = self.did2document_pred[doc_id].sentences
         last_sid = sentences[-1].sid if sentences else None
         return process_all or (sid == last_sid)
