@@ -132,10 +132,14 @@ class Tester:
                                                 self.logger,
                                                 use_gold_overt=(not self.predict_overt))
         documents_pred = prediction_writer.write(arguments_set, prediction_output_dir)
+        if corpus == 'kc':
+            documents_gold = data_loader.dataset.joined_documents
+        else:
+            documents_gold = data_loader.dataset.documents
 
         result = {}
         for pas_target in self.pas_targets:
-            scorer = Scorer(documents_pred, data_loader.dataset.documents,
+            scorer = Scorer(documents_pred, documents_gold,
                             target_cases=data_loader.dataset.target_cases,
                             target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
