@@ -69,8 +69,9 @@ class PASDataset(Dataset):
         self.examples: List[PasExample] = []
         self.features: List[InputFeatures] = []
         # FIXME: refactor
-        if self.kc:
-            reader = KyotoReader(source.parent / 'kc_joined',
+        if self.kc and not training:
+            eval_set = source.name
+            reader = KyotoReader(source.parent.parent / 'kc_joined' / eval_set,
                                  target_cases=dataset_config['target_cases'],
                                  target_corefs=dataset_config['target_corefs'],
                                  extract_nes=False)
