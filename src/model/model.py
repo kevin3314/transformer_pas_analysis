@@ -1620,3 +1620,95 @@ class CoreferenceSeparatedModel3(BaseModel):
         loss = cross_entropy_pas_loss(output, target_others)
 
         return loss, torch.cat([output, out_coref.unsqueeze(2)], dim=2)
+
+
+class CoreferenceSeparatedModel4(BaseModel):
+    """
+    2つの BERT を使って，右側では coref を解く．左側では coref の情報を使って他の 3タスクを解く
+    annealing してみる
+    """
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.coreference_model: BaselineModelOld = BaselineModelOld(bert_model, vocab_size, dropout, 0, True)
+        dates = ('0623_214717', '0623_222941', '0623_230434', '0623_233957', '0624_001637')
+        import random
+        date = dates[random.randrange(len(dates))]
+        # date = dates[0]
+        checkpoint = f'/mnt/elm/ueda/bpa/result/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
+        self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
+        self.coreference_model.eval()
+
+        assert coreference is True
+        self.num_case = num_case
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_context = nn.Linear(bert_hidden_size, bert_hidden_size)
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.out = nn.Linear(bert_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *args,
+                **kwargs
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, seq_len = input_ids.size()
+        ng_token_mask_others, ng_token_mask_coref = ng_token_mask[:, :, :-1, :], ng_token_mask[:, :, -1, :].unsqueeze(2)
+        target_others, target_coref = target[:, :, :-1, :], target[:, :, -1, :].unsqueeze(2)
+        mask = get_mask(attention_mask, ng_token_mask_others)  # (b, seq, case, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+
+        if self.training:
+            progress = kwargs['progress']  # learning progress (0 ~ 1)
+            gold_ratio = 0.5 - progress * 0.5
+        else:
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
+
+        # (b, seq, 1, seq)
+        _, out_coref = self.coreference_model(input_ids=input_ids,
+                                              attention_mask=attention_mask,
+                                              segment_ids=segment_ids,
+                                              ng_token_mask=ng_token_mask_coref,
+                                              target=target_coref)
+        out_coref = out_coref.detach().squeeze(2)  # (b, seq, seq)
+
+        annealed_out_coref = (~(target_coref.squeeze(2)) * -1024.0) * gold_mask + out_coref.detach() * ~gold_mask
+
+        hid_context = self.l_context(self.dropout(sequence_output))  # (b, seq, hid)
+        hid_context = hid_context.unsqueeze(2).expand(batch_size, seq_len, self.num_case, -1)  # (b, seq, case, hid)
+        context = torch.einsum('bjch,bij->bich', hid_context, annealed_out_coref.softmax(dim=2))  # (b, seq, case, hid)
+        h_a += context
+
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target_others)
+
+        return loss, torch.cat([output, out_coref.unsqueeze(2)], dim=2)
