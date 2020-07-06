@@ -172,7 +172,8 @@ class Trainer(BaseTrainer):
                             target_cases=data_loader.dataset.target_cases,
                             target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
-                            kc=data_loader.dataset.kc)
+                            bridging=data_loader.dataset.bridging,
+                            pas_target='pred')  # FIXME
 
             val_metrics = self._eval_metrics(scorer.result_dict(), label)
 

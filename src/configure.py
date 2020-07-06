@@ -48,11 +48,13 @@ def main() -> None:
     parser.add_argument('--eval-batch-size', type=int, default=None,
                         help='number of batch size for evaluation (default: same as that of training)')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
-                        help='Perform coreference resolution.')
+                        help='perform coreference resolution')
+    parser.add_argument('--bridging', '--brg', action='store_true', default=False,
+                        help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
-                        help='Case strings. Separate by ","')
+                        help='case strings separated by ","')
     parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
-                        help='Special tokens. Separate by ",".')
+                        help='exophor strings separated by ","')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
@@ -63,7 +65,7 @@ def main() -> None:
                         help='Proportion of training to perform linear learning rate warmup for')
     parser.add_argument('--warmup-steps', type=int, default=None,
                         help='Linear warmup over warmup_steps.')
-    parser.add_argument('--additional-name', type=str, default=None,
+    parser.add_argument('--additional-name', '--name', type=str, default=None,
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
@@ -95,7 +97,10 @@ def main() -> None:
     data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
+    exophors = args.exophors.split(',')
     cases: List[str] = args.case_string.split(',') if args.case_string else []
+    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
+    assert 'ノ' not in cases, msg
 
     for model, corpus, n_epoch, conditional_model, output_aggr, refinement_iter, atn_target in \
             itertools.product(args.model, args.corpus, args.epoch, args.conditional_model, args.output_aggr,
@@ -108,10 +113,10 @@ def main() -> None:
             items.append('nopas')
         if args.coreference:
             items.append('coref')
-        if set(cases) - {'ノ'}:
+        if cases or args.bridging:
             items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
-        if 'ノ' in cases:
-            items.append('nocase')
+        if args.bridging:
+            items.append('brg')
         if args.eventive_noun:
             items.append('noun')
         if model in ('RefinementModel', 'RefinementModel2'):
@@ -140,7 +145,7 @@ def main() -> None:
             'args': {
                 'bert_model': dataset_config['bert_path'],
                 'dropout': args.dropout,
-                'num_case': len(cases),
+                'num_case': len(cases) + int(args.bridging),
                 'coreference': args.coreference,
             },
         }
@@ -158,13 +163,12 @@ def main() -> None:
             'type': 'PASDataset',
             'args': {
                 'path': None,
-                'max_seq_length': dataset_config['max_seq_length'],
                 'cases': cases,
-                'exophors': args.exophors.split(','),
+                'exophors': exophors,
                 'coreference': args.coreference,
+                'bridging': args.bridging,
                 'dataset_config': dataset_config,
                 'training': None,
-                'bert_model': dataset_config['bert_path'],
                 'kc': None,
                 'train_target': args.train_target,
                 'eventive_noun': args.eventive_noun,
@@ -205,7 +209,7 @@ def main() -> None:
                 'args': {
                     'path': None,
                     'max_seq_length': dataset_config['max_seq_length'],
-                    'num_special_tokens': len(args.exophors.split(',')) + 1 + int(args.coreference),
+                    'num_special_tokens': len(exophors) + 1 + int(args.coreference),
                     'bert_model': dataset_config['bert_path'],
                 },
             }
@@ -278,7 +282,7 @@ def main() -> None:
             ]
         if args.coreference:
             metrics.append('coreference_f1')
-        if 'ノ' in cases:
+        if args.bridging:
             metrics.append('bridging_anaphora_f1')
 
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch

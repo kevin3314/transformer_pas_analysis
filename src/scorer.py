@@ -29,18 +29,17 @@ class Scorer:
                  documents_gold: List[Document],
                  target_cases: List[str],
                  target_exophors: List[str],
-                 coreference: bool = True,
-                 kc: bool = False,
+                 coreference: bool = False,
+                 bridging: bool = False,
                  pas_target: str = 'pred'):
         # long document may have been ignored
         assert set(doc.doc_id for doc in documents_pred) <= set(doc.doc_id for doc in documents_gold)
-        self.cases: List[str] = [c for c in target_cases if c != 'ノ']
-        self.bridging: bool = 'ノ' in target_cases
+        self.cases: List[str] = target_cases
+        self.bridging: bool = bridging
         self.doc_ids: List[str] = [doc.doc_id for doc in documents_pred]
         self.did2document_pred: Dict[str, Document] = {doc.doc_id: doc for doc in documents_pred}
         self.did2document_gold: Dict[str, Document] = {doc.doc_id: doc for doc in documents_gold}
         self.coreference = coreference
-        self.kc = kc
         self.comp_result: Dict[tuple, str] = {}
         self.measures: Dict[str, Dict[str, Measure]] = OrderedDict(
             (case, OrderedDict((anal, Measure()) for anal in Scorer.DEPTYPE2ANALYSIS.values()))
@@ -52,7 +51,7 @@ class Scorer:
         for exophor in target_exophors:
             self.relax_exophors[exophor] = exophor
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
-                for n in '１２３４５６７８９':
+                for n in ('１', '２', '３', '４', '５', '６', '７', '８', '９', '１０', '１１'):
                     self.relax_exophors[exophor + n] = exophor
 
         self.did2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
@@ -65,8 +64,6 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             for predicate_pred in document_pred.get_predicates():
-                if self._process(predicate_pred.sid, doc_id) is False:
-                    continue
                 features = predicate_pred.tag.features
                 if (pas_target in ('pred', 'all') and '用言' in features) or \
                         (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
@@ -74,8 +71,6 @@ class Scorer:
                 if self.bridging and '体言' in features and '非用言格解析' not in features:
                     self.did2bridgings_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
-                if self._process(predicate_gold.sid, doc_id) is False:
-                    continue
                 features = predicate_gold.tag.features
                 if (pas_target in ('pred', 'all') and '用言' in features) or \
                         (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
@@ -84,10 +79,10 @@ class Scorer:
                     self.did2bridgings_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
-                if '体言' in mention_pred.tag.features and self._process(mention_pred.sid, doc_id):
+                if '体言' in mention_pred.tag.features:
                     self.did2mentions_pred[doc_id].append(mention_pred)
             for mention_gold in document_gold.mentions.values():
-                if '体言' in mention_gold.tag.features and self._process(mention_gold.sid, doc_id):
+                if '体言' in mention_gold.tag.features:
                     self.did2mentions_gold[doc_id].append(mention_gold)
 
         for doc_id in self.doc_ids:
@@ -98,16 +93,6 @@ class Scorer:
                 self._evaluate_bridging(doc_id, document_pred, document_gold)
             if self.coreference:
                 self._evaluate_coref(doc_id, document_pred, document_gold)
-
-    # FIXME: これはいらなくなったはず
-    def _process(self, sid: str, doc_id: str) -> bool:
-        """return if given sentence is analysis target"""
-        if self.kc is False:
-            return True
-        process_all = not (len(doc_id.split('-')) == 2 and doc_id.split('-')[1] != '00')
-        sentences = self.did2document_pred[doc_id].sentences
-        last_sid = sentences[-1].sid if sentences else None
-        return process_all or (sid == last_sid)
 
     def _evaluate_pas(self, doc_id: str, document_pred: Document, document_gold: Document):
         """calculate PAS analysis scores"""
@@ -575,14 +560,16 @@ def main():
                         help='path to directory where system output KWDLC files exist (default: None)')
     parser.add_argument('--gold-dir', default=None, type=str,
                         help='path to directory where gold KWDLC files exist (default: None)')
-    parser.add_argument('--coreference', action='store_true', default=False,
-                        help='evaluate coreference resolution')
-    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
-                        help='Coreference strings. Separate by ","')
+    parser.add_argument('--coreference', '--coref', action='store_true', default=False,
+                        help='perform coreference resolution')
+    parser.add_argument('--bridging', '--brg', action='store_true', default=False,
+                        help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
-                        help='Case strings. Separate by ","')
-    parser.add_argument('--exophors', type=str, default='著者,読者,不特定:人',
-                        help='Special tokens. Separate by ",".')
+                        help='case strings separated by ","')
+    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
+                        help='exophor strings separated by ","')
+    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
+                        help='coreference strings separated by ","')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
     parser.add_argument('--pas-target', choices=['pred', 'noun', 'all'], default='pred',
@@ -597,7 +584,8 @@ def main():
         Path(args.gold_dir),
         target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ'.split(','),
         target_corefs=args.coref_string.split(','),
-        extract_nes=False
+        extract_nes=False,
+        use_pas_tag=False,
     )
     reader_pred = KyotoReader(
         Path(args.prediction_dir),
@@ -610,11 +598,13 @@ def main():
     documents_gold = list(reader_gold.process_all_documents())
 
     assert set(args.case_string.split(',')) <= set(CASE2YOMI.keys())
+    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
+    assert 'ノ' not in args.case_string.split(','), msg
     scorer = Scorer(documents_pred, documents_gold,
                     target_cases=args.case_string.split(','),
                     target_exophors=args.exophors.split(','),
                     coreference=args.coreference,
-                    kc=(len(documents_gold[0].doc_id.split('-')[-1]) == 2),
+                    bridging=args.bridging,
                     pas_target=args.pas_target)
     if args.result_html:
         scorer.write_html(Path(args.result_html))

@@ -143,7 +143,7 @@ class Tester:
                             target_cases=data_loader.dataset.target_cases,
                             target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
-                            kc=data_loader.dataset.kc,
+                            bridging=data_loader.dataset.bridging,
                             pas_target=pas_target)
             if self.target != 'test':
                 scorer.write_html(self.save_dir / f'{corpus}_{pas_target}{suffix}.html')
