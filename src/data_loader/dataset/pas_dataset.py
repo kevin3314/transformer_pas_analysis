@@ -36,9 +36,8 @@ class PASDataset(Dataset):
                  dataset_config: dict,
                  training: bool,
                  kc: bool,
-                 train_target: List[str],
-                 eventive_noun: bool,
-                 disable_pas: bool = False,
+                 train_targets: List[str],
+                 pas_targets: List[str],
                  knp_string: Optional[str] = None,
                  logger=None,
                  ) -> None:
@@ -56,9 +55,10 @@ class PASDataset(Dataset):
         self.coreference: bool = coreference
         self.bridging: bool = bridging
         self.kc: bool = kc
-        self.train_overt: bool = 'overt' in train_target
-        self.train_case: bool = 'case' in train_target
-        self.train_zero: bool = 'zero' in train_target
+        self.train_overt: bool = 'overt' in train_targets
+        self.train_case: bool = 'case' in train_targets
+        self.train_zero: bool = 'zero' in train_targets
+        self.pas_targets: List[str] = pas_targets
         self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: dataset_config['max_seq_length'] - i - 1 for i, token
@@ -87,8 +87,7 @@ class PASDataset(Dataset):
                                    coreference=coreference,
                                    bridging=bridging,
                                    kc=kc,
-                                   eventive_noun=eventive_noun,
-                                   disable_pas=(disable_pas and training),
+                                   pas_targets=pas_targets,
                                    dataset_config=dataset_config)
             feature = self._convert_example_to_feature(example, dataset_config['max_seq_length'])
             if feature is None:

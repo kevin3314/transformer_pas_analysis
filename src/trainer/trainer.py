@@ -167,13 +167,14 @@ class Trainer(BaseTrainer):
                 documents_gold = data_loader.dataset.joined_documents
             else:
                 documents_gold = data_loader.dataset.documents
+            targets2label = {tuple(): '', ('pred',): 'pred', ('noun',): 'noun', ('pred', 'noun'): 'all'}
 
             scorer = Scorer(documents_pred, documents_gold,
                             target_cases=data_loader.dataset.target_cases,
                             target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
                             bridging=data_loader.dataset.bridging,
-                            pas_target='pred')  # FIXME
+                            pas_target=targets2label[tuple(data_loader.dataset.pas_targets)])
 
             val_metrics = self._eval_metrics(scorer.result_dict(), label)
 

@@ -1,7 +1,7 @@
 import re
 import argparse
 from pathlib import Path
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Set
 
 import torch
 import numpy as np
@@ -37,9 +37,20 @@ class Tester:
             else list(config.save_dir.glob('**/model_best.pth'))
         self.save_dir: Path = config.save_dir / f'eval_{target}{result_suffix}'
         self.save_dir.mkdir(exist_ok=True)
-        eventive_noun = (kwdlc_data_loader and config[f'{target}_kwdlc_dataset']['args']['eventive_noun']) or \
-                        (kc_data_loader and config[f'{target}_kc_dataset']['args']['eventive_noun'])
-        self.pas_targets = ('pred', 'noun', 'all') if eventive_noun else ('pred',)
+        pas_targets: Set[str] = set()
+        if kwdlc_data_loader is not None:
+            pas_targets |= set(kwdlc_data_loader.dataset.pas_targets)
+        if kc_data_loader is not None:
+            pas_targets |= set(kc_data_loader.dataset.pas_targets)
+        self.pas_targets: List[str] = []
+        if 'pred' in pas_targets:
+            self.pas_targets.append('pred')
+        if 'noun' in pas_targets:
+            self.pas_targets.append('noun')
+        if 'noun' in pas_targets and 'pred' in pas_targets:
+            self.pas_targets.append('all')
+        if not self.pas_targets:
+            self.pas_targets.append('')
 
     def test(self):
         log = {}
@@ -145,16 +156,22 @@ class Tester:
                             coreference=data_loader.dataset.coreference,
                             bridging=data_loader.dataset.bridging,
                             pas_target=pas_target)
+
+            stem = corpus
+            if pas_target:
+                stem += f'_{pas_target}'
+            stem += suffix
             if self.target != 'test':
-                scorer.write_html(self.save_dir / f'{corpus}_{pas_target}{suffix}.html')
-            scorer.export_txt(self.save_dir / f'{corpus}_{pas_target}{suffix}.txt')
-            scorer.export_csv(self.save_dir / f'{corpus}_{pas_target}{suffix}.csv')
+                scorer.write_html(self.save_dir / f'{stem}.html')
+            scorer.export_txt(self.save_dir / f'{stem}.txt')
+            scorer.export_csv(self.save_dir / f'{stem}.csv')
 
             metrics = self._eval_metrics(scorer.result_dict())
             for met, value in zip(self.metrics, metrics):
                 met_name = met.__name__
                 if 'case_analysis' in met_name or 'zero_anaphora' in met_name:
-                    met_name = f'{pas_target}_{met_name}'
+                    if pas_target:
+                        met_name = f'{pas_target}_{met_name}'
                 result[met_name] = value
 
         return result

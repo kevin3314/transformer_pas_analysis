@@ -572,8 +572,8 @@ def main():
                         help='coreference strings separated by ","')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
-    parser.add_argument('--pas-target', choices=['pred', 'noun', 'all'], default='pred',
-                        help='PAS analysis evaluation target (pred: predicates, noun: eventive noun)')
+    parser.add_argument('--pas-target', choices=['', 'pred', 'noun', 'all'], default='pred',
+                        help='PAS analysis evaluation target (pred: verbal predicates, noun: nominal predicates)')
     parser.add_argument('--result-html', default=None, type=str,
                         help='path to html file which prediction result is exported (default: None)')
     parser.add_argument('--result-csv', default=None, type=str,

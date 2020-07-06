@@ -18,16 +18,13 @@ def read_example(document: Document,
                  coreference: bool,
                  bridging: bool,
                  kc: bool,
-                 eventive_noun: bool,
-                 disable_pas: bool,
+                 pas_targets: List[str],
                  dataset_config: dict,
                  ) -> 'PasExample':
     load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
     save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
     bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, cases, exophors, coreference, bridging, kc, eventive_noun, dataset_config)
-    if disable_pas:
-        example_hash += '_nopas'
+    example_hash = _hash(document, cases, exophors, coreference, bridging, kc, pas_targets, dataset_config)
     cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
     if cache_path.exists() and load_cache:
         with cache_path.open('rb') as f:
@@ -40,8 +37,7 @@ def read_example(document: Document,
                      coreference=coreference,
                      bridging=bridging,
                      kc=kc,
-                     eventive_noun=eventive_noun,
-                     disable_pas=disable_pas)
+                     pas_targets=pas_targets)
         if save_cache:
             cache_path.parent.mkdir(exist_ok=True, parents=True)
             with cache_path.open('wb') as f:
@@ -76,8 +72,7 @@ class PasExample:
              coreference: bool,
              bridging: bool,
              kc: bool,
-             eventive_noun: bool,
-             disable_pas: bool,
+             pas_targets: List[str],
              ) -> None:
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
@@ -112,8 +107,8 @@ class PasExample:
                     arguments = OrderedDict((rel, []) for rel in relations)
                     arg_candidates = ment_candidates = []
                     if mrph is target_mrph and process is True:
-                        if (disable_pas is False and '用言' in tag.features) or \
-                                (eventive_noun and '非用言格解析' in tag.features):
+                        if ('pred' in pas_targets and '用言' in tag.features) or \
+                                ('noun' in pas_targets and '非用言格解析' in tag.features):
                             arg_candidates = [x for x in head_dmids if x != dmid]
                             for case in cases:
                                 dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
