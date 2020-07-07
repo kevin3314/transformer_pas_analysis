@@ -1013,6 +1013,7 @@ class CorefCAModel(BaseModel):
 class CoreferenceSeparatedModel(BaseModel):
     """
     2つの BERT を使って，右側では coref を解く．左側では coref の情報を使って他の 3タスクを解く
+    旧名: CoreferenceSeparatedModel3
     """
 
     def __init__(self,

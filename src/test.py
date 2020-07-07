@@ -20,7 +20,7 @@ from base.base_model import BaseModel
 
 class Tester:
     def __init__(self, model, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                 target, logger, predict_overt, confidence_threshold, result_suffix):
+                 target, logger, predict_overt, precision_threshold, recall_threshold, result_suffix):
         self.model: BaseModel = model
         self.metrics: List[Callable] = metrics
         self.config = config
@@ -30,7 +30,8 @@ class Tester:
         self.target: str = target
         self.logger = logger
         self.predict_overt: bool = predict_overt
-        self.threshold: float = confidence_threshold
+        self.p_threshold: float = precision_threshold
+        self.r_threshold: float = recall_threshold
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
         self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
@@ -85,11 +86,14 @@ class Tester:
             output = Tester._softmax(output, axis=3)
             null_idx = data_loader.dataset.special_to_index['NULL']
             if data_loader.dataset.coreference:
-                output[:, :, :-1, null_idx] += (output[:, :, :-1] < self.threshold).all(axis=3).astype(np.int) * 1024
+                output[:, :, :-1, null_idx] += (output[:, :, :-1] < self.p_threshold).all(axis=3).astype(np.int) * 1024
+                output[:, :, :-1, null_idx] -= (output[:, :, :-1] < self.r_threshold).all(axis=3).astype(np.int) * 1024
                 na_idx = data_loader.dataset.special_to_index['NA']
-                output[:, :, -1, na_idx] += (output[:, :, -1] < self.threshold).all(axis=2).astype(np.int) * 1024
+                output[:, :, -1, na_idx] += (output[:, :, -1] < self.p_threshold).all(axis=2).astype(np.int) * 1024
+                output[:, :, -1, na_idx] -= (output[:, :, -1] < self.r_threshold).all(axis=2).astype(np.int) * 1024
             else:
-                output[:, :, :, null_idx] += (output < self.threshold).all(axis=3).astype(np.int) * 1024
+                output[:, :, :, null_idx] += (output < self.p_threshold).all(axis=3).astype(np.int) * 1024
+                output[:, :, :, null_idx] -= (output < self.r_threshold).all(axis=3).astype(np.int) * 1024
             arguments_set = np.argmax(output, axis=3).tolist()
             result = self._eval_pas(arguments_set, data_loader, corpus=label)
         elif label == 'commonsense':
@@ -217,7 +221,8 @@ def main(config, args):
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     tester = Tester(model, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                    args.target, logger, args.predict_overt, args.confidence_threshold, args.result_suffix)
+                    args.target, logger, args.predict_overt, args.precision_threshold, args.recall_threshold,
+                    args.result_suffix)
 
     log = tester.test()
 
@@ -241,8 +246,10 @@ if __name__ == '__main__':
                         help='evaluation target')
     parser.add_argument('--predict-overt', action='store_true', default=False,
                         help='calculate scores for overt arguments instead of using gold')
-    parser.add_argument('--confidence-threshold', default=0.0, type=float,
-                        help='threshold for argument existence [0, 1] (default: 0.0)')
+    parser.add_argument('--precision-threshold', default=0.0, type=float,
+                        help='threshold for argument existence. The higher you set, the higher precision gets. [0, 1]')
+    parser.add_argument('--recall-threshold', default=0.0, type=float,
+                        help='threshold for argument non-existence. The higher you set, the higher recall gets [0, 1]')
     parser.add_argument('--result-suffix', default='', type=str,
                         help='custom evaluation result directory name')
     parser.add_help = True
