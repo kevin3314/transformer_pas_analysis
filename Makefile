@@ -8,7 +8,19 @@ TRAIN_NUM := 1
 EVAL_SET := test
 # which case to calculate confidence interval (ga, wo, ni, ga2, no, or all_case)
 CASE := all_case
-TARGET := kwdlc_pred
+TARGET :=
+
+ifndef TARGET
+  ifneq ($(shell ls $(RESULT)/eval_$(EVAL_SET)/*pred.csv 2> /dev/null),)
+    TARGET=kwdlc_pred
+  else
+    ifneq ($(shell ls $(RESULT)/eval_$(EVAL_SET)/*noun.csv 2> /dev/null),)
+      TARGET=kwdlc_noun
+    else
+      TARGET=kwdlc
+    endif
+  endif
+endif
 
 CSV_NAME := $(TARGET).csv
 SHELL = /bin/bash -eu
@@ -16,16 +28,16 @@ PYTHON := $(shell which python)
 AGGR_DIR_NAME := aggregates
 
 ifdef CONFIG
-	RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
+  RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
 endif
 
 TRAIN_DONES := $(patsubst %,$(RESULT)/.train.done.%,$(shell seq $(TRAIN_NUM)))
 CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
 RESULT_FILES := $(patsubst $(RESULT)/%/model_best.pth,$(RESULT)/%/eval_$(EVAL_SET)/$(CSV_NAME),$(CHECKPOINTS))
 ifeq ($(CASE),all_case)
-	AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(CSV_NAME)
+  AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(CSV_NAME)
 else
-	AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(TARGET)_$(CASE).csv
+  AGGR_SCORE_FILE := $(RESULT)/$(AGGR_DIR_NAME)/eval_$(EVAL_SET)/$(TARGET)_$(CASE).csv
 endif
 AGGR_TFEVENTS_DONE := $(RESULT)/.aggr_tfevents.done
 ENS_RESULT_FILE := $(RESULT)/eval_$(EVAL_SET)/$(CSV_NAME)
