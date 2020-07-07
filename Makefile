@@ -10,14 +10,18 @@ EVAL_SET := test
 CASE := all_case
 TARGET :=
 
+ifndef RESULT
+  RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
+endif
+
 ifndef TARGET
-  ifneq ($(shell ls $(RESULT)/eval_$(EVAL_SET)/*pred.csv 2> /dev/null),)
-    TARGET=kwdlc_pred
+  ifneq ($(shell ls $(RESULT)/*/eval_$(EVAL_SET)/*pred.csv 2> /dev/null),)
+    TARGET := kwdlc_pred
   else
-    ifneq ($(shell ls $(RESULT)/eval_$(EVAL_SET)/*noun.csv 2> /dev/null),)
-      TARGET=kwdlc_noun
+    ifneq ($(shell ls $(RESULT)/*/eval_$(EVAL_SET)/*noun.csv 2> /dev/null),)
+      TARGET := kwdlc_noun
     else
-      TARGET=kwdlc
+      TARGET := kwdlc
     endif
   endif
 endif
@@ -26,10 +30,6 @@ CSV_NAME := $(TARGET).csv
 SHELL = /bin/bash -eu
 PYTHON := $(shell which python)
 AGGR_DIR_NAME := aggregates
-
-ifdef CONFIG
-  RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
-endif
 
 TRAIN_DONES := $(patsubst %,$(RESULT)/.train.done.%,$(shell seq $(TRAIN_NUM)))
 CHECKPOINTS := $(wildcard $(RESULT)/*/model_best.pth)
