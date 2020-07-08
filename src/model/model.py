@@ -1034,7 +1034,7 @@ class CoreferenceSeparatedModel(BaseModel):
         import random
         date = dates[random.randrange(len(dates))]
         # date = dates[0]
-        checkpoint = f'/mnt/elm/ueda/bpa/result/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        checkpoint = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
         state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
         self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
         self.coreference_model.eval()
@@ -1117,7 +1117,7 @@ class CoreferenceSeparatedModel2(BaseModel):
         import random
         date = dates[random.randrange(len(dates))]
         # date = dates[0]
-        checkpoint = f'/mnt/elm/ueda/bpa/result/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        checkpoint = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
         state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
         self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
         self.coreference_model.eval()
