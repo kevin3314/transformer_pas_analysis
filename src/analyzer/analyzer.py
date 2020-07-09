@@ -45,7 +45,7 @@ class Analyzer:
         os.environ['BPA_DISABLE_CACHE'] = '1'
 
         dataset_config = config['test_kwdlc_dataset']['args']
-        bert_config = BertConfig.from_pretrained(dataset_config['bert_model'])
+        bert_config = BertConfig.from_pretrained(dataset_config['bert_path'])
         coreference = dataset_config['coreference']
         exophors = dataset_config['exophors']
         expanded_vocab_size = bert_config.vocab_size + len(exophors) + 1 + int(coreference)
