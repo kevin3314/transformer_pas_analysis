@@ -48,11 +48,13 @@ def main() -> None:
     parser.add_argument('--eval-batch-size', type=int, default=None,
                         help='number of batch size for evaluation (default: same as that of training)')
     parser.add_argument('--coreference', '--coref', action='store_true', default=False,
-                        help='Perform coreference resolution.')
+                        help='perform coreference resolution')
+    parser.add_argument('--bridging', '--brg', action='store_true', default=False,
+                        help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
-                        help='Case strings. Separate by ","')
+                        help='case strings separated by ","')
     parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
-                        help='Special tokens. Separate by ",".')
+                        help='exophor strings separated by ","')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
@@ -63,7 +65,7 @@ def main() -> None:
                         help='Proportion of training to perform linear learning rate warmup for')
     parser.add_argument('--warmup-steps', type=int, default=None,
                         help='Linear warmup over warmup_steps.')
-    parser.add_argument('--additional-name', type=str, default=None,
+    parser.add_argument('--additional-name', '--name', type=str, default=None,
                         help='additional config file name')
     parser.add_argument('--gpus', type=int, default=2,
                         help='number of gpus to use')
@@ -75,8 +77,8 @@ def main() -> None:
                         help='corpus to use in training')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
                         help='dependency type to train')
-    parser.add_argument('--eventive-noun', '--noun', action='store_true', default=False,
-                        help='analyze eventive noun as predicate')
+    parser.add_argument('--pas-target', choices=['none', 'pred', 'noun', 'all'], default=['pred'], nargs='*',
+                        help='PAS analysis target (pred: verbal predicates, noun: nominal predicates, all: both)')
     parser.add_argument('--refinement-iter', '--riter', type=int, default=[3], nargs='*',
                         help='number of refinement iteration (IterativeRefinementModel)')
     parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default=['atn'], nargs='*',
@@ -93,22 +95,29 @@ def main() -> None:
     data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
+    exophors = args.exophors.split(',')
     cases: List[str] = args.case_string.split(',') if args.case_string else []
+    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
+    assert 'ノ' not in cases, msg
+    pas_targets_list = [['pred'] * (t in ('pred', 'all')) + ['noun'] * (t in ('noun', 'all')) for t in args.pas_target]
 
-    for model, corpus, n_epoch, conditional_model, output_aggr, refinement_iter, atn_target in \
-            itertools.product(args.model, args.corpus, args.epoch, args.conditional_model, args.output_aggr,
-                              args.refinement_iter, args.atn_target):
+    for model, corpus, n_epoch, pas_targets, conditional_model, output_aggr, refinement_iter, atn_target in \
+            itertools.product(args.model, args.corpus, args.epoch, pas_targets_list, args.conditional_model,
+                              args.output_aggr, args.refinement_iter, args.atn_target):
         items = [model]
         if 'IterativeRefinement' in model:
             items.append(refinement_iter)
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
+        if pas_targets or args.bridging:
+            items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
+        if 'pred' in pas_targets:
+            items.append('vpa')
+        if 'noun' in pas_targets:
+            items.append('npa')
+        if args.bridging:
+            items.append('brg')
         if args.coreference:
             items.append('coref')
-        items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
-        if 'ノ' in cases:
-            items.append('nocase')
-        if args.eventive_noun:
-            items.append('noun')
         if model in ('RefinementModel', 'RefinementModel2'):
             items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
@@ -135,7 +144,7 @@ def main() -> None:
             'args': {
                 'bert_model': dataset_config['bert_path'],
                 'dropout': args.dropout,
-                'num_case': len(cases),
+                'num_case': len(cases) + int(args.bridging),
                 'coreference': args.coreference,
             },
         }
@@ -153,16 +162,15 @@ def main() -> None:
             'type': 'PASDataset',
             'args': {
                 'path': None,
-                'max_seq_length': dataset_config['max_seq_length'],
                 'cases': cases,
-                'exophors': args.exophors.split(','),
+                'exophors': exophors,
                 'coreference': args.coreference,
+                'bridging': args.bridging,
                 'dataset_config': dataset_config,
                 'training': None,
-                'bert_model': dataset_config['bert_path'],
                 'kc': None,
-                'train_target': args.train_target,
-                'eventive_noun': args.eventive_noun,
+                'train_targets': args.train_target,
+                'pas_targets': pas_targets,
             },
         }
 
@@ -199,7 +207,7 @@ def main() -> None:
                 'args': {
                     'path': None,
                     'max_seq_length': dataset_config['max_seq_length'],
-                    'num_special_tokens': len(args.exophors.split(',')) + 1 + int(args.coreference),
+                    'num_special_tokens': len(exophors) + 1 + int(args.coreference),
                     'bert_model': dataset_config['bert_path'],
                 },
             }
@@ -245,40 +253,36 @@ def main() -> None:
         }
 
         metrics = []
-        if 'ガ' in cases:
-            metrics.append('case_analysis_f1_ga')
-        if 'ヲ' in cases:
-            metrics.append('case_analysis_f1_wo')
-        if 'ニ' in cases:
-            metrics.append('case_analysis_f1_ni')
-        if 'ガ２' in cases:
-            metrics.append('case_analysis_f1_ga2')
-        if any(met.startswith('case_analysis_f1_') for met in metrics):
-            metrics.append('case_analysis_f1')
-        if 'ガ' in cases:
-            metrics.append('zero_anaphora_f1_ga')
-        if 'ヲ' in cases:
-            metrics.append('zero_anaphora_f1_wo')
-        if 'ニ' in cases:
-            metrics.append('zero_anaphora_f1_ni')
-        if 'ガ２' in cases:
-            metrics.append('zero_anaphora_f1_ga2')
-        if any(met.startswith('zero_anaphora_f1_') for met in metrics):
-            metrics += [
-                'zero_anaphora_f1_inter',
-                'zero_anaphora_f1_intra',
-                'zero_anaphora_f1_exophora',
-                'zero_anaphora_f1',
-            ]
+        if pas_targets:
+            if 'ガ' in cases:
+                metrics.append('case_analysis_f1_ga')
+            if 'ヲ' in cases:
+                metrics.append('case_analysis_f1_wo')
+            if 'ニ' in cases:
+                metrics.append('case_analysis_f1_ni')
+            if 'ガ２' in cases:
+                metrics.append('case_analysis_f1_ga2')
+            if any(met.startswith('case_analysis_f1_') for met in metrics):
+                metrics.append('case_analysis_f1')
+            if 'ガ' in cases:
+                metrics.append('zero_anaphora_f1_ga')
+            if 'ヲ' in cases:
+                metrics.append('zero_anaphora_f1_wo')
+            if 'ニ' in cases:
+                metrics.append('zero_anaphora_f1_ni')
+            if 'ガ２' in cases:
+                metrics.append('zero_anaphora_f1_ga2')
+            if any(met.startswith('zero_anaphora_f1_') for met in metrics):
+                metrics += [
+                    'zero_anaphora_f1_inter',
+                    'zero_anaphora_f1_intra',
+                    'zero_anaphora_f1_exophora',
+                    'zero_anaphora_f1',
+                ]
         if args.coreference:
             metrics.append('coreference_f1')
-        if 'ノ' in cases:
-            metrics += [
-                'bridging_anaphora_f1_inter',
-                'bridging_anaphora_f1_intra',
-                'bridging_anaphora_f1_exophora',
-                'bridging_anaphora_f1',
-            ]
+        if args.bridging:
+            metrics.append('bridging_anaphora_f1')
 
         t_total = math.ceil(num_train_examples / args.batch_size) * n_epoch
         warmup_steps = args.warmup_steps if args.warmup_steps is not None else t_total * args.warmup_proportion

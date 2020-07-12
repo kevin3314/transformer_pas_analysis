@@ -3,6 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 # from transformers import BertModel
+from transformers import BertConfig
 
 from base import BaseModel
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
@@ -858,3 +859,317 @@ class OvertGivenConditionalModel(BaseModel):
         loss = weighted_cross_entropy_pas_loss(output, target, (~overt_mask).float())
 
         return loss, output
+
+
+class CandidateAwareModel(BaseModel):
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+        atn_target = 'kv'
+        self.num_case = num_case + int(coreference)
+        config = BertConfig.from_pretrained(bert_model)
+        self.rel_embeddings1 = nn.Embedding(2, int(config.hidden_size / config.num_attention_heads))
+        self.rel_embeddings2 = nn.Embedding(2, int(config.hidden_size / config.num_attention_heads))
+        kwargs = {'conditional_self_attention': True,
+                  'rel_embeddings1': None,
+                  'rel_embeddings2': None}
+        if 'k' in atn_target:
+            kwargs['rel_embeddings1'] = self.rel_embeddings1
+        if 'v' in atn_target:
+            kwargs['rel_embeddings2'] = self.rel_embeddings2
+        self.bert: BertModel = BertModel.from_pretrained(bert_model, **kwargs)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *_,
+                **__
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        device = input_ids.device
+        # (b, seq, case, seq) -> (b, seq, 1, seq)
+        mask = get_mask(attention_mask, ng_token_mask).any(dim=2, keepdim=True)
+        candidate_mask = (mask | mask.transpose(1, 3)).any(dim=3, keepdim=True)  # (b, seq, 1, 1)
+        extended_mask = torch.cat([~candidate_mask, candidate_mask], dim=2)  # (b, seq, 2, 1)
+        zeros = torch.zeros((batch_size, sequence_len, 2, sequence_len - 1), dtype=torch.bool, device=device)
+        extended_mask = torch.cat([zeros, extended_mask], dim=3)  # (b, seq, 2, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,
+                                       attention_mask=attention_mask,
+                                       token_type_ids=segment_ids,
+                                       rel_weights=extended_mask.float())
+
+        # -> (b, seq, hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, sequence_len, self.num_case, -1)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
+
+
+class CorefCAModel(BaseModel):
+    """
+    出力層で共参照の結果を与える
+    soft な重みで、別に用意した coref' の重みで変換
+    COLING2020 に出したモデルのバグを修正したもの
+    旧名: CoreferenceAwareModel3
+    """
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        assert coreference is True
+        self.num_case = num_case + int(coreference)
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_context = nn.Linear(bert_hidden_size, bert_hidden_size)
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.out = nn.Linear(bert_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *args,
+                **kwargs
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, seq_len = input_ids.size()
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+
+        if self.training:
+            progress = kwargs['progress']  # learning progress (0 ~ 1)
+            gold_ratio = 0.5 - progress * 0.5
+        else:
+            gold_ratio = 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
+
+        # assuming coreference is the last case
+        # (b, seq, seq, hid)
+        h_coref = torch.tanh(self.dropout(h_p[:, :, -1, :].unsqueeze(2) + h_a[:, :, -1, :].unsqueeze(1)))
+        out_coref = self.out(h_coref).squeeze(-1)  # (b, seq, seq)
+        out_coref += (~mask[:, :, -1, :]).float() * -1024.0
+        # (b, seq, seq)
+        annealed_out_coref = (~target[:, :, -1, :] * -1024.0) * gold_mask + out_coref.detach() * ~gold_mask
+
+        hid_context = self.l_context(self.dropout(sequence_output))  # (b, seq, hid)
+        hid_context = hid_context.unsqueeze(2).expand(batch_size, seq_len, self.num_case, -1)  # (b, seq, case, hid)
+        context = torch.einsum('bjch,bij->bich', hid_context, annealed_out_coref.softmax(dim=2))  # (b, seq, case, hid)
+        h_a += context
+
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
+
+
+class CoreferenceSeparatedModel(BaseModel):
+    """
+    2つの BERT を使って，右側では coref を解く．左側では coref の情報を使って他の 3タスクを解く
+    旧名: CoreferenceSeparatedModel3
+    """
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.coreference_model: BaselineModelOld = BaselineModelOld(bert_model, vocab_size, dropout, 0, True)
+        dates = ('0623_214717', '0623_222941', '0623_230434', '0623_233957', '0624_001637')
+        import random
+        date = dates[random.randrange(len(dates))]
+        # date = dates[0]
+        checkpoint = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
+        self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
+        self.coreference_model.eval()
+
+        assert coreference is True
+        self.num_case = num_case
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_context = nn.Linear(bert_hidden_size, bert_hidden_size)
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.out = nn.Linear(bert_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *args,
+                **kwargs
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, seq_len = input_ids.size()
+        ng_token_mask_others, ng_token_mask_coref = ng_token_mask[:, :, :-1, :], ng_token_mask[:, :, -1, :].unsqueeze(2)
+        target_others, target_coref = target[:, :, :-1, :], target[:, :, -1, :].unsqueeze(2)
+        mask = get_mask(attention_mask, ng_token_mask_others)  # (b, seq, case, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+
+        # (b, seq, 1, seq)
+        _, out_coref = self.coreference_model(input_ids=input_ids,
+                                              attention_mask=attention_mask,
+                                              segment_ids=segment_ids,
+                                              ng_token_mask=ng_token_mask_coref,
+                                              target=target_coref)
+        out_coref = out_coref.detach().squeeze(2)  # (b, seq, seq)
+
+        hid_context = self.l_context(self.dropout(sequence_output))  # (b, seq, hid)
+        hid_context = hid_context.unsqueeze(2).expand(batch_size, seq_len, self.num_case, -1)  # (b, seq, case, hid)
+        context = torch.einsum('bjch,bij->bich', hid_context, out_coref.softmax(dim=2))  # (b, seq, case, hid)
+        h_a += context
+
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target_others)
+
+        return loss, torch.cat([output, out_coref.unsqueeze(2)], dim=2)
+
+
+class CoreferenceSeparatedModel2(BaseModel):
+    """
+    2つの BERT を使って，右側では coref を解く．左側では coref の情報を使って他の 3タスクを解く
+    CoreferenceSeparatedModel の l_context を格ごとに用意
+    """
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 ) -> None:
+        super().__init__()
+
+        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.coreference_model: BaselineModelOld = BaselineModelOld(bert_model, vocab_size, dropout, 0, True)
+        dates = ('0623_214717', '0623_222941', '0623_230434', '0623_233957', '0624_001637')
+        import random
+        date = dates[random.randrange(len(dates))]
+        # date = dates[0]
+        checkpoint = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
+        self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
+        self.coreference_model.eval()
+
+        assert coreference is True
+        self.num_case = num_case
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.l_arg2 = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.out = nn.Linear(bert_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                *args,
+                **kwargs
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, seq_len = input_ids.size()
+        ng_token_mask_others, ng_token_mask_coref = ng_token_mask[:, :, :-1, :], ng_token_mask[:, :, -1, :].unsqueeze(2)
+        target_others, target_coref = target[:, :, :-1, :], target[:, :, -1, :].unsqueeze(2)
+        mask = get_mask(attention_mask, ng_token_mask_others)  # (b, seq, case, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=segment_ids)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+
+        # (b, seq, 1, seq)
+        _, out_coref = self.coreference_model(input_ids=input_ids,
+                                              attention_mask=attention_mask,
+                                              segment_ids=segment_ids,
+                                              ng_token_mask=ng_token_mask_coref,
+                                              target=target_coref)
+        out_coref = out_coref.detach().squeeze(2)  # (b, seq, seq)
+
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a2 = self.l_arg2(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        context = torch.einsum('bjch,bij->bich', h_a2, out_coref.softmax(dim=2))  # (b, seq, case, hid)
+        h_a += context
+
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target_others)
+
+        return loss, torch.cat([output, out_coref.unsqueeze(2)], dim=2)

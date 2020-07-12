@@ -29,16 +29,15 @@ class InputFeatures(NamedTuple):
 class PASDataset(Dataset):
     def __init__(self,
                  path: Optional[str],
-                 max_seq_length: int,
                  cases: List[str],
                  exophors: List[str],
                  coreference: bool,
+                 bridging: bool,
                  dataset_config: dict,
                  training: bool,
-                 bert_model: str,
                  kc: bool,
-                 train_target: List[str],
-                 eventive_noun: bool,
+                 train_targets: List[str],
+                 pas_targets: List[str],
                  knp_string: Optional[str] = None,
                  logger=None,
                  ) -> None:
@@ -51,33 +50,46 @@ class PASDataset(Dataset):
                                   target_cases=dataset_config['target_cases'],
                                   target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
-        self.target_cases: List[str] = [c for c in cases if c in self.reader.target_cases]
+        self.target_cases: List[str] = [c for c in cases if c in self.reader.target_cases and c != 'ノ']
         self.target_exophors: List[str] = [e for e in exophors if e in ALL_EXOPHORS]
         self.coreference: bool = coreference
+        self.bridging: bool = bridging
         self.kc: bool = kc
-        self.train_overt: bool = 'overt' in train_target
-        self.train_case: bool = 'case' in train_target
-        self.train_zero: bool = 'zero' in train_target
+        self.train_overt: bool = 'overt' in train_targets
+        self.train_case: bool = 'case' in train_targets
+        self.train_zero: bool = 'zero' in train_targets
+        self.pas_targets: List[str] = pas_targets
         self.logger = logger if logger else logging.getLogger(__file__)
         special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
-        self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
+        self.special_to_index: Dict[str, int] = {token: dataset_config['max_seq_length'] - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
-        self.tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
+        self.tokenizer = BertTokenizer.from_pretrained(dataset_config['bert_path'], do_lower_case=False,
+                                                       tokenize_chinese_chars=False)
         self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
         documents = list(self.reader.process_all_documents())
         self.documents: Optional[List[Document]] = documents if not training else None
         self.examples: List[PasExample] = []
         self.features: List[InputFeatures] = []
+        # FIXME: refactor
+        if self.kc and not training:
+            eval_set = source.name
+            reader = KyotoReader(source.parent.parent / 'kc_joined' / eval_set,
+                                 target_cases=dataset_config['target_cases'],
+                                 target_corefs=dataset_config['target_corefs'],
+                                 extract_nes=False)
+            joined_documents = list(reader.process_all_documents())
+            self.joined_documents = joined_documents if not training else None
 
         for document in tqdm(documents, desc='processing documents'):
             example = read_example(document,
-                                   cases=cases,
-                                   exophors=exophors,
+                                   cases=self.target_cases,
+                                   exophors=self.target_exophors,
                                    coreference=coreference,
+                                   bridging=bridging,
                                    kc=kc,
-                                   eventive_noun=eventive_noun,
+                                   pas_targets=pas_targets,
                                    dataset_config=dataset_config)
-            feature = self._convert_example_to_feature(example, max_seq_length)
+            feature = self._convert_example_to_feature(example, dataset_config['max_seq_length'])
             if feature is None:
                 continue
             self.examples.append(example)
@@ -90,7 +102,7 @@ class PASDataset(Dataset):
 
         vocab_size = self.tokenizer.vocab_size
         num_special_tokens = len(self.special_to_index)
-        num_case_w_coreference = len(self.target_cases) + int(self.coreference)
+        num_relations = len(self.target_cases) + int(self.bridging) + int(self.coreference)
 
         all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
         # ignore too long document
@@ -111,14 +123,14 @@ class PASDataset(Dataset):
 
             # subsequent subword or [CLS] token or [SEP] token
             if token.startswith("##") or orig_index is None:
-                arguments_set.append([[] for _ in range(num_case_w_coreference)])
-                overts_set.append([[] for _ in range(num_case_w_coreference)])
-                candidates_set.append([[] for _ in range(num_case_w_coreference)])
+                arguments_set.append([[] for _ in range(num_relations)])
+                overts_set.append([[] for _ in range(num_relations)])
+                candidates_set.append([[] for _ in range(num_relations)])
                 deps.append([0] * max_seq_length)
                 continue
 
-            arguments: List[List[int]] = [[] for _ in range(num_case_w_coreference)]
-            overts: List[List[int]] = [[] for _ in range(num_case_w_coreference)]
+            arguments: List[List[int]] = [[] for _ in range(num_relations)]
+            overts: List[List[int]] = [[] for _ in range(num_relations)]
             for i, (case, arg_strings) in enumerate(example.arguments_set[orig_index].items()):
                 if not arg_strings:
                     continue
@@ -178,9 +190,9 @@ class PASDataset(Dataset):
             input_ids.append(0)
             input_mask.append(False)
             segment_ids.append(0)
-            arguments_set.append([[] for _ in range(num_case_w_coreference)])
-            overts_set.append([[] for _ in range(num_case_w_coreference)])
-            candidates_set.append([[] for _ in range(num_case_w_coreference)])
+            arguments_set.append([[] for _ in range(num_relations)])
+            overts_set.append([[] for _ in range(num_relations)])
+            candidates_set.append([[] for _ in range(num_relations)])
             deps.append([0] * max_seq_length)
 
         # add special tokens
@@ -188,9 +200,9 @@ class PASDataset(Dataset):
             input_ids.append(vocab_size + i)
             input_mask.append(True)
             segment_ids.append(0)
-            arguments_set.append([[] for _ in range(num_case_w_coreference)])
-            overts_set.append([[] for _ in range(num_case_w_coreference)])
-            candidates_set.append([[] for _ in range(num_case_w_coreference)])
+            arguments_set.append([[] for _ in range(num_relations)])
+            overts_set.append([[] for _ in range(num_relations)])
+            candidates_set.append([[] for _ in range(num_relations)])
             deps.append([0] * max_seq_length)
 
         assert len(input_ids) == max_seq_length

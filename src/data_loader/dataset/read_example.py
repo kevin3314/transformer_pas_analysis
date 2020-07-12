@@ -16,14 +16,15 @@ def read_example(document: Document,
                  cases: List[str],
                  exophors: List[str],
                  coreference: bool,
+                 bridging: bool,
                  kc: bool,
-                 eventive_noun: bool,
+                 pas_targets: List[str],
                  dataset_config: dict,
                  ) -> 'PasExample':
     load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
     save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
     bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, cases, exophors, coreference, kc, eventive_noun, dataset_config)
+    example_hash = _hash(document, cases, exophors, coreference, bridging, kc, pas_targets, dataset_config)
     cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
     if cache_path.exists() and load_cache:
         with cache_path.open('rb') as f:
@@ -31,11 +32,12 @@ def read_example(document: Document,
     else:
         example = PasExample()
         example.load(document,
-                     target_cases=cases,
-                     target_exophors=exophors,
+                     cases=cases,
+                     exophors=exophors,
                      coreference=coreference,
+                     bridging=bridging,
                      kc=kc,
-                     eventive_noun=eventive_noun)
+                     pas_targets=pas_targets)
         if save_cache:
             cache_path.parent.mkdir(exist_ok=True, parents=True)
             with cache_path.open('wb') as f:
@@ -65,19 +67,19 @@ class PasExample:
 
     def load(self,
              document: Document,
-             target_cases: List[str],
-             target_exophors: List[str],
+             cases: List[str],
+             exophors: List[str],
              coreference: bool,
+             bridging: bool,
              kc: bool,
-             eventive_noun: bool,
+             pas_targets: List[str],
              ) -> None:
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
         last_sent = document.sentences[-1] if len(document) > 0 else None
-        cases = target_cases + (['='] if coreference else [])
-        basic_cases = [c for c in target_cases if c != 'ノ']
+        relations = cases + (['ノ'] if bridging else []) + (['='] if coreference else [])
         relax_exophors = {}
-        for exophor in target_exophors:
+        for exophor in exophors:
             relax_exophors[exophor] = exophor
             if exophor in ('不特定:人', '不特定:物', '不特定:状況'):
                 for n in '１２３４５６７８９':
@@ -102,22 +104,23 @@ class PasExample:
                     self.words.append(mrph.midasi)
                     self.dtids.append(document.tag2dtid[tag])
                     self.ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
-                    arguments = OrderedDict((case, []) for case in cases)
+                    arguments = OrderedDict((rel, []) for rel in relations)
                     arg_candidates = ment_candidates = []
                     if mrph is target_mrph and process is True:
-                        if '用言' in tag.features or (eventive_noun and '非用言格解析' in tag.features):
+                        if ('pred' in pas_targets and '用言' in tag.features) or \
+                                ('noun' in pas_targets and '非用言格解析' in tag.features):
                             arg_candidates = [x for x in head_dmids if x != dmid]
-                            for case in basic_cases:
+                            for case in cases:
                                 dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
                                 arguments[case] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
 
-                        if 'ノ' in cases:
+                        if 'ノ' in relations:
                             arg_candidates = [x for x in head_dmids if x != dmid]
                             if '体言' in tag.features and '非用言格解析' not in tag.features:
                                 dmid2args = {dmid: arguments['ノ'] for dmid, arguments in dmid2arguments.items()}
                                 arguments['ノ'] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
 
-                        if coreference:
+                        if '=' in relations:
                             if '体言' in tag.features:
                                 ment_candidates = [x for x in head_dmids if x < dmid]
                                 arguments['='] = self._get_mentions(tag, document, relax_exophors, ment_candidates)

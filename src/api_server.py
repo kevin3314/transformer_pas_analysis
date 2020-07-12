@@ -43,9 +43,10 @@ def api():
         </style>
         ''')
     html_string += '<pre>\n'
+    cases = dataset.target_cases + ['ノ'] * dataset.bridging
     for sid in document.sid2sentence.keys():
         with io.StringIO() as string:
-            draw_tree(document, sid, dataset.target_cases, dataset.coreference, string)
+            draw_tree(document, sid, cases, dataset.coreference, string)
             tree_string = string.getvalue()
         logger.info('output:\n' + tree_string)
         html_string += tree_string
@@ -64,8 +65,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model', '-r', '--resume', required=True, type=str,
                         help='path to trained checkpoint')
-    # parser.add_argument('-c', '--config', default=None, type=str,
-    #                     help='config file path (default: None)')
     parser.add_argument('--host', default='0.0.0.0', type=str,
                         help='host ip address (default: 0.0.0.0)')
     parser.add_argument('--port', default=12345, type=int,

@@ -163,12 +163,18 @@ class Trainer(BaseTrainer):
         if label in ('kwdlc', 'kc'):
             prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
             documents_pred = prediction_writer.write(arguments_set, None)
+            if label == 'kc':
+                documents_gold = data_loader.dataset.joined_documents
+            else:
+                documents_gold = data_loader.dataset.documents
+            targets2label = {tuple(): '', ('pred',): 'pred', ('noun',): 'noun', ('pred', 'noun'): 'all'}
 
-            scorer = Scorer(documents_pred, data_loader.dataset.documents,
+            scorer = Scorer(documents_pred, documents_gold,
                             target_cases=data_loader.dataset.target_cases,
                             target_exophors=data_loader.dataset.target_exophors,
                             coreference=data_loader.dataset.coreference,
-                            kc=data_loader.dataset.kc)
+                            bridging=data_loader.dataset.bridging,
+                            pas_target=targets2label[tuple(data_loader.dataset.pas_targets)])
 
             val_metrics = self._eval_metrics(scorer.result_dict(), label)
 

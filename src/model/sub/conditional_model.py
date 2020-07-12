@@ -167,7 +167,7 @@ class AttentionConditionalModel(BaseModel):
                 ) -> torch.Tensor:  # (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
-        rel_weights = self.output_aggr(pre_output, mask)
+        rel_weights = self.output_aggr(pre_output, mask)  # (b, seq, 1+case*2, seq)
         # (b, seq, hid)
         sequence_output, _ = self.bert(input_ids,
                                        attention_mask=attention_mask,

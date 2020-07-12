@@ -1,5 +1,6 @@
 import io
 import re
+from collections import defaultdict
 from logging import Logger
 from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 from pathlib import Path
@@ -27,11 +28,14 @@ class PredictionKNPWriter:
         self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
+        self.bridging: bool = dataset.bridging
         self.dids = [example.doc_id for example in dataset.examples]
         self.did2document: Dict[str, Document] = {doc.doc_id: doc for doc in dataset.documents}
         self.dtid2cfid: Dict[int, str] = {}
         self.logger = logger
         self.use_gold_overt = use_gold_overt
+        self.kc: bool = dataset.kc
+        self.reader = dataset.reader
 
     def write(self,
               arguments_sets: List[List[List[int]]],
@@ -49,7 +53,7 @@ class PredictionKNPWriter:
         elif not (destination is None or isinstance(destination, io.TextIOBase)):
             self.logger.warning('invalid output destination')
 
-        documents_pred: List[Document] = []
+        did2knps: Dict[str, List[str]] = defaultdict(list)
         for did, document in self.did2document.items():
             if did in did2examples:
                 features, arguments_set, gold_arguments_set = did2examples[did]
@@ -66,20 +70,37 @@ class PredictionKNPWriter:
                     if line.startswith('+ '):
                         line = self.rel_pat.sub('', line)  # remove gold data
                     output_knp_lines.append(line)
-            document_pred = Document('\n'.join(output_knp_lines) + '\n',
-                                     document.doc_id,
-                                     document.cases,
-                                     document.corefs,
-                                     document.relax_cases,
+            knps: List[str] = []
+            buff = ''
+            for knp_line in output_knp_lines:
+                buff += knp_line + '\n'
+                if knp_line.strip() == 'EOS':
+                    knps.append(buff)
+                    buff = ''
+            if self.kc:
+                orig_did, idx = did.split('-')
+                if idx == '00':
+                    did2knps[orig_did] += knps
+                else:
+                    did2knps[orig_did].append(knps[-1])
+            else:
+                did2knps[did] = knps
+        documents_pred: List[Document] = []  # kc については元通り結合された文書のリスト
+        for did, knps in did2knps.items():
+            document_pred = Document(''.join(knps),
+                                     did,
+                                     self.reader.target_cases,
+                                     self.reader.target_corefs,
+                                     self.reader.relax_cases,
                                      extract_nes=False,
                                      use_pas_tag=False)
             documents_pred.append(document_pred)
             if destination is None:
                 continue
-            output_knp_lines = self._add_pas_analysis(output_knp_lines, document_pred)
+            output_knp_lines = self._add_pas_analysis(document_pred.knp_string.split('\n'), document_pred)
             output_string = '\n'.join(output_knp_lines) + '\n'
             if isinstance(destination, Path):
-                output_basename = document.doc_id + '.knp'
+                output_basename = did + '.knp'
                 with destination.joinpath(output_basename).open('w') as writer:
                     writer.write(output_string)
             elif isinstance(destination, io.TextIOBase):
@@ -175,15 +196,15 @@ class PredictionKNPWriter:
         dmid2tag = {document.mrph2dmid[mrph]: tag for tag in document.tag_list() for mrph in tag.mrph_list()}
         tag2sid = {tag: sentence.sid for sentence in document for tag in sentence.tag_list()}
         assert len(gold_arguments_set) == len(dmid2tag)
-        cases_w_coref: List[str] = self.cases + (['='] if self.coreference else [])
+        relations: List[str] = self.cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         for mrph in tag.mrph_list():
             dmid = document.mrph2dmid[mrph]
             token_index = features.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
             # {'ガ': ['14%O', '著者'], 'ヲ': ['23%C'], 'ニ': ['NULL'], 'ガ２': ['NULL'], '=': []}
             gold_arguments: Dict[str, List[str]] = gold_arguments_set[dmid]
-            assert len(cases_w_coref) == len(arguments)
-            assert cases_w_coref == list(gold_arguments.keys())
+            assert len(relations) == len(arguments)
+            assert relations == list(gold_arguments.keys())
             for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
                 # 助詞などの非解析対象形態素については gold_args が空になっている
                 if not gold_args:
@@ -246,7 +267,7 @@ class PredictionKNPWriter:
                     ) -> str:
         dtype2caseflag = {'overt': 'C', 'dep': 'N', 'intra': 'O', 'inter': 'O', 'exo': 'E'}
         case_elements = []
-        for case in self.cases:
+        for case in self.cases + (['ノ'] * self.bridging):
             items = ['-'] * 6
             items[0] = case
             args = pas.arguments[case]
