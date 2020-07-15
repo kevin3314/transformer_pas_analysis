@@ -7,16 +7,16 @@ Japanese Predicate Argument Structure (PAS) Analyzer using BERT.
 This project is mainly for Japanese PAS analysis,
 but provides following other analyses as well.
 
-- coreference resolution
-- bridging anaphora resolution
-- eventive noun argument structure analysis
+- Coreference resolution
+- Bridging anaphora resolution
+- Nominal predicate argument structure analysis
 
 PAS analysis process is as follows:
 
-1. apply Juman++ and (BERT)KNP to input text and split into tags
-2. extract predicates from tags by seeing whether the tag has "<用言>" feature
-3. split each tags into subwords using BPE
-4. for each predicate subword, select its arguments
+1. Apply Juman++ and (BERT)KNP to input text and split into base phrases
+2. Extract predicates from base phrases by seeing whether the phrase has "<用言>" feature
+3. Split each phrases into subwords using BPE
+4. For each predicate subword, select its arguments
 
 ## Demo
 
@@ -26,22 +26,21 @@ PAS analysis process is as follows:
 
 ## Requirements
 
-- Python 3.7
-- PyTorch 1.4.0
-- Transformers 2.8.0
-- pyknp 0.4.1
-- kyoto-reader 1.0.0
+- Python 3.7.2+
+- [Juman++](https://github.com/ku-nlp/jumanpp) 2.0.0-rc3
+- [KNP](http://nlp.ist.i.kyoto-u.ac.jp/index.php?KNP) 4.2
+- BERTKNP (optional)
 
 ## Setup Environment
 
-You can choose either of virtualenv or poetry.
-- virtualenv: create virtualenv and `pip install -r requirements.txt`
-- poetry: run `poetry install`
+Use [poetry](https://github.com/python-poetry/poetry)
+
+`poetry install`
 
 ## Quick Start
 
 ```zsh
-MODEL=/mnt/hinoki/ueda/bert/pas_analysis/result/best/model_best.pth
+MODEL=/mnt/elm/ueda/bpa/result/best/model_best.pth
 
 python src/inference.py \
 --model $MODEL \
@@ -63,7 +62,7 @@ Options:
 - `--device, -d`: GPU IDs separated by "," (if not specified, use CPU)
 - `--input, -i`: input sentence or document separated by "。"
 - `-tab`: output is KNP tab format
-- `--use-bertknp`: use BERTKNP instead of KNP
+- `--use-bertknp`: use BERTKNP instead of KNP (requires BERTKNP)
 
 ## Analyze a Large Number of Documents
 
@@ -72,7 +71,7 @@ Then, run `inference.py` specifying the document directory.
 
 ```zsh
 python src/inference.py \
---model /mnt/hinoki/ueda/bert/pas_analysis/result/best/model_best.pth \
+--model /mnt/elm/ueda/bpa/result/best/model_best.pth \
 --knp-dir <path-to-parsed-document-directory>
 --export-dir <path-to-export-directory>
 ```
@@ -137,7 +136,7 @@ python src/preprocess.py \
 --kwdlc /somewhere/kwdlc \
 --kc /somewhere/kc \
 --out /somewhere/dataset \
---bert large-wwm
+--bert nict
 ```
 
 Don't care if many "sentence not found" messages are shown when processing kc.
@@ -177,7 +176,7 @@ python src/train.py \
 example:
 
 ```zsh
-python src/train.py -c config/BaselineModel-kwdlc-4e.json -d 0,1
+python src/train.py -c config/BaselineModel-all-4e-nict-cz-vpa.json -d 0,1
 ```
 
 ### Testing Models
@@ -212,10 +211,10 @@ python src/scorer.py \
 
 You can also perform training and testing via make command.
 
-Here is an example of training your own model for 10 times with different random seeds:
+Here is an example of training your own model for 5 times with different random seeds:
 
 ```zsh
-make train GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=10
+make train GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=5
 ```
 
 Testing command is as follows (outputs confidence interval):
@@ -227,7 +226,7 @@ make test GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 This command executes above two commands all at once.
 
 ```zsh
-make all GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=10
+make all GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=5
 ```
 
 Ensemble test is also available.
