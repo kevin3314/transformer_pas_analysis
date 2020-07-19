@@ -8,7 +8,7 @@ import torch
 from sklearn.metrics import f1_score
 
 from base import BaseTrainer
-from writer.prediction_writer import PredictionKNPWriter
+from prediction.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
 import data_loader.data_loaders as module_loader
 
@@ -135,7 +135,7 @@ class Trainer(BaseTrainer):
 
                 if len(loss.size()) > 0:
                     loss = loss.mean()
-                if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+                if re.match(r'.*(CaseInteraction|Refinement|Duplicate).*Model', self.config['arch']['type']):
                     pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
                     pas_scores = output[0]  # (b, seq, case, seq)

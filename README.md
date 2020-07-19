@@ -42,7 +42,7 @@ Use [poetry](https://github.com/python-poetry/poetry)
 ```zsh
 MODEL=/mnt/elm/ueda/bpa/result/best/model_best.pth
 
-python src/prediction.py \
+python src/predict.py \
 --model $MODEL \
 --input "太郎はパンを買って食べた。"
 ```
@@ -67,10 +67,10 @@ Options:
 ## Analyze a Large Number of Documents
 
 Given raw sentences, first you need to apply (BERT)KNP to them and split into documents.
-Then, run `prediction.py` specifying the document directory.
+Then, run `predict.py` specifying the document directory.
 
 ```zsh
-python src/prediction.py \
+python src/predict.py \
 --model /mnt/elm/ueda/bpa/result/best/model_best.pth \
 --knp-dir <path-to-parsed-document-directory>
 --export-dir <path-to-export-directory>
