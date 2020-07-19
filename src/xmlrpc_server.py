@@ -34,11 +34,9 @@ if __name__ == '__main__':
                         help='host ip address (default: 0.0.0.0)')
     parser.add_argument('--port', default=12345, type=int,
                         help='host port number (default: 12345)')
-    parser.add_argument('--use-bertknp', action='store_true', default=False,
-                        help='use BERTKNP in base phrase segmentation and parsing')
     args = parser.parse_args()
     config = ConfigParser.from_parser(parser, run_id='')
-    analyzer = Analyzer(config, logger=logger, bertknp=args.use_bertknp)
+    analyzer = Analyzer(config, logger=logger)
 
     server = SimpleXMLRPCServer((args.host, args.port))
     server.register_function(analyze_raw_data_from_client)
