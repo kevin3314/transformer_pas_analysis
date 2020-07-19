@@ -73,7 +73,7 @@ def draw_tree(document: Document,
 
 
 def main(args):
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('inference')
     analyzer = Analyzer(args.model, device=args.device, logger=logger, bertknp=args.use_bertknp)
 
     if args.input is not None:

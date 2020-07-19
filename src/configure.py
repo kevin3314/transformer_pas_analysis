@@ -318,7 +318,7 @@ def main() -> None:
             'max_bpg': args.max_bpg if args.max_bpg is not None else args.batch_size,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
-            'verbosity': 2,
+            'verbosity': 2 if args.debug else 1,  # 0: WARNING, 1: INFO, 2: DEBUG
             'monitor': f'{mnt_mode} {mnt_metric}',
             'early_stop': 10,
             'tensorboard': True,
