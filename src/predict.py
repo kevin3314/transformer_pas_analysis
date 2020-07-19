@@ -8,8 +8,9 @@ from typing import List, Optional, TextIO
 from kyoto_reader import Document, Argument
 from pyknp import BList
 
-from writer.prediction_writer import PredictionKNPWriter
+from prediction.prediction_writer import PredictionKNPWriter
 from analyzer import Analyzer
+from utils.parse_config import ConfigParser
 
 
 def draw_tree(document: Document,
@@ -72,9 +73,9 @@ def draw_tree(document: Document,
     print('\n'.join(tree_strings), file=fh)
 
 
-def main(args):
+def main(config, args):
     logger = logging.getLogger('inference')
-    analyzer = Analyzer(args.model, device=args.device, logger=logger, bertknp=args.use_bertknp)
+    analyzer = Analyzer(config, logger=logger, bertknp=args.use_bertknp)
 
     if args.input is not None:
         source = args.input
@@ -101,10 +102,14 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-m', '--model', '-r', '--resume', required=True, type=str,
+    parser.add_argument('-r', '--resume', '-m', '--model', default=None, type=str,
                         help='path to trained checkpoint')
+    parser.add_argument('--ens', '--ensemble', default=None, type=str,
+                        help='path to directory where checkpoints to ensemble exist')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
+    parser.add_argument('-c', '--config', default=None, type=str,
+                        help='config file path (default: None)')
     parser.add_argument('--input', default=None, type=str,
                         help='sentences to analysis (if not specified, use stdin)')
     parser.add_argument('--knp-dir', default=None, type=str,
@@ -118,5 +123,5 @@ if __name__ == '__main__':
                         help='use BERTKNP in base phrase segmentation and parsing')
     parser.add_argument('--skip-untagged', action='store_true', default=False,
                         help='If set, do not export documents which failed to be analyzed')
-
-    main(parser.parse_args())
+    parsed_args = parser.parse_args()
+    main(ConfigParser.from_parser(parser, run_id=''), parsed_args)

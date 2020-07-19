@@ -183,7 +183,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-r', '--resume', default=None, type=str,
                         help='path to checkpoint to test')
-    parser.add_argument('--ens', default=None, type=str,
+    parser.add_argument('--ens', '--ensemble', default=None, type=str,
                         help='path to directory where checkpoints to ensemble exist')
     parser.add_argument('-d', '--device', default='', type=str,
                         help='indices of GPUs to enable (default: all)')
@@ -199,8 +199,6 @@ if __name__ == '__main__':
                         help='threshold for argument non-existence. The higher you set, the higher recall gets [0, 1]')
     parser.add_argument('--result-suffix', default='', type=str,
                         help='custom evaluation result directory name')
-    parser.add_help = True
-
     parsed_args = parser.parse_args()
     config_args = {'run_id': ''} if parsed_args.resume is None else {'inherit_save_dir': True}
     main(ConfigParser.from_parser(parser, **config_args), parsed_args)

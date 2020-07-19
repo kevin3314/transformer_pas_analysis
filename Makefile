@@ -84,7 +84,7 @@ $(RESULT_FILES): %/eval_$(EVAL_SET)/$(CSV_NAME): %/model_best.pth
 test-ens: $(ENS_RESULT_FILE)
 
 $(ENS_RESULT_FILE): $(CHECKPOINTS)
-	$(PYTHON) src/test.py --ens $(RESULT) -c $(dir $<)config.json --target $(EVAL_SET) -d $(GPUS)
+	$(PYTHON) src/test.py --ens $(RESULT) --target $(EVAL_SET) -d $(GPUS)
 
 .PHONY: help
 help:

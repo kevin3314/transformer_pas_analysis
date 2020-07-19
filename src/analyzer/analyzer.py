@@ -15,7 +15,6 @@ import model.model as module_arch
 import data_loader.dataset as module_dataset
 import data_loader.data_loaders as module_loader
 from data_loader.dataset import PASDataset
-from utils import read_json
 from utils.parse_config import ConfigParser
 from test import Inference
 
@@ -23,7 +22,7 @@ from test import Inference
 class Analyzer:
     """Perform PAS analysis given a sentence."""
 
-    def __init__(self, model_path: str, device: str, logger, bertknp: bool = False):
+    def __init__(self, config: ConfigParser, logger, bertknp: bool = False):
         cfg = configparser.ConfigParser()
         here = Path(__file__).parent
         cfg.read(here / 'config.ini')
@@ -38,10 +37,8 @@ class Analyzer:
         self.logger = logger
         self.bertknp = bertknp
 
-        config_path = Path(model_path).parent / 'config.json'
-        self.config = ConfigParser(read_json(config_path), resume=model_path, run_id='')  # save_dir 作らせたくない
+        self.config = config
         os.environ['BPA_DISABLE_CACHE'] = '1'
-        os.environ['CUDA_VISIBLE_DEVICES'] = device
 
         dataset_config = self.config['test_kwdlc_dataset']['args']
         bert_config = BertConfig.from_pretrained(dataset_config['dataset_config']['bert_path'])

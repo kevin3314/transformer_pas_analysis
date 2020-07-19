@@ -194,7 +194,6 @@ You can perform ensemble test as well:
 ```zsh
 python src/test.py \
 --ens <path-to-model-set-directory> \
--c <path-to-config-file> \
 -d <gpu-ids>
 ```
 

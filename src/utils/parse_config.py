@@ -63,20 +63,22 @@ class ConfigParser:
 
         if args.device is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+        resume = ensemble = None
         if args.resume is not None:
             resume = Path(args.resume)
-            cfg_fname = resume.parent / 'config.json'
+            cfg_file = resume.parent / 'config.json'
             if kwargs.get('inherit_save_dir', False):
                 kwargs['run_id'] = str(resume.parent.name)
+        elif getattr(args, 'ens', None) is not None:
+            cfg_file = next(Path(args.ens).glob('*/config.json'))
+            ensemble = args.ens
         else:
             msg_no_cfg = "Configuration file need to be specified. Add '-c config.json', for example."
             assert args.config is not None, msg_no_cfg
-            resume = None
-            cfg_fname = Path(args.config)
+            cfg_file = Path(args.config)
 
-        config = read_json(cfg_fname)
-        if args.config and resume:
-            # update new config for fine-tuning
+        config = read_json(cfg_file)
+        if args.config and (resume or ensemble):
             config.update(read_json(args.config))
 
         # parse custom cli options into dictionary
