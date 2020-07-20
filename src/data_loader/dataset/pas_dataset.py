@@ -1,15 +1,18 @@
+import os
 import logging
-from typing import List, Dict, Optional, NamedTuple, Tuple
+import hashlib
 from pathlib import Path
+import _pickle as cPickle
 from collections import defaultdict
+from typing import List, Dict, Optional, NamedTuple, Tuple
 
-from tqdm import tqdm
 import numpy as np
+from tqdm import tqdm
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
-from data_loader.dataset.read_example import read_example, PasExample
+from .read_example import PasExample
 from utils.constants import TASK_ID
 
 
@@ -61,7 +64,7 @@ class PASDataset(Dataset):
         self.train_zero: bool = 'zero' in train_targets
         self.pas_targets: List[str] = pas_targets
         self.logger = logger if logger else logging.getLogger(__file__)
-        special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
+        special_tokens = self.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: dataset_config['max_seq_length'] - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
         self.tokenizer = BertTokenizer.from_pretrained(dataset_config['bert_path'], do_lower_case=False,
@@ -69,8 +72,6 @@ class PASDataset(Dataset):
         self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
         documents = list(self.reader.process_all_documents())
         self.documents: Optional[List[Document]] = documents if not training else None
-        self.examples: List[PasExample] = []
-        self.features: List[InputFeatures] = []
 
         if self.kc and not training:
             assert kc_joined_path is not None
@@ -80,20 +81,55 @@ class PASDataset(Dataset):
                                  extract_nes=False)
             self.joined_documents = list(reader.process_all_documents())
 
+        self.examples: List[PasExample] = []
+        self.features: List[InputFeatures] = []
+        load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
+        save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
+        bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
         for document in tqdm(documents, desc='processing documents'):
-            example = read_example(document,
-                                   cases=self.target_cases,
-                                   exophors=self.target_exophors,
-                                   coreference=coreference,
-                                   bridging=bridging,
-                                   kc=kc,
-                                   pas_targets=pas_targets,
-                                   dataset_config=dataset_config)
-            feature = self._convert_example_to_feature(example, dataset_config['max_seq_length'])
-            if feature is None:
-                continue
+            hash_ = self._hash(document, self.target_cases, self.target_exophors, coreference, bridging, kc,
+                               pas_targets, train_targets, dataset_config)
+            example_cache_path = bpa_cache_dir / hash_ / 'example' / f'{document.doc_id}.pkl'
+            if example_cache_path.exists() and load_cache:
+                with example_cache_path.open('rb') as f:
+                    example = cPickle.load(f)
+            else:
+                example = PasExample()
+                example.load(document,
+                             cases=self.target_cases,
+                             exophors=self.target_exophors,
+                             coreference=coreference,
+                             bridging=bridging,
+                             kc=kc,
+                             pas_targets=pas_targets)
+                if save_cache:
+                    example_cache_path.parent.mkdir(exist_ok=True, parents=True)
+                    with example_cache_path.open('wb') as f:
+                        cPickle.dump(example, f)
+
+            feature_cache_path = bpa_cache_dir / hash_ / 'feature' / f'{document.doc_id}.pkl'
+            if feature_cache_path.exists() and load_cache:
+                with feature_cache_path.open('rb') as f:
+                    feature = cPickle.load(f)
+            else:
+                feature = self._convert_example_to_feature(example, dataset_config['max_seq_length'])
+                if feature is None:
+                    continue
+                if save_cache:
+                    feature_cache_path.parent.mkdir(exist_ok=True, parents=True)
+                    with feature_cache_path.open('wb') as f:
+                        cPickle.dump(feature, f)
+
             self.examples.append(example)
             self.features.append(feature)
+
+    @staticmethod
+    def _hash(document, *args) -> str:
+        attrs = ('cases', 'corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
+        assert set(attrs) <= set(vars(document).keys())
+        vars_document = {k: v for k, v in vars(document).items() if k in attrs}
+        string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
+        return hashlib.md5(string.encode()).hexdigest()
 
     def _convert_example_to_feature(self,
                                     example: PasExample,

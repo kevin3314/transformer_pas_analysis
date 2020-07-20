@@ -1,55 +1,10 @@
-import os
-import hashlib
 import logging
 from typing import List, Dict
-from pathlib import Path
-import _pickle as cPickle
 from collections import OrderedDict
 
 from kyoto_reader import Document, BasePhrase, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 logger = logging.getLogger(__file__)
-
-
-def read_example(document: Document,
-                 cases: List[str],
-                 exophors: List[str],
-                 coreference: bool,
-                 bridging: bool,
-                 kc: bool,
-                 pas_targets: List[str],
-                 dataset_config: dict,
-                 ) -> 'PasExample':
-    load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
-    save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
-    bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, cases, exophors, coreference, bridging, kc, pas_targets, dataset_config)
-    cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
-    if cache_path.exists() and load_cache:
-        with cache_path.open('rb') as f:
-            example = cPickle.load(f)
-    else:
-        example = PasExample()
-        example.load(document,
-                     cases=cases,
-                     exophors=exophors,
-                     coreference=coreference,
-                     bridging=bridging,
-                     kc=kc,
-                     pas_targets=pas_targets)
-        if save_cache:
-            cache_path.parent.mkdir(exist_ok=True, parents=True)
-            with cache_path.open('wb') as f:
-                cPickle.dump(example, f)
-    return example
-
-
-def _hash(document, *args) -> str:
-    attrs = ('cases', 'corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
-    assert set(attrs) <= set(vars(document).keys())
-    vars_document = {k: v for k, v in vars(document).items() if k in attrs}
-    string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
-    return hashlib.md5(string.encode()).hexdigest()
 
 
 class PasExample:
