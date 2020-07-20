@@ -28,11 +28,11 @@ def draw_tree(document: Document,
         coreference (bool): 共参照関係も表示するかどうか
         fh (Optional[TextIO]): 出力ストリーム
     """
-    sentence: BList = document.sid2sentence[sid]
+    blist: BList = document.sid2sentence[sid].blist
     with io.StringIO() as string:
-        sentence.draw_tag_tree(fh=string)
+        blist.draw_tag_tree(fh=string)
         tree_strings = string.getvalue().rstrip('\n').split('\n')
-    assert len(tree_strings) == len(sentence.tag_list())
+    assert len(tree_strings) == len(blist.tag_list())
     all_midasis = [m.midasi for m in document.mentions.values()]
     for predicate in filter(lambda p: p.sid == sid, document.get_predicates()):
         idx = predicate.tid

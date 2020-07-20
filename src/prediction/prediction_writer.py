@@ -6,7 +6,7 @@ from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 from pathlib import Path
 
 from pyknp import Tag
-from kyoto_reader import Document, Pas, BaseArgument, Argument
+from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
 
 from data_loader.dataset import InputFeatures, PASDataset
 
@@ -116,7 +116,7 @@ class PredictionKNPWriter:
                      document: Document,
                      ) -> List[str]:
         self.dtid2cfid = {}
-        dtid2tag: Dict[int, Tag] = {dtid: tag for tag, dtid in document.tag2dtid.items()}
+        # dtid2tag: Dict[int, Tag] = {dtid: tag for tag, dtid in document.tag2dtid.items()}
         dtid = 0
         sent_idx = 0
         output_knp_lines = []
@@ -136,7 +136,7 @@ class PredictionKNPWriter:
             match = self.tag_pat.match(rel_removed)
             if match is not None:
                 rel_idx = match.end()
-                rel_string = self._rel_string(dtid2tag[dtid],
+                rel_string = self._rel_string(document.bp_list()[dtid],
                                               arguments_set,
                                               gold_arguments_set,
                                               features,
@@ -185,7 +185,7 @@ class PredictionKNPWriter:
         return overt_dict
 
     def _rel_string(self,
-                    tag: Tag,
+                    bp: BasePhrase,
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
                     gold_arguments_set: List[Dict[str, List[str]]],  # (mrph_len, cases)
                     features: InputFeatures,
@@ -193,11 +193,10 @@ class PredictionKNPWriter:
                     overt_dict: Dict[str, int],
                     ) -> str:
         rels: List[RelTag] = []
-        dmid2tag = {document.mrph2dmid[mrph]: tag for tag in document.tag_list() for mrph in tag.mrph_list()}
-        tag2sid = {tag: sentence.sid for sentence in document for tag in sentence.tag_list()}
-        assert len(gold_arguments_set) == len(dmid2tag)
+        dmid2bp = {document.mrph2dmid[mrph]: bp for bp in document.bp_list() for mrph in bp.mrph_list()}
+        assert len(gold_arguments_set) == len(dmid2bp)
         relations: List[str] = self.cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
-        for mrph in tag.mrph_list():
+        for mrph in bp.mrph_list():
             dmid = document.mrph2dmid[mrph]
             token_index = features.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
@@ -230,11 +229,8 @@ class PredictionKNPWriter:
                     # normal
                     else:
                         prediction_dmid = features.tok_to_orig_index[argument]
-                prediction_tag: Tag = dmid2tag[prediction_dmid]
-                target = ''.join(mrph.midasi for mrph in prediction_tag.mrph_list() if '<内容語>' in mrph.fstring)
-                if not target:
-                    target = prediction_tag.midasi
-                rels.append(RelTag(case, target, tag2sid[prediction_tag], prediction_tag.tag_id))
+                prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
+                rels.append(RelTag(case, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
 
         return ''.join(rel.to_string() for rel in rels)
 
@@ -242,7 +238,6 @@ class PredictionKNPWriter:
                           knp_lines: List[str],
                           document: Document,
                           ) -> List[str]:
-        sid2index = {sid: i for i, sid in enumerate(document.sid2sentence.keys())}
         dtid2pas = {pas.dtid: pas for pas in document.pas_list()}
         dtid = 0
         output_knp_lines = []
@@ -251,7 +246,7 @@ class PredictionKNPWriter:
                 output_knp_lines.append(line)
                 continue
             if dtid in dtid2pas:
-                pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid.get(dtid, 'dummy:dummy'), sid2index)
+                pas_string = self._pas_string(dtid2pas[dtid], self.dtid2cfid.get(dtid, 'dummy:dummy'), document)
                 output_knp_lines.append(line + pas_string)
             else:
                 output_knp_lines.append(line)
@@ -263,8 +258,9 @@ class PredictionKNPWriter:
     def _pas_string(self,
                     pas: Pas,
                     cfid: str,
-                    sid2index: Dict[str, int],
+                    document: Document,
                     ) -> str:
+        sid2index: Dict[str, int] = {sid: i for i, sid in enumerate(document.sid2sentence.keys())}
         dtype2caseflag = {'overt': 'C', 'dep': 'N', 'intra': 'O', 'inter': 'O', 'exo': 'E'}
         case_elements = []
         for case in self.cases + (['ノ'] * self.bridging):
@@ -278,11 +274,12 @@ class PredictionKNPWriter:
                 if isinstance(arg, Argument):
                     items[3] = str(sid2index[pas.sid] - sid2index[arg.sid])  # N文前
                     items[4] = str(arg.tid)  # tag id
-                    items[5] = str(list(arg.eids)[0])  # Entity ID
+                    items[5] = str(document.get_entities(arg)[0])  # Entity ID
                 else:
+                    assert isinstance(arg, SpecialArgument)
                     items[3] = str(-1)
                     items[4] = str(-1)
-                    items[5] = str(list(arg.eids)[0])  # Entity ID
+                    items[5] = str(arg.eid)  # Entity ID
             else:
                 items[1] = 'U'
             case_elements.append('/'.join(items))

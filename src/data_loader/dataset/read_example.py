@@ -6,8 +6,7 @@ from pathlib import Path
 import _pickle as cPickle
 from collections import OrderedDict
 
-from pyknp import BList, Tag, Morpheme
-from kyoto_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
+from kyoto_reader import Document, BasePhrase, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 logger = logging.getLogger(__file__)
 
@@ -86,49 +85,39 @@ class PasExample:
                     relax_exophors[exophor + n] = exophor
         dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
                                                                     for pred in document.get_predicates()}
-        dmid = 0
         head_dmids = []
         for sentence in document:
             process: bool = process_all or (sentence is last_sent)
-            head_dmids += self._get_head_dmids(sentence, document.mrph2dmid)
-            for tag in sentence.tag_list():
-                mrph_list: List[Morpheme] = tag.mrph_list()
-                if not mrph_list:
-                    continue
-                target_mrph = mrph_list[0]
-                for mrph in mrph_list:
-                    if '<内容語>' in mrph.fstring:
-                        target_mrph = mrph
-                        break
-                for mrph in tag.mrph_list():
+            head_dmids += [bp.dmid for bp in sentence.bp_list()]
+            for bp in sentence.bp_list():
+                for mrph in bp.mrph_list():
                     self.words.append(mrph.midasi)
-                    self.dtids.append(document.tag2dtid[tag])
-                    self.ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
+                    self.dtids.append(bp.dtid)
+                    self.ddeps.append(bp.parent.dtid if bp.parent is not None else -1)
                     arguments = OrderedDict((rel, []) for rel in relations)
                     arg_candidates = ment_candidates = []
-                    if mrph is target_mrph and process is True:
-                        if ('pred' in pas_targets and '用言' in tag.features) or \
-                                ('noun' in pas_targets and '非用言格解析' in tag.features):
-                            arg_candidates = [x for x in head_dmids if x != dmid]
+                    if document.mrph2dmid[mrph] == bp.dmid and process is True:
+                        if ('pred' in pas_targets and '用言' in bp.tag.features) or \
+                                ('noun' in pas_targets and '非用言格解析' in bp.tag.features):
+                            arg_candidates = [x for x in head_dmids if x != bp.dmid]
                             for case in cases:
                                 dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
-                                arguments[case] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
+                                arguments[case] = self._get_args(bp.dmid, dmid2args, relax_exophors, arg_candidates)
 
                         if 'ノ' in relations:
-                            arg_candidates = [x for x in head_dmids if x != dmid]
-                            if '体言' in tag.features and '非用言格解析' not in tag.features:
+                            arg_candidates = [x for x in head_dmids if x != bp.dmid]
+                            if '体言' in bp.tag.features and '非用言格解析' not in bp.tag.features:
                                 dmid2args = {dmid: arguments['ノ'] for dmid, arguments in dmid2arguments.items()}
-                                arguments['ノ'] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
+                                arguments['ノ'] = self._get_args(bp.dmid, dmid2args, relax_exophors, arg_candidates)
 
                         if '=' in relations:
-                            if '体言' in tag.features:
-                                ment_candidates = [x for x in head_dmids if x < dmid]
-                                arguments['='] = self._get_mentions(tag, document, relax_exophors, ment_candidates)
+                            if '体言' in bp.tag.features:
+                                ment_candidates = [x for x in head_dmids if x < bp.dmid]
+                                arguments['='] = self._get_mentions(bp, document, relax_exophors, ment_candidates)
 
                     self.arguments_set.append(arguments)
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
-                    dmid += 1
 
     def _get_args(self,
                   dmid: int,
@@ -178,16 +167,15 @@ class PasExample:
         return arg_strings
 
     def _get_mentions(self,
-                      tag: Tag,
+                      bp: BasePhrase,
                       document: Document,
                       relax_exophors: Dict[str, str],
                       candidates: List[int],
                       ) -> List[str]:
-        ment_strings: List[str] = []
-        dtid = document.tag2dtid[tag]
-        if dtid in document.mentions:
-            src_mention = document.mentions[dtid]
-            tgt_mentions = document.get_siblings(src_mention)
+        if bp.dtid in document.mentions:
+            ment_strings: List[str] = []
+            src_mention = document.mentions[bp.dtid]
+            tgt_mentions = document.get_siblings(src_mention, relax=False)
             exophors = [document.entities[eid].exophor for eid in src_mention.eids
                         if document.entities[eid].is_special]
             for mention in tgt_mentions:
@@ -206,32 +194,6 @@ class PasExample:
                 return ['NA']
         else:
             return ['NA']
-
-    @staticmethod
-    def _get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
-        """sentence 中の基本句それぞれについて、内容語である形態素の dmid を返す
-
-        内容語がなかった場合、先頭の形態素の dmid を返す
-
-        Args:
-            sentence (BList): 対象の文
-            mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
-
-        Returns:
-            list: 各基本句に含まれる内容語形態素の文書レベル形態素ID
-        """
-        head_dmids = []
-        for tag in sentence.tag_list():
-            head_dmid = None
-            for idx, mrph in enumerate(tag.mrph_list()):
-                if idx == 0:
-                    head_dmid = mrph2dmid[mrph]
-                if '<内容語>' in mrph.fstring:
-                    head_dmid = mrph2dmid[mrph]
-                    break
-            if head_dmid is not None:
-                head_dmids.append(head_dmid)
-        return head_dmids
 
     def __str__(self):
         return self.__repr__()

@@ -40,10 +40,10 @@ class Analyzer:
         self.config = config
         os.environ['BPA_DISABLE_CACHE'] = '1'
 
-        dataset_config = self.config['test_kwdlc_dataset']['args']
-        bert_config = BertConfig.from_pretrained(dataset_config['dataset_config']['bert_path'])
-        coreference = dataset_config['coreference']
-        exophors = dataset_config['exophors']
+        dataset_args = self.config['test_kwdlc_dataset']['args']
+        bert_config = BertConfig.from_pretrained(dataset_args['dataset_config']['bert_path'])
+        coreference = dataset_args['coreference']
+        exophors = dataset_args['exophors']
         expanded_vocab_size = bert_config.vocab_size + len(exophors) + 1 + int(coreference)
 
         # build model architecture
@@ -79,8 +79,7 @@ class Analyzer:
         return self._analysis(save_dir)
 
     def _analysis(self, path: Path) -> Tuple[list, PASDataset]:
-        dataset_config: dict = self.config['test_kwdlc_dataset']['args']
-        dataset_config['path'] = str(path)
+        self.config['test_kwdlc_dataset']['args']['path'] = str(path)
         dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
         data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
 

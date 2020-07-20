@@ -315,7 +315,7 @@ description = "A KWDLC and KyotoCorpus parser"
 name = "kyoto-reader"
 optional = false
 python-versions = ">=3.7, !=3.7.0, !=3.7.1"
-version = "1.0.0"
+version = "1.1.0"
 
 [package.dependencies]
 jaconv = "*"
@@ -325,7 +325,7 @@ pyknp = "*"
 testing = ["pytest"]
 
 [package.source]
-reference = "2cb04a40d7c262eab0a85882d6c0df633d6e7592"
+reference = "7ebc4c9d6c4324914e27f3e2f2d0abf5ba5922e0"
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
 [[package]]
@@ -490,7 +490,7 @@ six = ">=1.9"
 [[package]]
 category = "dev"
 description = "Run a subprocess in a pseudo terminal"
-marker = "python_version >= \"3.4\" and sys_platform != \"win32\" or sys_platform != \"win32\""
+marker = "python_version >= \"3.4\" and sys_platform != \"win32\" or sys_platform != \"win32\" or python_version >= \"3.4\" and sys_platform != \"win32\" and (python_version >= \"3.4\" and sys_platform != \"win32\" or sys_platform != \"win32\")"
 name = "ptyprocess"
 optional = false
 python-versions = "*"
@@ -546,6 +546,7 @@ six = "*"
 reference = "ab2dfbec820575d82cbf98115c7706f2e3e290f4"
 type = "git"
 url = "https://github.com/ku-nlp/pyknp.git"
+
 [[package]]
 category = "dev"
 description = "Python parsing module"
@@ -756,6 +757,7 @@ version = "0.0.1"
 reference = "0c2c51ab07a8c7028f0faa55a8b31d7032ade936"
 type = "git"
 url = "https://github.com/ku-nlp/python-textformatting.git"
+
 [[package]]
 category = "main"
 description = "Fast and Customizable Tokenizers"

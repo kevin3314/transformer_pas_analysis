@@ -146,12 +146,12 @@ def main(config, args):
     # setup data_loader instances
     expanded_vocab_size = None
     kwdlc_data_loader = None
-    if config[f'{args.target}_kwdlc_dataset']['args']['path'] is not None:
+    if config[f'{args.target}_kwdlc_dataset'] is not None:
         dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
         kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
         expanded_vocab_size = dataset.expanded_vocab_size
     kc_data_loader = None
-    if config[f'{args.target}_kc_dataset']['args']['path'] is not None:
+    if config[f'{args.target}_kc_dataset'] is not None:
         dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
         kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
         expanded_vocab_size = dataset.expanded_vocab_size

@@ -174,33 +174,48 @@ def main() -> None:
             },
         }
 
-        train_kwdlc_dataset = copy.deepcopy(dataset)
-        train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train') if corpus in ('kwdlc', 'all') else None
-        train_kwdlc_dataset['args']['training'] = True
-        train_kwdlc_dataset['args']['kc'] = False
+        train_kwdlc_dataset = None
+        valid_kwdlc_dataset = None
+        test_kwdlc_dataset = None
+        train_kc_dataset = None
+        valid_kc_dataset = None
+        test_kc_dataset = None
+        if corpus in ('kwdlc', 'all'):
+            train_kwdlc_dataset = copy.deepcopy(dataset)
+            train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train')
+            train_kwdlc_dataset['args']['training'] = True
+            train_kwdlc_dataset['args']['kc'] = False
 
-        valid_kwdlc_dataset = copy.deepcopy(dataset)
-        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid') if corpus in ('kwdlc', 'all') else None
-        valid_kwdlc_dataset['args']['training'] = False
-        valid_kwdlc_dataset['args']['kc'] = False
+            valid_kwdlc_dataset = copy.deepcopy(dataset)
+            valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid')
+            valid_kwdlc_dataset['args']['training'] = False
+            valid_kwdlc_dataset['args']['kc'] = False
 
-        test_kwdlc_dataset = copy.deepcopy(dataset)
-        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test') if corpus in ('kwdlc', 'all') else None
-        test_kwdlc_dataset['args']['training'] = False
-        test_kwdlc_dataset['args']['kc'] = False
+            test_kwdlc_dataset = copy.deepcopy(dataset)
+            test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test')
+            test_kwdlc_dataset['args']['training'] = False
+            test_kwdlc_dataset['args']['kc'] = False
+        if corpus in ('kc', 'all'):
+            train_kc_dataset = copy.deepcopy(dataset)
+            train_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'train')
+            train_kc_dataset['args']['training'] = True
+            train_kc_dataset['args']['kc'] = True
 
-        train_kc_dataset = copy.deepcopy(train_kwdlc_dataset)
-        train_kc_dataset['args']['path'] = str(data_root / 'kc' / 'train') if corpus in ('kc', 'all') else None
-        train_kc_dataset['args']['kc'] = True
+            valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
+            valid_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'valid')
+            valid_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'valid')
+            valid_kc_dataset['args']['training'] = False
+            valid_kc_dataset['args']['kc'] = True
 
-        valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
-        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid') if corpus in ('kc', 'all') else None
-        valid_kc_dataset['args']['kc'] = True
+            test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
+            test_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'test')
+            test_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'test')
+            test_kc_dataset['args']['training'] = False
+            test_kc_dataset['args']['kc'] = True
 
-        test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
-        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test') if corpus in ('kc', 'all') else None
-        test_kc_dataset['args']['kc'] = True
-
+        train_commonsense_dataset = None
+        valid_commonsense_dataset = None
+        test_commonsense_dataset = None
         if model == 'CommonsenseModel':
             commonsense_dataset = {
                 'type': 'CommonsenseDataset',
@@ -217,10 +232,6 @@ def main() -> None:
             valid_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'valid.pkl')
             test_commonsense_dataset = copy.deepcopy(commonsense_dataset)
             test_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'test.pkl')
-        else:
-            train_commonsense_dataset = None
-            valid_commonsense_dataset = None
-            test_commonsense_dataset = None
 
         data_loader = {
             'type': 'PASDataLoader',

@@ -136,7 +136,8 @@ python src/preprocess.py \
 --kwdlc /somewhere/kwdlc \
 --kc /somewhere/kc \
 --out /somewhere/dataset \
---bert nict
+--bert-name nict
+--bert-path /somewhere/NICT_BERT-base_JapaneseWikipedia_32K_BPE
 ```
 
 Don't care if many "sentence not found" messages are shown when processing kc.

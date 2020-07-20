@@ -40,6 +40,7 @@ class PASDataset(Dataset):
                  pas_targets: List[str],
                  knp_string: Optional[str] = None,
                  logger=None,
+                 kc_joined_path: Optional[str] = None,
                  ) -> None:
         if path is not None:
             source = Path(path)
@@ -70,15 +71,14 @@ class PASDataset(Dataset):
         self.documents: Optional[List[Document]] = documents if not training else None
         self.examples: List[PasExample] = []
         self.features: List[InputFeatures] = []
-        # FIXME: refactor
+
         if self.kc and not training:
-            eval_set = source.name
-            reader = KyotoReader(source.parent.parent / 'kc_joined' / eval_set,
+            assert kc_joined_path is not None
+            reader = KyotoReader(Path(kc_joined_path),
                                  target_cases=dataset_config['target_cases'],
                                  target_corefs=dataset_config['target_corefs'],
                                  extract_nes=False)
-            joined_documents = list(reader.process_all_documents())
-            self.joined_documents = joined_documents if not training else None
+            self.joined_documents = list(reader.process_all_documents())
 
         for document in tqdm(documents, desc='processing documents'):
             example = read_example(document,
