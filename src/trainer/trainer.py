@@ -70,7 +70,7 @@ class Trainer(BaseTrainer):
             total_loss += loss_value * batch[0].size(0)
 
             if step % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
+                self.logger.info('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
                     epoch,
                     step * self.data_loader.batch_size,
                     self.data_loader.n_samples,
@@ -152,7 +152,7 @@ class Trainer(BaseTrainer):
                 self.writer.add_scalar(f'loss_{label}', loss.item())
 
                 if step % self.log_step == 0:
-                    self.logger.debug('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
+                    self.logger.info('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
                         step * data_loader.batch_size,
                         data_loader.n_samples,
                         100.0 * step / len(data_loader),
