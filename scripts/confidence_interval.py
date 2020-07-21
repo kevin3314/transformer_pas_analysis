@@ -8,6 +8,10 @@ from scipy import stats
 def main():
     df = pd.read_csv(sys.argv[1], sep=',')
 
+    if len(df) == 1:
+        print(df)
+        return
+
     columns = []
     uppers = []
     deltas_plus = []
