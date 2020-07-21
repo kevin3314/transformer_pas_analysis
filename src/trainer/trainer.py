@@ -59,10 +59,10 @@ class Trainer(BaseTrainer):
         total_loss = 0
         for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
-            batch = tuple(t.to(self.device) for t in batch)
+            batch = {label: t.to(self.device) for label, t in batch.items()}
             current_step = (epoch - 1) * len(self.data_loader) + step
 
-            loss, *_ = self.model(*batch, progress=current_step / self.total_step)
+            loss, *_ = self.model(**batch, progress=current_step / self.total_step)
 
             if len(loss.size()) > 0:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -128,10 +128,9 @@ class Trainer(BaseTrainer):
         contingency_set: List[int] = []
         with torch.no_grad():
             for step, batch in enumerate(data_loader):
-                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
-                batch = tuple(t.to(self.device) for t in batch)
+                batch = {label: t.to(self.device) for label, t in batch.items()}
 
-                loss, *output = self.model(*batch)
+                loss, *output = self.model(**batch)
 
                 if len(loss.size()) > 0:
                     loss = loss.mean()

@@ -1,10 +1,10 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import torch
 import numpy as np
 from base import BaseDataLoader
 from data_loader.dataset.pas_dataset import PASDataset
-from torch.utils.data import Sampler, BatchSampler
+# from torch.utils.data import Sampler, BatchSampler
 
 
 class PASDataLoader(BaseDataLoader):
@@ -24,10 +24,11 @@ class PASDataLoader(BaseDataLoader):
                          sampler=None)
 
 
-def broadcast_collate_fn(batch: List[Tuple[np.ndarray, ...]]) -> Tuple[torch.Tensor, ...]:
-    input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask = zip(*batch)
+def broadcast_collate_fn(batch: List[Tuple[np.ndarray, ...]]) -> Dict[str, torch.Tensor, ...]:
+    input_ids, attention_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask = zip(*batch)  # Tuple[list]
     target = np.broadcast_arrays(*target)
     ng_token_mask = np.broadcast_arrays(*ng_token_mask)
     deps = np.broadcast_arrays(*deps)
-    transposed = (input_ids, input_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask)
-    return tuple(torch.as_tensor(np.stack(elem, axis=0)) for elem in transposed)
+    inputs = (input_ids, attention_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask)
+    labels = ('input_ids', 'attention_mask', 'segment_ids', 'target', 'ng_token_mask', 'deps', 'task', 'overt_mask')
+    return {label: torch.as_tensor(np.stack(elem, axis=0)) for label, elem in zip(labels, inputs)}

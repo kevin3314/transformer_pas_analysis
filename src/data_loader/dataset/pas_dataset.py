@@ -368,11 +368,11 @@ class PASDataset(Dataset):
     def __getitem__(self, idx) -> tuple:
         feature = self.features[idx]
         input_ids = np.array(feature.input_ids)          # (seq)
-        input_mask = np.array(feature.input_mask)        # (seq)
+        attention_mask = np.array(feature.input_mask)    # (seq)
         segment_ids = np.array(feature.segment_ids)      # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
         overt_mask = np.array(feature.overt_mask)        # (seq, case, seq)
         ng_token_mask = np.array(feature.ng_token_mask)  # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
-        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask
+        return input_ids, attention_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask
