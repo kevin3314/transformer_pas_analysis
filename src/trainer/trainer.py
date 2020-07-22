@@ -67,7 +67,7 @@ class Trainer(BaseTrainer):
             if len(loss.size()) > 0:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
             loss_value = loss.item()
-            total_loss += loss_value * batch[0].size(0)
+            total_loss += loss_value * next(iter(batch.values())).size(0)
 
             if step % self.log_step == 0:
                 self.logger.info('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(

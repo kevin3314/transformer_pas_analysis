@@ -24,11 +24,11 @@ class PASDataLoader(BaseDataLoader):
                          sampler=None)
 
 
-def broadcast_collate_fn(batch: List[Tuple[np.ndarray, ...]]) -> Dict[str, torch.Tensor, ...]:
+def broadcast_collate_fn(batch: List[Tuple[np.ndarray, ...]]) -> Dict[str, torch.Tensor]:
     input_ids, attention_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask = zip(*batch)  # Tuple[list]
     target = np.broadcast_arrays(*target)
     ng_token_mask = np.broadcast_arrays(*ng_token_mask)
     deps = np.broadcast_arrays(*deps)
     inputs = (input_ids, attention_mask, segment_ids, target, ng_token_mask, deps, task, overt_mask)
-    labels = ('input_ids', 'attention_mask', 'segment_ids', 'target', 'ng_token_mask', 'deps', 'task', 'overt_mask')
+    labels = ('input_ids', 'attention_mask', 'segment_ids', 'ng_token_mask', 'target', 'deps', 'task', 'overt_mask')
     return {label: torch.as_tensor(np.stack(elem, axis=0)) for label, elem in zip(labels, inputs)}
