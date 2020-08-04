@@ -448,7 +448,7 @@ class Scorer:
         """
         blist: BList = document.sid2sentence[sid].blist
         with io.StringIO() as string:
-            blist.draw_tag_tree(fh=string)
+            blist.draw_tag_tree(fh=string, show_pos=False)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(blist.tag_list())
         all_midasis = [m.midasi for m in document.mentions.values()]
