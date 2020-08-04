@@ -328,6 +328,7 @@ testing = ["pytest"]
 reference = "7ebc4c9d6c4324914e27f3e2f2d0abf5ba5922e0"
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
+
 [[package]]
 category = "main"
 description = "Python implementation of Markdown."
@@ -537,16 +538,15 @@ description = "Python module for JUMAN/KNP."
 name = "pyknp"
 optional = false
 python-versions = "*"
-version = "0.4.1"
+version = "0.4.2"
 
 [package.dependencies]
 six = "*"
 
 [package.source]
-reference = "ab2dfbec820575d82cbf98115c7706f2e3e290f4"
+reference = "bc13c9a06c8e0fb5b14a186a63bb67f9bba1c1bb"
 type = "git"
 url = "https://github.com/ku-nlp/pyknp.git"
-
 [[package]]
 category = "dev"
 description = "Python parsing module"
@@ -899,6 +899,7 @@ testing = ["jaraco.itertools", "func-timeout"]
 
 [metadata]
 content-hash = "7c7b580b3ac21cd97148de6327c9b13612472818cd3590bca5d943b9a24f9459"
+lock-version = "1.0"
 python-versions = "^3.7.2"
 
 [metadata.files]
