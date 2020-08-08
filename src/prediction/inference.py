@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import List, Tuple, Optional
 
 import torch
@@ -22,20 +21,24 @@ class Inference:
         self.r_threshold: float = recall_threshold
 
         self.device, self.device_ids = prepare_device(config['n_gpu'], self.logger)
-        self.checkpoints: List[Path] = [config.resume] if config.resume is not None \
-            else list(config.save_dir.glob('**/model_best.pth'))
+        self.state_dicts = []
+        checkpoints = [config.resume] if config.resume is not None else list(config.save_dir.glob('**/model_best.pth'))
+        for checkpoint in checkpoints:
+            self.logger.info(f'Loading checkpoint: {checkpoint} ...')
+            state_dict = torch.load(checkpoint, map_location=self.device)['state_dict']
+            self.state_dicts.append({k.replace('module.', ''): v for k, v in state_dict.items()})
 
         self.model = model
 
     def __call__(self, data_loader) -> tuple:
         total_output: Optional[Tuple[np.ndarray]] = None
         total_loss = 0.0
-        for checkpoint in self.checkpoints:
-            model = self._prepare_model(checkpoint)
+        for state_dict in self.state_dicts:
+            model = self._prepare_model(state_dict)
             loss, *output = self._forward(model, data_loader)
             total_output = tuple(t + o for t, o in zip(total_output, output)) if total_output is not None else output
             total_loss += loss
-        avg_loss = total_loss / len(self.checkpoints)
+        avg_loss = total_loss / len(self.state_dicts)
 
         predictions = []
         for i, output in enumerate(total_output):
@@ -59,10 +62,8 @@ class Inference:
 
         return (avg_loss, *predictions)
 
-    def _prepare_model(self, checkpoint: Path):
-        self.logger.info(f'Loading checkpoint: {checkpoint} ...')
-        state_dict = torch.load(checkpoint, map_location=self.device)['state_dict']
-        self.model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
+    def _prepare_model(self, state_dict: dict):
+        self.model.load_state_dict(state_dict)
         self.model.eval()
         model = self.model.to(self.device)
         if len(self.device_ids) > 1:
