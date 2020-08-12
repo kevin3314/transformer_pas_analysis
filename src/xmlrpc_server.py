@@ -1,6 +1,8 @@
 import io
 import logging
 import argparse
+from pathlib import Path
+from datetime import datetime
 from xmlrpc.server import SimpleXMLRPCServer
 
 from prediction.prediction_writer import PredictionKNPWriter
@@ -11,12 +13,15 @@ logger = logging.getLogger(__name__)
 
 
 def analyze_raw_data_from_client(knp_result: str):
-    arguments_set, dataset = analyzer.analyze_from_knp(knp_result)
+    log_dir = Path('log') / datetime.now().strftime(r'%Y%m%d_%H%M%S')
+    arguments_set, dataset = analyzer.analyze_from_knp(knp_result, knp_dir=log_dir)
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
     with io.StringIO() as string:
         _ = prediction_writer.write(arguments_set, string, skip_untagged=False)
         knp_result = string.getvalue()
+    with log_dir.joinpath('pas.knp').open('wt') as f:
+        f.write(knp_result)
     return knp_result
 
 

@@ -3,6 +3,8 @@ import html
 import logging
 import textwrap
 import argparse
+from pathlib import Path
+from datetime import datetime
 
 from flask import Flask, request, jsonify, make_response
 from kyoto_reader import Document
@@ -20,13 +22,16 @@ logger = logging.getLogger(__name__)
 @app.route('/api')
 def api():
     input_string = request.args['input']
+    log_dir = Path('log') / datetime.now().strftime(r'%Y%m%d_%H%M%S')
 
-    arguments_set, dataset = analyzer.analyze(input_string)
+    arguments_set, dataset = analyzer.analyze(input_string, knp_dir=log_dir)
 
     prediction_writer = PredictionKNPWriter(dataset, logger)
     with io.StringIO() as string:
         document: Document = prediction_writer.write(arguments_set, string, skip_untagged=False)[0]
         knp_result: str = string.getvalue()
+    with log_dir.joinpath('pas.knp').open('wt') as f:
+        f.write(knp_result)
 
     html_string = textwrap.dedent('''
         <style type="text/css">
