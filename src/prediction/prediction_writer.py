@@ -240,7 +240,7 @@ class PredictionKNPWriter:
                 if isinstance(arg, Argument):
                     items[3] = str(sid2index[pas.sid] - sid2index[arg.sid])  # N文前
                     items[4] = str(arg.tid)  # tag id
-                    items[5] = str(document.get_entities(arg)[0])  # Entity ID
+                    items[5] = str(document.get_entities(arg)[0].eid)  # Entity ID
                 else:
                     assert isinstance(arg, SpecialArgument)
                     items[3] = str(-1)
