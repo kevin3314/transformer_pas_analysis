@@ -1,12 +1,18 @@
-import os
 import logging
-from pathlib import Path
+import os
+from datetime import datetime
 from functools import reduce, partial
 from operator import getitem
-from datetime import datetime
-from logger import setup_logging
+from pathlib import Path
 
+from logger import setup_logging
 from utils import read_json, write_json
+
+LOG_LEVELS = {
+    0: logging.WARNING,
+    1: logging.INFO,
+    2: logging.DEBUG
+}
 
 
 class ConfigParser:
@@ -24,30 +30,26 @@ class ConfigParser:
         # load config file and apply modification
         self._config = _update_config(config, modification)
         self.resume = resume
+        self._save_dir = None
+
+        if self.config['trainer']['save_dir'] == '':
+            return
 
         # set save_dir where trained model and log will be saved.
-        if self.config['trainer']['save_dir']:
-            exper_name = self.config['name']
-            if run_id is None:  # use timestamp as default run-id
-                run_id = datetime.now().strftime(r'%m%d_%H%M%S')
-            self._save_dir = Path(self.config['trainer']['save_dir']) / exper_name / run_id
+        exper_name = self.config['name']
+        if run_id is None:  # use timestamp as default run-id
+            run_id = datetime.now().strftime(r'%m%d_%H%M%S')
+        self._save_dir = Path(self.config['trainer']['save_dir']) / exper_name / run_id
 
-            # make directory for saving checkpoints and log.
-            exist_ok = (run_id == '') or kwargs.get('inherit_save_dir', False)
-            self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
+        # make directory for saving checkpoints and log.
+        exist_ok = (run_id == '') or kwargs.get('inherit_save_dir', False)
+        self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-            # save updated config file to the checkpoint dir
-            write_json(self.config, self.save_dir / 'config.json')
-        else:
-            self._save_dir = None
+        # save updated config file to the checkpoint dir
+        write_json(self.config, self.save_dir / 'config.json')
 
         # configure logging module
         setup_logging(self.log_dir, log_config='src/logger/logger_config.json')
-        self.log_levels = {
-            0: logging.WARNING,
-            1: logging.INFO,
-            2: logging.DEBUG
-        }
 
     @classmethod
     def from_parser(cls, parser, options=None, **kwargs):
@@ -118,12 +120,12 @@ class ConfigParser:
         """Access items like ordinary dict."""
         return self.config[name]
 
-    def get_logger(self, name, verbosity=2):
-        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity,
-                                                                                       self.log_levels.keys())
-        assert verbosity in self.log_levels, msg_verbosity
+    @staticmethod
+    def get_logger(name, verbosity=2):
+        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, LOG_LEVELS.keys())
+        assert verbosity in LOG_LEVELS, msg_verbosity
         logger = logging.getLogger(name)
-        logger.setLevel(self.log_levels[verbosity])
+        logger.setLevel(LOG_LEVELS[verbosity])
         return logger
 
     # setting read-only attributes
