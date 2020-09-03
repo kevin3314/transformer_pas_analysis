@@ -26,21 +26,20 @@ class ConfigParser:
         self.resume = resume
 
         # set save_dir where trained model and log will be saved.
-        save_dir = Path(self.config['trainer']['save_dir'])
+        if self.config['trainer']['save_dir']:
+            exper_name = self.config['name']
+            if run_id is None:  # use timestamp as default run-id
+                run_id = datetime.now().strftime(r'%m%d_%H%M%S')
+            self._save_dir = Path(self.config['trainer']['save_dir']) / exper_name / run_id
 
-        exper_name = self.config['name']
-        if run_id is None:  # use timestamp as default run-id
-            run_id = datetime.now().strftime(r'%m%d_%H%M%S')
-        self._save_dir = save_dir / exper_name / run_id
-        # self._log_dir = save_dir / exper_name / run_id
+            # make directory for saving checkpoints and log.
+            exist_ok = (run_id == '') or kwargs.get('inherit_save_dir', False)
+            self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        # make directory for saving checkpoints and log.
-        exist_ok = (run_id == '') or kwargs.get('inherit_save_dir', False)
-        self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
-        # self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-
-        # save updated config file to the checkpoint dir
-        write_json(self.config, self.save_dir / 'config.json')
+            # save updated config file to the checkpoint dir
+            write_json(self.config, self.save_dir / 'config.json')
+        else:
+            self._save_dir = None
 
         # configure logging module
         setup_logging(self.log_dir, log_config='src/logger/logger_config.json')
