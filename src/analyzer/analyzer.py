@@ -58,7 +58,7 @@ class Analyzer:
             save_dir = source
         else:
             save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
-            save_dir.mkdir(exist_ok=True)
+            save_dir.mkdir(exist_ok=True, parents=True)
             sents = [self.sanitize_string(sent) for sent in ssplit(source)]
             self.logger.info('input: ' + ''.join(sents))
             knp_out = ''
