@@ -538,13 +538,13 @@ description = "Python module for JUMAN/KNP."
 name = "pyknp"
 optional = false
 python-versions = "*"
-version = "0.4.2"
+version = "0.4.5"
 
 [package.dependencies]
 six = "*"
 
 [package.source]
-reference = "bc13c9a06c8e0fb5b14a186a63bb67f9bba1c1bb"
+reference = "80cad359ac72d91c4f3e912af8cf88ba9670ee97"
 type = "git"
 url = "https://github.com/ku-nlp/pyknp.git"
 [[package]]
