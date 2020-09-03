@@ -7,9 +7,9 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.7.2"
-torch = "^1.4.0"
+torch = "1.5.1"
 transformers = "2.10.0"
-pyknp = { git = "https://github.com/ku-nlp/pyknp.git", branch = "master" }
+pyknp = "^0.4.5"
 textformatting = { git = "https://github.com/ku-nlp/python-textformatting.git", branch = "master" }
 kyoto-reader = { git = "https://github.com/ku-nlp/kyoto-reader.git", branch = "master" }
 numpy = "^1.18.1"
