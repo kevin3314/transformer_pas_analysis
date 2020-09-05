@@ -1,0 +1,484 @@
+{
+  "name": "BaselineModelOld-all-4e-nict-cz-vpa-npa-brg-coref",
+  "n_gpu": 8,
+  "arch": {
+    "type": "BaselineModelOld",
+    "args": {
+      "bert_model": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "dropout": 0.0,
+      "num_case": 5,
+      "coreference": true
+    }
+  },
+  "train_kwdlc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kwdlc/train",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "dataset_config": {
+        "target_cases": [
+          "ガ",
+          "ヲ",
+          "ニ",
+          "ガ２",
+          "ノ",
+          "ノ？",
+          "判ガ"
+        ],
+        "target_corefs": [
+          "=",
+          "=構",
+          "=≒",
+          "=構≒"
+        ],
+        "max_seq_length": 128,
+        "bert_name": "nict",
+        "bert_path": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+        "num_examples": {
+          "kwdlc": {
+            "train": 3912,
+            "valid": 512,
+            "test": 700
+          },
+          "kc": {
+            "train": 6207,
+            "valid": 842,
+            "test": 1328
+          },
+          "commonsense": {
+            "train": 88292,
+            "valid": 10456,
+            "test": 10436
+          }
+        }
+      },
+      "training": true,
+      "kc": false,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "train_kc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kc_split/train",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "dataset_config": {
+        "target_cases": [
+          "ガ",
+          "ヲ",
+          "ニ",
+          "ガ２",
+          "ノ",
+          "ノ？",
+          "判ガ"
+        ],
+        "target_corefs": [
+          "=",
+          "=構",
+          "=≒",
+          "=構≒"
+        ],
+        "max_seq_length": 128,
+        "bert_name": "nict",
+        "bert_path": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+        "num_examples": {
+          "kwdlc": {
+            "train": 3912,
+            "valid": 512,
+            "test": 700
+          },
+          "kc": {
+            "train": 6207,
+            "valid": 842,
+            "test": 1328
+          },
+          "commonsense": {
+            "train": 88292,
+            "valid": 10456,
+            "test": 10436
+          }
+        }
+      },
+      "training": true,
+      "kc": true,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "train_commonsense_dataset": null,
+  "valid_kwdlc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kwdlc/valid",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "dataset_config": {
+        "target_cases": [
+          "ガ",
+          "ヲ",
+          "ニ",
+          "ガ２",
+          "ノ",
+          "ノ？",
+          "判ガ"
+        ],
+        "target_corefs": [
+          "=",
+          "=構",
+          "=≒",
+          "=構≒"
+        ],
+        "max_seq_length": 128,
+        "bert_name": "nict",
+        "bert_path": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+        "num_examples": {
+          "kwdlc": {
+            "train": 3912,
+            "valid": 512,
+            "test": 700
+          },
+          "kc": {
+            "train": 6207,
+            "valid": 842,
+            "test": 1328
+          },
+          "commonsense": {
+            "train": 88292,
+            "valid": 10456,
+            "test": 10436
+          }
+        }
+      },
+      "training": false,
+      "kc": false,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "valid_kc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kc_split/valid",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "dataset_config": {
+        "target_cases": [
+          "ガ",
+          "ヲ",
+          "ニ",
+          "ガ２",
+          "ノ",
+          "ノ？",
+          "判ガ"
+        ],
+        "target_corefs": [
+          "=",
+          "=構",
+          "=≒",
+          "=構≒"
+        ],
+        "max_seq_length": 128,
+        "bert_name": "nict",
+        "bert_path": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+        "num_examples": {
+          "kwdlc": {
+            "train": 3912,
+            "valid": 512,
+            "test": 700
+          },
+          "kc": {
+            "train": 6207,
+            "valid": 842,
+            "test": 1328
+          },
+          "commonsense": {
+            "train": 88292,
+            "valid": 10456,
+            "test": 10436
+          }
+        }
+      },
+      "training": false,
+      "kc": true,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ],
+      "kc_joined_path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kc/valid"
+    }
+  },
+  "valid_commonsense_dataset": null,
+  "test_kwdlc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kwdlc/test",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "dataset_config": {
+        "target_cases": [
+          "ガ",
+          "ヲ",
+          "ニ",
+          "ガ２",
+          "ノ",
+          "ノ？",
+          "判ガ"
+        ],
+        "target_corefs": [
+          "=",
+          "=構",
+          "=≒",
+          "=構≒"
+        ],
+        "max_seq_length": 128,
+        "bert_name": "nict",
+        "bert_path": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+        "num_examples": {
+          "kwdlc": {
+            "train": 3912,
+            "valid": 512,
+            "test": 700
+          },
+          "kc": {
+            "train": 6207,
+            "valid": 842,
+            "test": 1328
+          },
+          "commonsense": {
+            "train": 88292,
+            "valid": 10456,
+            "test": 10436
+          }
+        }
+      },
+      "training": false,
+      "kc": false,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "test_kc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kc_split/test",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "dataset_config": {
+        "target_cases": [
+          "ガ",
+          "ヲ",
+          "ニ",
+          "ガ２",
+          "ノ",
+          "ノ？",
+          "判ガ"
+        ],
+        "target_corefs": [
+          "=",
+          "=構",
+          "=≒",
+          "=構≒"
+        ],
+        "max_seq_length": 128,
+        "bert_name": "nict",
+        "bert_path": "/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+        "num_examples": {
+          "kwdlc": {
+            "train": 3912,
+            "valid": 512,
+            "test": 700
+          },
+          "kc": {
+            "train": 6207,
+            "valid": 842,
+            "test": 1328
+          },
+          "commonsense": {
+            "train": 88292,
+            "valid": 10456,
+            "test": 10436
+          }
+        }
+      },
+      "training": false,
+      "kc": true,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ],
+      "kc_joined_path": "/mnt/hinoki/ueda/bert/pas_analysis/data/bld200720/kc/test"
+    }
+  },
+  "test_commonsense_dataset": null,
+  "train_data_loader": {
+    "type": "PASDataLoader",
+    "args": {
+      "batch_size": null,
+      "shuffle": true,
+      "validation_split": 0.0,
+      "num_workers": 2
+    }
+  },
+  "valid_data_loader": {
+    "type": "PASDataLoader",
+    "args": {
+      "batch_size": 8,
+      "shuffle": false,
+      "validation_split": 0.0,
+      "num_workers": 2
+    }
+  },
+  "test_data_loader": {
+    "type": "PASDataLoader",
+    "args": {
+      "batch_size": 8,
+      "shuffle": false,
+      "validation_split": 0.0,
+      "num_workers": 2
+    }
+  },
+  "optimizer": {
+    "type": "AdamW",
+    "args": {
+      "lr": 5e-05,
+      "eps": 1e-08,
+      "weight_decay": 0.01
+    }
+  },
+  "metrics": [
+    "case_analysis_f1_ga",
+    "case_analysis_f1_wo",
+    "case_analysis_f1_ni",
+    "case_analysis_f1_ga2",
+    "case_analysis_f1",
+    "zero_anaphora_f1_ga",
+    "zero_anaphora_f1_wo",
+    "zero_anaphora_f1_ni",
+    "zero_anaphora_f1_ga2",
+    "zero_anaphora_f1_inter",
+    "zero_anaphora_f1_intra",
+    "zero_anaphora_f1_exophora",
+    "zero_anaphora_f1",
+    "coreference_f1",
+    "bridging_anaphora_f1"
+  ],
+  "lr_scheduler": {
+    "type": "get_linear_schedule_with_warmup",
+    "args": {
+      "num_warmup_steps": 506.0,
+      "num_training_steps": 5060
+    }
+  },
+  "trainer": {
+    "epochs": 4,
+    "batch_size": 8,
+    "max_bpg": 8,
+    "save_dir": "result/",
+    "save_start_epoch": 3,
+    "verbosity": 1,
+    "monitor": "max val_kwdlc_zero_anaphora_f1",
+    "early_stop": 10,
+    "tensorboard": true
+  }
+}
