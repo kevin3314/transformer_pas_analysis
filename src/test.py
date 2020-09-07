@@ -199,8 +199,8 @@ if __name__ == '__main__':
                         help='threshold for argument non-existence. The higher you set, the higher recall gets [0, 1]')
     parser.add_argument('--result-suffix', default='', type=str,
                         help='custom evaluation result directory name')
-    parser.add_argument('--run-id', default='', type=str,
+    parser.add_argument('--run-id', default=None, type=str,
                         help='custom experiment directory name')
     parsed_args = parser.parse_args()
-    config_args = {'run_id': parsed_args.run_id} if parsed_args.resume is None else {'inherit_save_dir': True}
-    main(ConfigParser.from_parser(parser, **config_args), parsed_args)
+    inherit_save_dir = (parsed_args.resume is not None and parsed_args.run_id is None)
+    main(ConfigParser.from_parser(parser, run_id=parsed_args.run_id, inherit_save_dir=inherit_save_dir), parsed_args)
