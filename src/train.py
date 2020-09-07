@@ -19,8 +19,8 @@ def main(config: ConfigParser, args: argparse.Namespace):
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
+    torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
     # torch.autograd.set_detect_anomaly(True)
 
     logger = config.get_logger('train')

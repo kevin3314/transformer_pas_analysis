@@ -59,7 +59,7 @@ class Trainer(BaseTrainer):
         total_loss = 0
         for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
-            batch = {label: t.to(self.device) for label, t in batch.items()}
+            batch = {label: t.to(self.device, non_blocking=True) for label, t in batch.items()}
             current_step = (epoch - 1) * len(self.data_loader) + step
 
             loss, *_ = self.model(**batch, progress=current_step / self.total_step)
@@ -128,7 +128,7 @@ class Trainer(BaseTrainer):
         contingency_set: List[int] = []
         with torch.no_grad():
             for step, batch in enumerate(data_loader):
-                batch = {label: t.to(self.device) for label, t in batch.items()}
+                batch = {label: t.to(self.device, non_blocking=True) for label, t in batch.items()}
 
                 loss, *output = self.model(**batch)
 

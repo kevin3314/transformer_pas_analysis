@@ -75,7 +75,7 @@ class Inference:
         outputs: List[Tuple[np.ndarray, ...]] = []
         with torch.no_grad():
             for batch_idx, batch in enumerate(data_loader):
-                batch = {label: t.to(self.device) for label, t in batch.items()}
+                batch = {label: t.to(self.device, non_blocking=True) for label, t in batch.items()}
 
                 loss, *output = model(**batch)
 
