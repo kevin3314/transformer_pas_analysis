@@ -1,3 +1,4 @@
+import sys
 import logging
 import logging.config
 from pathlib import Path
@@ -18,5 +19,5 @@ def setup_logging(save_dir, log_config='logger/logger_config.json', default_leve
 
         logging.config.dictConfig(config)
     else:
-        print("Warning: logging configuration file is not found in {}.".format(log_config))
+        print(f'Warning: logging configuration file is not found in {log_config}.', file=sys.stderr)
         logging.basicConfig(level=default_level)
