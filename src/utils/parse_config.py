@@ -65,7 +65,7 @@ class ConfigParser:
         if args.resume is not None:
             resume = Path(args.resume)
             cfg_file = resume.parent / 'config.json'
-            if inherit_save_dir is False and run_id is None:
+            if inherit_save_dir is True and run_id is None:
                 run_id = str(resume.parent.name)
         elif getattr(args, 'ens', None) is not None:
             cfg_file = next(Path(args.ens).glob('*/config.json'))
