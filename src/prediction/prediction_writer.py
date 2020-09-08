@@ -3,11 +3,12 @@ import re
 from collections import defaultdict
 from logging import Logger
 from pathlib import Path
-from typing import List, Optional, Dict, NamedTuple, Union, TextIO, Tuple
+from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 
 from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
 
-from data_loader.dataset import InputFeatures, PASDataset
+from data_loader.dataset import PASDataset
+from data_loader.dataset.read_example import PasExample
 
 
 class PredictionKNPWriter:
@@ -26,15 +27,12 @@ class PredictionKNPWriter:
                  logger: Logger,
                  use_gold_overt: bool = True,
                  ) -> None:
-        self.gold_arguments_sets: List[List[Dict[str, List[str]]]] = \
-            [example.arguments_set for example in dataset.examples]
-        self.all_features: List[InputFeatures] = dataset.features
+        self.examples: List[PasExample] = dataset.examples
         self.cases: List[str] = dataset.target_cases
         self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
         self.bridging: bool = dataset.bridging
-        self.tagged_dids = [example.doc_id for example in dataset.examples]
         self.documents: List[Document] = dataset.documents
         self.logger = logger
         self.use_gold_overt = use_gold_overt
@@ -54,15 +52,18 @@ class PredictionKNPWriter:
         elif not (destination is None or isinstance(destination, io.TextIOBase)):
             self.logger.warning('invalid output destination')
 
-        did2examples = {did: tuple(ex) for did, *ex
-                        in zip(self.tagged_dids, self.all_features, arguments_sets, self.gold_arguments_sets)}
+        did2examples = {ex.doc_id: ex for ex in self.examples}
+        did2arguments_sets = {ex.doc_id: arguments_set for ex, arguments_set in zip(self.examples, arguments_sets)}
 
         did2knps: Dict[str, List[str]] = defaultdict(list)
         for document in self.documents:
             did = document.doc_id
             input_knp_lines = document.knp_string.strip().split('\n')
             if did in did2examples:
-                output_knp_lines = self._rewrite_rel(input_knp_lines, did2examples[did], document)
+                output_knp_lines = self._rewrite_rel(input_knp_lines,
+                                                     did2examples[did],
+                                                     did2arguments_sets[did],
+                                                     document)
             else:
                 if skip_untagged:
                     continue
@@ -114,7 +115,8 @@ class PredictionKNPWriter:
 
     def _rewrite_rel(self,
                      knp_lines: List[str],
-                     examples: Tuple[InputFeatures, list, list],
+                     example: PasExample,
+                     arguments_set: List[List[int]],  # (max_seq_len, cases)
                      document: Document,
                      ) -> List[str]:
         output_knp_lines = []
@@ -128,11 +130,9 @@ class PredictionKNPWriter:
             assert '<rel ' not in rel_removed
             match = self.tag_pat.match(rel_removed)
             if match is not None:
-                features, arguments_set, gold_arguments_set = examples
                 rel_string = self._rel_string(document.bp_list()[dtid],
+                                              example,
                                               arguments_set,
-                                              gold_arguments_set,
-                                              features,
                                               document)
                 rel_idx = match.end()
                 output_knp_lines.append(rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:])
@@ -146,9 +146,8 @@ class PredictionKNPWriter:
 
     def _rel_string(self,
                     bp: BasePhrase,
+                    example: PasExample,
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
-                    gold_arguments_set: List[Dict[str, List[str]]],  # (mrph_len, cases)
-                    features: InputFeatures,
                     document: Document,
                     ) -> str:
 
@@ -160,14 +159,14 @@ class PredictionKNPWriter:
 
         rels: List[RelTag] = []
         dmid2bp = {document.mrph2dmid[mrph]: bp for bp in document.bp_list() for mrph in bp.mrph_list()}
-        assert len(gold_arguments_set) == len(dmid2bp)
+        assert len(example.arguments_set) == len(dmid2bp)
         relations: List[str] = self.cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         for mrph in bp.mrph_list():
             dmid = document.mrph2dmid[mrph]
-            token_index = features.orig_to_tok_index[dmid]
+            token_index = example.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
             # {'ガ': ['14%O', '著者'], 'ヲ': ['23%C'], 'ニ': ['NULL'], 'ガ２': ['NULL'], '=': []}
-            gold_arguments: Dict[str, List[str]] = gold_arguments_set[dmid]
+            gold_arguments: Dict[str, List[str]] = example.arguments_set[dmid]
             assert len(relations) == len(arguments)
             assert relations == list(gold_arguments.keys())
             for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
@@ -189,12 +188,12 @@ class PredictionKNPWriter:
                             rels.append(RelTag(case, special_anaphor, None, None))
                         continue
                     # [SEP] or [CLS]
-                    elif features.tok_to_orig_index[argument] is None:
+                    elif example.tok_to_orig_index[argument] is None:
                         self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
                         continue
                     # normal
                     else:
-                        prediction_dmid = features.tok_to_orig_index[argument]
+                        prediction_dmid = example.tok_to_orig_index[argument]
                 prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
                 rels.append(RelTag(case, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
 

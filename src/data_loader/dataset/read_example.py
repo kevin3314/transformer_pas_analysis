@@ -1,7 +1,8 @@
 import logging
-from typing import List, Dict
+from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
 
+from transformers import BertTokenizer
 from kyoto_reader import Document, BasePhrase, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 logger = logging.getLogger(__file__)
@@ -12,6 +13,9 @@ class PasExample:
 
     def __init__(self) -> None:
         self.words: List[str] = []
+        self.tokens: List[str] = []
+        self.orig_to_tok_index: List[int] = []
+        self.tok_to_orig_index: List[Optional[int]] = []
         self.arguments_set: List[Dict[str, List[str]]] = []
         self.arg_candidates_set: List[List[int]] = []
         self.ment_candidates_set: List[List[int]] = []
@@ -27,6 +31,7 @@ class PasExample:
              bridging: bool,
              kc: bool,
              pas_targets: List[str],
+             tokenizer: BertTokenizer,
              ) -> None:
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
@@ -73,6 +78,8 @@ class PasExample:
                     self.arguments_set.append(arguments)
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
+
+        self.tokens, self.tok_to_orig_index, self.orig_to_tok_index = self._get_tokenized_tokens(self.words, tokenizer)
 
     def _get_args(self,
                   dmid: int,
@@ -149,6 +156,29 @@ class PasExample:
                 return ['NA']
         else:
             return ['NA']
+
+    @staticmethod
+    def _get_tokenized_tokens(words: List[str],
+                              tokenizer: BertTokenizer,
+                              ) -> Tuple[List[str], List[Optional[int]], List[int]]:
+        all_tokens = []
+        tok_to_orig_index: List[Optional[int]] = []
+        orig_to_tok_index: List[int] = []
+
+        all_tokens.append('[CLS]')
+        tok_to_orig_index.append(None)  # There's no original token corresponding to [CLS] token
+
+        for i, word in enumerate(words):
+            orig_to_tok_index.append(len(all_tokens))  # assign head subword
+            sub_tokens = tokenizer.tokenize(word)
+            for sub_token in sub_tokens:
+                all_tokens.append(sub_token)
+                tok_to_orig_index.append(i)
+
+        all_tokens.append('[SEP]')
+        tok_to_orig_index.append(None)  # There's no original token corresponding to [SEP] token
+
+        return all_tokens, tok_to_orig_index, orig_to_tok_index
 
     def __str__(self):
         return self.__repr__()
