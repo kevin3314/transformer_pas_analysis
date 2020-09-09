@@ -422,8 +422,10 @@ class BertSelfOutput(nn.Module):
 class BertAttention(nn.Module):
     def __init__(self, config, **kwargs):
         super().__init__()
-        if kwargs.get('conditional_self_attention', None) is True:
+        if kwargs.get('self_attention', None) == 'conditional':
             self.self = ConditionalBertSelfAttention(config, **kwargs)
+        elif kwargs.get('self_attention', None) == 'case_aware':
+            self.self = CaseAwareBertSelfAttention(config, **kwargs)
         else:
             self.self = BertSelfAttention(config)
         self.output = BertSelfOutput(config)

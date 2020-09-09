@@ -9,7 +9,12 @@ from base import BaseModel
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
 from .sub.mask import get_mask
 from .sub.bert import BertModel
-from .sub.conditional_model import OutputConditionalModel, EmbeddingConditionalModel, AttentionConditionalModel
+from .sub.conditional_model import (
+    OutputConditionalModel,
+    EmbeddingConditionalModel,
+    AttentionConditionalModel,
+    CaseAwareAttentionConditionalModel
+)
 from .loss import (
     cross_entropy_pas_loss,
     weighted_cross_entropy_pas_loss,
@@ -514,6 +519,8 @@ class IterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -556,6 +563,8 @@ class NoRelInitIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -596,6 +605,8 @@ class AnnealingIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -644,6 +655,8 @@ class WeightedIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -685,6 +698,8 @@ class MaskedLossIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -727,6 +742,8 @@ class WeightedAnnealingIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -776,6 +793,8 @@ class OvertGivenIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -816,6 +835,8 @@ class OvertGivenConditionalModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 

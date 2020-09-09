@@ -81,7 +81,7 @@ def main() -> None:
                         help='PAS analysis target (pred: verbal predicates, noun: nominal predicates, all: both)')
     parser.add_argument('--refinement-iter', '--riter', type=int, default=[3], nargs='*',
                         help='number of refinement iteration (IterativeRefinementModel)')
-    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default=['atn'], nargs='*',
+    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out', 'catn'], default=['atn'], nargs='*',
                         help='how to insert pre-output to model (IterativeRefinementModel)')
     parser.add_argument('--output-aggr', choices=['hard', 'hard2', 'soft', 'confidence'], default=['hard'], nargs='*',
                         help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
@@ -122,8 +122,9 @@ def main() -> None:
             items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             items.append(conditional_model)
-            if conditional_model == 'atn':
+            if conditional_model in ('atn', 'catn'):
                 items.append(output_aggr)
+            if conditional_model == 'atn':
                 items.append(atn_target)
         if args.debug:
             items.append('debug')
@@ -155,8 +156,10 @@ def main() -> None:
             arch['args'].update({'num_iter': refinement_iter})
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             arch['args'].update({'conditional_model': conditional_model})
+            if conditional_model in ('atn', 'catn'):
+                arch['args'].update({'output_aggr': output_aggr})
             if conditional_model == 'atn':
-                arch['args'].update({'output_aggr': output_aggr, 'atn_target': atn_target})
+                arch['args'].update({'atn_target': atn_target})
 
         dataset = {
             'type': 'PASDataset',
@@ -239,7 +242,7 @@ def main() -> None:
                 'batch_size': None,
                 'shuffle': None,
                 'validation_split': 0.0,
-                'num_workers': 2,
+                'num_workers': 4,
             },
         }
 
