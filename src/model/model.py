@@ -491,6 +491,7 @@ class FullGoldConditionalModel(BaseModel):
                 target: torch.Tensor,          # (b, seq, case, seq)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
         full_gold = target.float() + (~mask).float() * -1024.0  # (b, seq, case, seq)
         output = self.conditional_model(input_ids=input_ids,
                                         attention_mask=attention_mask,
