@@ -5,7 +5,7 @@ from logging import Logger
 from pathlib import Path
 from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 
-from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
+from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase, Sentence
 
 from data_loader.dataset import PASDataset
 from data_loader.dataset.read_example import PasExample
@@ -21,6 +21,7 @@ class PredictionKNPWriter:
     """
     rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
     tag_pat = re.compile(r'^\+ -?\d+\w ?')
+    case_analysis_pat = re.compile(r'<格解析結果:(.+?)>')
 
     def __init__(self,
                  dataset: PASDataset,
@@ -121,10 +122,17 @@ class PredictionKNPWriter:
                      ) -> List[str]:
         output_knp_lines = []
         dtid = 0
+        sent_idx = 0
         for line in knp_lines:
             if not line.startswith('+ '):
                 output_knp_lines.append(line)
+                if line == 'EOS':
+                    sent_idx += 1
                 continue
+
+            # <格解析結果:>タグから overt case を見つける(inference用)
+            match = self.case_analysis_pat.search(line)
+            overt_dict = self._extract_overt_from_knp_result(match, document.sentences[sent_idx])
 
             rel_removed: str = self.rel_pat.sub('', line)  # remove gold data
             assert '<rel ' not in rel_removed
@@ -133,7 +141,8 @@ class PredictionKNPWriter:
                 rel_string = self._rel_string(document.bp_list()[dtid],
                                               example,
                                               arguments_set,
-                                              document)
+                                              document,
+                                              overt_dict)
                 rel_idx = match.end()
                 output_knp_lines.append(rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:])
             else:
@@ -144,19 +153,36 @@ class PredictionKNPWriter:
 
         return output_knp_lines
 
+    @staticmethod
+    def _extract_overt_from_knp_result(match: Optional,
+                                       sentence: Sentence,
+                                       ) -> Dict[str, int]:
+        if match is None:
+            return {}
+        case_analysis_result = match.group(1)
+        c0 = case_analysis_result.find(':')
+        c1 = case_analysis_result.find(':', c0 + 1)
+
+        if case_analysis_result.count(':') < 2:  # For copula
+            return {}
+
+        overt_dict = {}
+        for k in case_analysis_result[c1 + 1:].split(';'):
+            items = k.split('/')
+            caseflag = items[1]
+            if caseflag == 'C':
+                case = items[0]
+                tid = int(items[3])
+                overt_dict[case] = sentence.bps[tid].dmid
+        return overt_dict
+
     def _rel_string(self,
                     bp: BasePhrase,
                     example: PasExample,
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
                     document: Document,
+                    overt_dict: Dict[str, int],
                     ) -> str:
-
-        overt_dict: Dict[str, int] = {}
-        for child in bp.children:
-            dep_case = child.tag.features.get('係', '').rstrip('格')
-            if dep_case:
-                overt_dict[dep_case] = child.dmid
-
         rels: List[RelTag] = []
         dmid2bp = {document.mrph2dmid[mrph]: bp for bp in document.bp_list() for mrph in bp.mrph_list()}
         assert len(example.arguments_set) == len(dmid2bp)
