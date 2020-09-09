@@ -491,12 +491,12 @@ class FullGoldConditionalModel(BaseModel):
                 target: torch.Tensor,          # (b, seq, case, seq)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
-        full_gold = target.bool()  # (b, seq, case, seq)
+        full_gold = target.float() + (~mask).float() * -1024.0  # (b, seq, case, seq)
         output = self.conditional_model(input_ids=input_ids,
                                         attention_mask=attention_mask,
                                         segment_ids=segment_ids,
                                         ng_token_mask=ng_token_mask,
-                                        pre_output=(~full_gold).float() * -1024.0)
+                                        pre_output=full_gold)
         loss = cross_entropy_pas_loss(output, target)
 
         return loss, output
@@ -529,6 +529,8 @@ class IterativeRefinementModel(BaseModel):
         for _ in range(self.num_iter):
             # (b, seq, case, seq)
             pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
+            # pre_output = torch.rand_like(target, dtype=torch.float) + (~mask).float() * -1024.0
+            # pre_output = target.float() + (~mask).float() * -1024.0
             output = self.conditional_model(input_ids=input_ids,
                                             attention_mask=attention_mask,
                                             segment_ids=segment_ids,
