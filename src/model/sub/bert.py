@@ -334,7 +334,7 @@ class CaseAwareBertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.num_case = kwargs['num_case']
-        self.case_value = nn.Linear(config.hidden_size, self.num_case * config.hidden_size)
+        self.case_value = nn.Linear(config.hidden_size, self.num_case * self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 

@@ -5,7 +5,7 @@ from transformers import BertConfig
 
 from base import BaseModel
 from .mask import get_mask
-from .bert import BertModel
+from .bert import BertModel, CaseAwareBertSelfAttention
 
 
 class OutputConditionalModel(BaseModel):
@@ -280,15 +280,16 @@ class CaseAwareAttentionConditionalModel(BaseModel):
                  ) -> None:
         super().__init__()
         self.num_case = num_case + int(coreference)
-        self.output_aggr = getattr(self, f'_{output_aggr}_output_aggr')
+        self.output_aggr = getattr(AttentionConditionalModel, f'_{output_aggr}_output_aggr')
         # config = BertConfig.from_pretrained(bert_model)
         # attention_head_size = int(config.hidden_size / config.num_attention_heads)
         # self.keys = nn.ModuleList(nn.Linear(config.hidden_size, attention_head_size)
         #                           for _ in range(self.num_case * 2 + 1))
         # self.values = nn.ModuleList(nn.Linear(config.hidden_size, attention_head_size)
         #                             for _ in range(self.num_case * 2 + 1))
+        self.directed_num_case = self.num_case * 2 + 1
         kwargs = {'self_attention': 'case_aware',
-                  'num_case': self.num_case * 2 + 1,
+                  'num_case': self.directed_num_case,
                   'keys': None,
                   'values': None}
         # if 'k' in atn_target:
@@ -297,6 +298,10 @@ class CaseAwareAttentionConditionalModel(BaseModel):
         #     kwargs['values'] = self.values
         self.bert: BertModel = BertModel.from_pretrained(bert_model, **kwargs)
         self.bert.resize_token_embeddings(vocab_size)
+        for layer_module in self.bert.encoder.layer:
+            self_module: CaseAwareBertSelfAttention = layer_module.attention.self
+            weight = torch.stack([self_module.value.weight.data] * self.directed_num_case, dim=0)  # (case, hid, hid)
+            self_module.case_value.weight.data = weight.view(-1, self.bert.config.hidden_size).clone()
         self.dropout = nn.Dropout(dropout)
 
         bert_hidden_size = self.bert.config.hidden_size
@@ -331,84 +336,3 @@ class CaseAwareAttentionConditionalModel(BaseModel):
         output += (~mask).float() * -1024.0  # (b, seq, case, seq)
 
         return output
-
-    @staticmethod
-    def _hard_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
-                          mask: torch.Tensor,  # (b, seq, case, seq)
-                          ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)
-        batch_size, seq_len, num_case, _ = pre_output.size()
-        device = pre_output.device
-
-        eye = torch.eye(seq_len, dtype=torch.bool, device=device)  # (seq)
-        pre_prediction = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
-        neg_pre_prediction = (~pre_prediction).float() * -1024.0  # (b, seq, case, seq)
-        bi_prediction = torch.cat([
-            torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
-            neg_pre_prediction,
-            neg_pre_prediction.transpose(1, 3)
-            ], dim=2)  # (b, seq, 1+case*2, seq)
-        rel_weights = bi_prediction.softmax(dim=2)  # (b, seq, 1+case*2, seq)
-        return rel_weights
-
-    @staticmethod
-    def _hard2_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
-                           mask: torch.Tensor,  # (b, seq, case, seq)
-                           ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)
-        batch_size, seq_len, num_case, _ = pre_output.size()
-        device = pre_output.device
-
-        eye = torch.eye(seq_len, dtype=torch.bool, device=device)  # (seq)
-        pre_prediction = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
-        neg_pre_prediction = (~pre_prediction).float() * -1024.0  # (b, seq, case, seq)
-        bi_prediction = torch.cat([
-            torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
-            neg_pre_prediction,
-            neg_pre_prediction.transpose(1, 3)
-            ], dim=2)  # (b, seq, 1+case*2, seq)
-        eye = torch.eye(1 + num_case * 2, dtype=torch.bool, device=device)
-        rel_weights = eye[bi_prediction.argmax(dim=2)].transpose(2, 3).float()  # (b, seq, 1+case*2, seq)
-        return rel_weights
-
-    @staticmethod
-    def _soft_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
-                          *_
-                          ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)
-        """前段の予測結果をソフトに与える"""
-        batch_size, seq_len, num_case, _ = pre_output.size()
-        device = pre_output.device
-
-        bi_prediction = torch.cat([
-            torch.full((batch_size, seq_len, 1, seq_len), -256.0, device=device),
-            pre_output,
-            pre_output.transpose(1, 3)
-        ], dim=2)  # (b, seq, 1+case*2, seq)
-        rel_weights = bi_prediction.softmax(dim=2)  # (b, seq, 1+case*2, seq)
-        return rel_weights
-
-    @staticmethod
-    def _confidence_output_aggr(pre_output: torch.Tensor,  # (b, seq, case, seq)
-                                mask: torch.Tensor,  # (b, seq, case, seq)
-                                ) -> torch.Tensor:  # (b, seq, 1+case*2, seq)
-        """前段の予測結果を confidence で重み付けして与える"""
-        batch_size, seq_len, num_case, _ = pre_output.size()
-        device = pre_output.device
-
-        eye = torch.eye(seq_len, dtype=torch.bool, device=device)  # (seq)
-        hard_output = eye[pre_output.argmax(dim=3)] & mask  # (b, seq, case, seq)
-        confidence = pre_output.softmax(dim=3)  # (b, seq, case, seq)
-        weighted_hard_output = hard_output * confidence
-
-        bi_weighted_hard_output = torch.cat([
-            weighted_hard_output,
-            weighted_hard_output.transpose(1, 3)
-        ], dim=2)  # (b, seq, case*2, seq)
-
-        bi_weighted_hard_output_sum = bi_weighted_hard_output.sum(dim=2, keepdim=True)  # (b, seq, 1, seq)
-        bi_weighted_hard_output_sum[bi_weighted_hard_output_sum.gt(1)] = 1  # clipping
-
-        rel_weights = torch.cat([
-            torch.tensor(1.0) - bi_weighted_hard_output_sum,
-            bi_weighted_hard_output,
-        ], dim=2)
-
-        return rel_weights

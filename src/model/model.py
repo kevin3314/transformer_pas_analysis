@@ -576,7 +576,7 @@ class AnnealingIterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                progress: float,               # learning progress (0 ~ 1)
+                progress: float = 1.0,         # learning progress (0 ~ 1)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
@@ -590,7 +590,7 @@ class AnnealingIterativeRefinementModel(BaseModel):
             if outputs:
                 annealed_pre_output = (~target * -1024.0) * gold_mask + outputs[-1].detach() * ~gold_mask
             else:
-                annealed_pre_output = (~mask).float() * -1024.0
+                annealed_pre_output = torch.rand_like(target, dtype=torch.float) + (~mask).float() * -1024.0
             output = self.conditional_model(input_ids=input_ids,
                                             attention_mask=attention_mask,
                                             segment_ids=segment_ids,
