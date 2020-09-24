@@ -42,7 +42,7 @@ Use [poetry](https://github.com/python-poetry/poetry)
 ```zsh
 MODEL=/mnt/elm/ueda/bpa/result/best/model_best.pth
 
-python src/inference.py \
+python src/predict.py \
 --model $MODEL \
 --input "太郎はパンを買って食べた。"
 ```
@@ -67,10 +67,10 @@ Options:
 ## Analyze a Large Number of Documents
 
 Given raw sentences, first you need to apply (BERT)KNP to them and split into documents.
-Then, run `inference.py` specifying the document directory.
+Then, run `predict.py` specifying the document directory.
 
 ```zsh
-python src/inference.py \
+python src/predict.py \
 --model /mnt/elm/ueda/bpa/result/best/model_best.pth \
 --knp-dir <path-to-parsed-document-directory>
 --export-dir <path-to-export-directory>
@@ -136,7 +136,8 @@ python src/preprocess.py \
 --kwdlc /somewhere/kwdlc \
 --kc /somewhere/kc \
 --out /somewhere/dataset \
---bert nict
+--bert-name nict
+--bert-path /somewhere/NICT_BERT-base_JapaneseWikipedia_32K_BPE
 ```
 
 Don't care if many "sentence not found" messages are shown when processing kc.
@@ -194,7 +195,6 @@ You can perform ensemble test as well:
 ```zsh
 python src/test.py \
 --ens <path-to-model-set-directory> \
--c <path-to-config-file> \
 -d <gpu-ids>
 ```
 

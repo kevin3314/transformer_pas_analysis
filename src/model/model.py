@@ -9,7 +9,12 @@ from base import BaseModel
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
 from .sub.mask import get_mask
 from .sub.bert import BertModel
-from .sub.conditional_model import OutputConditionalModel, EmbeddingConditionalModel, AttentionConditionalModel
+from .sub.conditional_model import (
+    OutputConditionalModel,
+    EmbeddingConditionalModel,
+    AttentionConditionalModel,
+    CaseAwareAttentionConditionalModel
+)
 from .loss import (
     cross_entropy_pas_loss,
     weighted_cross_entropy_pas_loss,
@@ -48,8 +53,7 @@ class BaselineModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -99,8 +103,7 @@ class BaselineModelOld(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -148,8 +151,7 @@ class RefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
         _, base_logits = self.baseline_model(input_ids, attention_mask, segment_ids, ng_token_mask, target)
@@ -182,8 +184,7 @@ class DuplicateModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         # (b, seq, case, seq)
         _, base_logits = self.baseline_model1(input_ids, attention_mask, segment_ids, ng_token_mask, target)
@@ -225,8 +226,7 @@ class GoldDepModel(BaseModel):
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -288,8 +288,7 @@ class MultitaskDepModel(BaseModel):
                 ng_token_mask: torch.Tensor,   # (b, seq, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 deps: torch.Tensor,            # (b, seq, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -358,7 +357,6 @@ class CaseInteractionModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
                 **__
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
@@ -423,10 +421,8 @@ class CommonsenseModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq) or (b, 1, 1, 1)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                _,
                 task: torch.Tensor,            # (b)
-                *args,
-                **kwargs
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)
@@ -467,8 +463,7 @@ class HalfGoldConditionalModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         half_gold = target.bool() & torch.rand_like(target, dtype=torch.float).lt(0.5)  # (b, seq, case, seq)
         output = self.conditional_model(input_ids=input_ids,
@@ -499,15 +494,15 @@ class FullGoldConditionalModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
-        full_gold = target.bool()  # (b, seq, case, seq)
+        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
+        full_gold = target.float() + (~mask).float() * -1024.0  # (b, seq, case, seq)
         output = self.conditional_model(input_ids=input_ids,
                                         attention_mask=attention_mask,
                                         segment_ids=segment_ids,
                                         ng_token_mask=ng_token_mask,
-                                        pre_output=(~full_gold).float() * -1024.0)
+                                        pre_output=full_gold)
         loss = cross_entropy_pas_loss(output, target)
 
         return loss, output
@@ -524,6 +519,8 @@ class IterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -533,54 +530,16 @@ class IterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
         mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
         for _ in range(self.num_iter):
             # (b, seq, case, seq)
-            pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
-            output = self.conditional_model(input_ids=input_ids,
-                                            attention_mask=attention_mask,
-                                            segment_ids=segment_ids,
-                                            ng_token_mask=ng_token_mask,
-                                            pre_output=pre_output)
-            loss = cross_entropy_pas_loss(output, target)
-            outputs.append(output)
-            losses.append(loss)
-        loss = torch.stack(losses).mean()
-
-        return (loss, *outputs)
-
-
-class NoRelInitIterativeRefinementModel(BaseModel):
-    """複数回の推論で予測を refine していく"""
-
-    def __init__(self, **kwargs):
-        super().__init__()
-        conditional_model = kwargs.pop('conditional_model')
-        self.num_iter = kwargs.pop('num_iter')
-        if conditional_model == 'emb':
-            self.conditional_model = EmbeddingConditionalModel(**kwargs)
-        elif conditional_model == 'atn':
-            self.conditional_model = AttentionConditionalModel(**kwargs)
-        elif conditional_model == 'out':
-            self.conditional_model = OutputConditionalModel(**kwargs)
-
-    def forward(self,
-                input_ids: torch.Tensor,       # (b, seq)
-                attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
-                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
-        outputs, losses = [], []
-        for _ in range(self.num_iter):
-            # (b, seq, case, seq)
-            pre_output = outputs[-1].detach() if outputs else torch.full_like(target, -1024.0, dtype=torch.float)
+            pre_output = outputs[-1].detach() if outputs \
+                else torch.rand_like(target, dtype=torch.float) + (~mask).float() * -1024.0
+            # pre_output = torch.rand_like(target, dtype=torch.float) + (~mask).float() * -1024.0
+            # pre_output = target.float() + (~mask).float() * -1024.0
             output = self.conditional_model(input_ids=input_ids,
                                             attention_mask=attention_mask,
                                             segment_ids=segment_ids,
@@ -606,6 +565,8 @@ class AnnealingIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -615,23 +576,21 @@ class AnnealingIterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *args,
-                **kwargs,
+                progress: float = 1.0,         # learning progress (0 ~ 1)
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
         mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
         for _ in range(self.num_iter):
             # (b, seq, 1, 1)
-            if self.training:
-                progress = kwargs['progress']  # learning progress (0 ~ 1)
-                gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(progress).view(*input_ids.size(), 1, 1)
-            else:
-                gold_mask = torch.full_like(input_ids, True, dtype=torch.bool).view(*input_ids.size(), 1, 1)
+            gold_ratio = 0.5 - progress * 0.5 if self.training else 0
+            gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).view(*input_ids.size(), 1, 1)
+
             # (b, seq, case, seq)
             if outputs:
-                annealed_pre_output = (~target * -1024.0) * ~gold_mask + outputs[-1].detach() * gold_mask
+                annealed_pre_output = (~target * -1024.0) * gold_mask + outputs[-1].detach() * ~gold_mask
             else:
-                annealed_pre_output = (~mask).float() * -1024.0
+                annealed_pre_output = torch.rand_like(target, dtype=torch.float) + (~mask).float() * -1024.0
             output = self.conditional_model(input_ids=input_ids,
                                             attention_mask=attention_mask,
                                             segment_ids=segment_ids,
@@ -656,6 +615,8 @@ class WeightedIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -665,8 +626,7 @@ class WeightedIterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
         mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
@@ -678,101 +638,6 @@ class WeightedIterativeRefinementModel(BaseModel):
                                             segment_ids=segment_ids,
                                             ng_token_mask=ng_token_mask,
                                             pre_output=pre_output)
-            loss_weight = (1.0 - output.detach().softmax(dim=3))  # (b, seq, case, seq)
-            loss = weighted_cross_entropy_pas_loss(output, target, loss_weight)
-            outputs.append(output)
-            losses.append(loss)
-        loss = torch.stack(losses).mean()
-
-        return (loss, *outputs)
-
-
-class MaskedLossIterativeRefinementModel(BaseModel):
-    """モデルの予測が正解だった場合 loss を計算しない"""
-
-    def __init__(self, **kwargs):
-        super().__init__()
-        conditional_model = kwargs.pop('conditional_model')
-        self.num_iter = kwargs.pop('num_iter')
-        if conditional_model == 'emb':
-            self.conditional_model = EmbeddingConditionalModel(**kwargs)
-        elif conditional_model == 'atn':
-            self.conditional_model = AttentionConditionalModel(**kwargs)
-        elif conditional_model == 'out':
-            self.conditional_model = OutputConditionalModel(**kwargs)
-
-    def forward(self,
-                input_ids: torch.Tensor,       # (b, seq)
-                attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
-                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
-        eye = torch.eye(input_ids.size(1), dtype=torch.bool, device=input_ids.device)  # (seq)
-        outputs, losses = [], []
-        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
-        for _ in range(self.num_iter):
-            # (b, seq, case, seq)
-            pre_output = outputs[-1].detach() if outputs else (~mask).float() * -1024.0
-            output = self.conditional_model(input_ids=input_ids,
-                                            attention_mask=attention_mask,
-                                            segment_ids=segment_ids,
-                                            ng_token_mask=ng_token_mask,
-                                            pre_output=pre_output)
-            loss_mask = ~(eye[output.detach().argmax(dim=3)] & target.bool())  # (b, seq, case, seq)
-            loss = weighted_cross_entropy_pas_loss(output, target, loss_mask.float())
-            outputs.append(output)
-            losses.append(loss)
-        loss = torch.stack(losses).mean()
-
-        return (loss, *outputs)
-
-
-class WeightedAnnealingIterativeRefinementModel(BaseModel):
-    """AnnealingIterativeRefinementModel + WeightedIterativeRefinementModel"""
-
-    def __init__(self, **kwargs):
-        super().__init__()
-        conditional_model = kwargs.pop('conditional_model')
-        self.num_iter = kwargs.pop('num_iter')
-        if conditional_model == 'emb':
-            self.conditional_model = EmbeddingConditionalModel(**kwargs)
-        elif conditional_model == 'atn':
-            self.conditional_model = AttentionConditionalModel(**kwargs)
-        elif conditional_model == 'out':
-            self.conditional_model = OutputConditionalModel(**kwargs)
-
-    def forward(self,
-                input_ids: torch.Tensor,       # (b, seq)
-                attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
-                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
-                target: torch.Tensor,          # (b, seq, case, seq)
-                *args,
-                **kwargs,
-                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
-        outputs, losses = [], []
-        mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
-        for _ in range(self.num_iter):
-            # (b, seq, 1, 1)
-            if self.training:
-                progress = kwargs['progress']  # learning progress (0 ~ 1)
-                gold_ratio = 0.5 - progress * 0.5
-                gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).view(*input_ids.size(), 1, 1)
-            else:
-                gold_mask = torch.full_like(input_ids, False, dtype=torch.bool).view(*input_ids.size(), 1, 1)
-            # (b, seq, case, seq)
-            if outputs:
-                annealed_pre_output = (~target * -1024.0) * gold_mask + outputs[-1].detach() * ~gold_mask
-            else:
-                annealed_pre_output = (~mask).float() * -1024.0
-            output = self.conditional_model(input_ids=input_ids,
-                                            attention_mask=attention_mask,
-                                            segment_ids=segment_ids,
-                                            ng_token_mask=ng_token_mask,
-                                            pre_output=annealed_pre_output)
             loss_weight = (1.0 - output.detach().softmax(dim=3))  # (b, seq, case, seq)
             loss = weighted_cross_entropy_pas_loss(output, target, loss_weight)
             outputs.append(output)
@@ -793,6 +658,8 @@ class OvertGivenIterativeRefinementModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -802,11 +669,8 @@ class OvertGivenIterativeRefinementModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                deps,
-                task,
                 overt_mask: torch.Tensor,      # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         outputs, losses = [], []
         mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
@@ -836,6 +700,8 @@ class OvertGivenConditionalModel(BaseModel):
             self.conditional_model = EmbeddingConditionalModel(**kwargs)
         elif conditional_model == 'atn':
             self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
         elif conditional_model == 'out':
             self.conditional_model = OutputConditionalModel(**kwargs)
 
@@ -845,11 +711,8 @@ class OvertGivenConditionalModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                deps,
-                task,
                 overt_mask: torch.Tensor,      # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         output = self.conditional_model(input_ids=input_ids,
                                         attention_mask=attention_mask,
@@ -899,8 +762,7 @@ class CandidateAwareModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *_,
-                **__
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
         device = input_ids.device
@@ -967,8 +829,8 @@ class CorefCAModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *args,
-                **kwargs
+                progress: float,               # learning progress (0 ~ 1)
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, seq_len = input_ids.size()
         mask = get_mask(attention_mask, ng_token_mask)  # (b, seq, case, seq)
@@ -979,12 +841,8 @@ class CorefCAModel(BaseModel):
         # -> (b, seq, case*hid) -> (b, seq, case, hid)
         h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
 
-        if self.training:
-            progress = kwargs['progress']  # learning progress (0 ~ 1)
-            gold_ratio = 0.5 - progress * 0.5
-        else:
-            gold_ratio = 0
-        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)
+        gold_ratio = 0.5 - progress * 0.5 if self.training else 0
+        gold_mask = torch.rand_like(input_ids, dtype=torch.float).lt(gold_ratio).unsqueeze(-1)  # (b, seq, 1)
 
         # assuming coreference is the last case
         # (b, seq, seq, hid)
@@ -1034,8 +892,8 @@ class CoreferenceSeparatedModel(BaseModel):
         import random
         date = dates[random.randrange(len(dates))]
         # date = dates[0]
-        checkpoint = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
-        state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
+        ckpt = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        state_dict = torch.load(ckpt, map_location=torch.device('cuda:0'))['state_dict']
         self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
         self.coreference_model.eval()
 
@@ -1055,8 +913,7 @@ class CoreferenceSeparatedModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *args,
-                **kwargs
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, seq_len = input_ids.size()
         ng_token_mask_others, ng_token_mask_coref = ng_token_mask[:, :, :-1, :], ng_token_mask[:, :, -1, :].unsqueeze(2)
@@ -1116,9 +973,8 @@ class CoreferenceSeparatedModel2(BaseModel):
         dates = ('0623_214717', '0623_222941', '0623_230434', '0623_233957', '0624_001637')
         import random
         date = dates[random.randrange(len(dates))]
-        # date = dates[0]
-        checkpoint = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
-        state_dict = torch.load(checkpoint, map_location=torch.device('cuda:0'))['state_dict']
+        ckpt = f'/mnt/elm/ueda/bpa/result.20200706/BaselineModelOld-all-4e-nict-coref-corefonly/{date}/model_best.pth'
+        state_dict = torch.load(ckpt, map_location=torch.device('cuda:0'))['state_dict']
         self.coreference_model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
         self.coreference_model.eval()
 
@@ -1137,8 +993,7 @@ class CoreferenceSeparatedModel2(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                *args,
-                **kwargs
+                **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, seq_len = input_ids.size()
         ng_token_mask_others, ng_token_mask_coref = ng_token_mask[:, :, :-1, :], ng_token_mask[:, :, -1, :].unsqueeze(2)

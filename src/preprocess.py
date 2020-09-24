@@ -16,19 +16,6 @@ from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
 NUM_SPECIAL_TOKENS = 5
 
-BERT_MODELS = {
-    'local': {
-        'base': f'{Path.home()}/Data/bert/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-        'nict': f'{Path.home()}/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
-    },
-    'server': {
-        'base': '/larch/share/bert/Japanese_models/Wikipedia/L-12_H-768_A-12_E-30_BPE',
-        'large': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-25_BPE',
-        'large-wwm': '/larch/share/bert/Japanese_models/Wikipedia/L-24_H-1024_A-16_E-30_BPE_WWM',
-        'nict': '/larch/share/bert/NICT_pretrained_models/NICT_BERT-base_JapaneseWikipedia_32K_BPE',
-    }
-}
-
 
 def process_kwdlc(input_path: Path, output_path: Path, cases: List[str], corefs: List[str]) -> int:
     output_path.mkdir(exist_ok=True)
@@ -118,7 +105,6 @@ def process_commonsense(input_path: Path, output_path: Path) -> int:
 
 
 def main():
-    all_bert_models = list(set(model for v in BERT_MODELS.values() for model in v.keys()))
     parser = argparse.ArgumentParser()
     parser.add_argument('--kwdlc', type=str, default=None,
                         help='path to directory where KWDLC data exists')
@@ -135,10 +121,10 @@ def main():
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
-    parser.add_argument('--bert', choices=all_bert_models, type=str, default='base',
+    parser.add_argument('--bert-path', type=str, required=True,
+                        help='path to pre-trained BERT model')
+    parser.add_argument('--bert-name', type=str, required=True,
                         help='BERT model name')
-    parser.add_argument('--env', choices=['local', 'server'], type=str, default='server',
-                        help='development environment')
     args = parser.parse_args()
 
     # make directories to save dataset
@@ -146,7 +132,6 @@ def main():
 
     target_cases: List[str] = args.case_string.split(',')
     target_corefs: List[str] = args.coref_string.split(',')
-    bert_model = BERT_MODELS[args.env][args.bert]
     config_path: Path = args.out / 'config.json'
     if config_path.exists():
         with config_path.open() as f:
@@ -159,8 +144,8 @@ def main():
             'target_corefs': target_corefs,
             # 'num_examples': {},
             'max_seq_length': args.max_seq_length,
-            'bert_name': args.bert,
-            'bert_path': bert_model,
+            'bert_name': args.bert_name,
+            'bert_path': args.bert_path,
         }
     )
     if 'num_examples' not in config:
@@ -178,19 +163,19 @@ def main():
 
     if args.kc is not None:
         input_dir = Path(args.kc).resolve()
-        output_dir: Path = args.out / 'kc'
+        output_dir: Path = args.out / 'kc_split'
         output_dir.mkdir(exist_ok=True)
-        tokenizer = BertTokenizer.from_pretrained(bert_model, do_lower_case=False, tokenize_chinese_chars=False)
+        tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=False, tokenize_chinese_chars=False)
         num_examples_train = process_kc(input_dir / 'train', output_dir / 'train', config, tokenizer, split=True)
         num_examples_valid = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer, split=True)
         num_examples_test = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer, split=True)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kc'] = num_examples_dict
 
-        joined_output_dir: Path = args.out / 'kc_joined'
-        joined_output_dir.mkdir(exist_ok=True)
-        _ = process_kc(input_dir / 'valid', joined_output_dir / 'valid', config, tokenizer, split=False)
-        _ = process_kc(input_dir / 'test', joined_output_dir / 'test', config, tokenizer, split=False)
+        output_dir: Path = args.out / 'kc'
+        output_dir.mkdir(exist_ok=True)
+        _ = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer, split=False)
+        _ = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer, split=False)
 
     if args.commonsense is not None:
         input_dir = Path(args.commonsense).resolve()

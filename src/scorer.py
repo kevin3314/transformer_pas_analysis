@@ -446,11 +446,11 @@ class Scorer:
             fh (Optional[TextIO]): 出力ストリーム
             html (bool): html 形式で出力するかどうか
         """
-        sentence: BList = document.sid2sentence[sid]
+        blist: BList = document.sid2sentence[sid].blist
         with io.StringIO() as string:
-            sentence.draw_tag_tree(fh=string)
+            blist.draw_tag_tree(fh=string, show_pos=False)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
-        assert len(tree_strings) == len(sentence.tag_list())
+        assert len(tree_strings) == len(blist.tag_list())
         all_midasis = [m.midasi for m in document.mentions.values()]
         for predicate in filter(lambda p: p.sid == sid, set(predicates + anaphors)):
             cases = []

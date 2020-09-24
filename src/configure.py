@@ -81,7 +81,7 @@ def main() -> None:
                         help='PAS analysis target (pred: verbal predicates, noun: nominal predicates, all: both)')
     parser.add_argument('--refinement-iter', '--riter', type=int, default=[3], nargs='*',
                         help='number of refinement iteration (IterativeRefinementModel)')
-    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out'], default=['atn'], nargs='*',
+    parser.add_argument('--conditional-model', choices=['emb', 'atn', 'out', 'catn'], default=['atn'], nargs='*',
                         help='how to insert pre-output to model (IterativeRefinementModel)')
     parser.add_argument('--output-aggr', choices=['hard', 'hard2', 'soft', 'confidence'], default=['hard'], nargs='*',
                         help='pre-output aggregation method (IterativeRefinementModel with AttentionConditionalModel)')
@@ -122,8 +122,9 @@ def main() -> None:
             items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             items.append(conditional_model)
-            if conditional_model == 'atn':
+            if conditional_model in ('atn', 'catn'):
                 items.append(output_aggr)
+            if conditional_model == 'atn':
                 items.append(atn_target)
         if args.debug:
             items.append('debug')
@@ -155,8 +156,10 @@ def main() -> None:
             arch['args'].update({'num_iter': refinement_iter})
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             arch['args'].update({'conditional_model': conditional_model})
+            if conditional_model in ('atn', 'catn'):
+                arch['args'].update({'output_aggr': output_aggr})
             if conditional_model == 'atn':
-                arch['args'].update({'output_aggr': output_aggr, 'atn_target': atn_target})
+                arch['args'].update({'atn_target': atn_target})
 
         dataset = {
             'type': 'PASDataset',
@@ -174,33 +177,48 @@ def main() -> None:
             },
         }
 
-        train_kwdlc_dataset = copy.deepcopy(dataset)
-        train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train') if corpus in ('kwdlc', 'all') else None
-        train_kwdlc_dataset['args']['training'] = True
-        train_kwdlc_dataset['args']['kc'] = False
+        train_kwdlc_dataset = None
+        valid_kwdlc_dataset = None
+        test_kwdlc_dataset = None
+        train_kc_dataset = None
+        valid_kc_dataset = None
+        test_kc_dataset = None
+        if corpus in ('kwdlc', 'all'):
+            train_kwdlc_dataset = copy.deepcopy(dataset)
+            train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train')
+            train_kwdlc_dataset['args']['training'] = True
+            train_kwdlc_dataset['args']['kc'] = False
 
-        valid_kwdlc_dataset = copy.deepcopy(dataset)
-        valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid') if corpus in ('kwdlc', 'all') else None
-        valid_kwdlc_dataset['args']['training'] = False
-        valid_kwdlc_dataset['args']['kc'] = False
+            valid_kwdlc_dataset = copy.deepcopy(dataset)
+            valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid')
+            valid_kwdlc_dataset['args']['training'] = False
+            valid_kwdlc_dataset['args']['kc'] = False
 
-        test_kwdlc_dataset = copy.deepcopy(dataset)
-        test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test') if corpus in ('kwdlc', 'all') else None
-        test_kwdlc_dataset['args']['training'] = False
-        test_kwdlc_dataset['args']['kc'] = False
+            test_kwdlc_dataset = copy.deepcopy(dataset)
+            test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test')
+            test_kwdlc_dataset['args']['training'] = False
+            test_kwdlc_dataset['args']['kc'] = False
+        if corpus in ('kc', 'all'):
+            train_kc_dataset = copy.deepcopy(dataset)
+            train_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'train')
+            train_kc_dataset['args']['training'] = True
+            train_kc_dataset['args']['kc'] = True
 
-        train_kc_dataset = copy.deepcopy(train_kwdlc_dataset)
-        train_kc_dataset['args']['path'] = str(data_root / 'kc' / 'train') if corpus in ('kc', 'all') else None
-        train_kc_dataset['args']['kc'] = True
+            valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
+            valid_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'valid')
+            valid_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'valid')
+            valid_kc_dataset['args']['training'] = False
+            valid_kc_dataset['args']['kc'] = True
 
-        valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
-        valid_kc_dataset['args']['path'] = str(data_root / 'kc' / 'valid') if corpus in ('kc', 'all') else None
-        valid_kc_dataset['args']['kc'] = True
+            test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
+            test_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'test')
+            test_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'test')
+            test_kc_dataset['args']['training'] = False
+            test_kc_dataset['args']['kc'] = True
 
-        test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
-        test_kc_dataset['args']['path'] = str(data_root / 'kc' / 'test') if corpus in ('kc', 'all') else None
-        test_kc_dataset['args']['kc'] = True
-
+        train_commonsense_dataset = None
+        valid_commonsense_dataset = None
+        test_commonsense_dataset = None
         if model == 'CommonsenseModel':
             commonsense_dataset = {
                 'type': 'CommonsenseDataset',
@@ -217,10 +235,6 @@ def main() -> None:
             valid_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'valid.pkl')
             test_commonsense_dataset = copy.deepcopy(commonsense_dataset)
             test_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'test.pkl')
-        else:
-            train_commonsense_dataset = None
-            valid_commonsense_dataset = None
-            test_commonsense_dataset = None
 
         data_loader = {
             'type': 'PASDataLoader',
@@ -228,7 +242,7 @@ def main() -> None:
                 'batch_size': None,
                 'shuffle': None,
                 'validation_split': 0.0,
-                'num_workers': 2,
+                'num_workers': 4,
             },
         }
 
@@ -318,7 +332,7 @@ def main() -> None:
             'max_bpg': args.max_bpg if args.max_bpg is not None else args.batch_size,
             'save_dir': 'result/',
             'save_start_epoch': args.save_start_epoch,
-            'verbosity': 2,
+            'verbosity': 2 if args.debug else 1,  # 0: WARNING, 1: INFO, 2: DEBUG
             'monitor': f'{mnt_mode} {mnt_metric}',
             'early_stop': 10,
             'tensorboard': True,

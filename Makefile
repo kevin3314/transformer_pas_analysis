@@ -1,5 +1,5 @@
-RESULT := # result/BaselineModel-kwdlc-4e-large-coref-cz
-CONFIG := # config/BaselineModel-kwdlc-4e-large-coref-cz.json
+RESULT := # result/BaselineModel-all-4e-nict-cz-vpa
+CONFIG := # config/BaselineModel-all-4e-nict-cz-vpa.json
 GPUS := -1
 # number of train iteration with different random seeds
 TRAIN_NUM := 1
@@ -10,15 +10,23 @@ EVAL_SET := test
 CASE := all_case
 TARGET :=
 
-ifndef RESULT
-  RESULT := result/$(patsubst config/%.json,%,$(CONFIG))
+ifdef CONFIG
+  EXPR := $(basename $(notdir $(CONFIG)))
+  ifndef RESULT
+    RESULT := result/$(EXPR)
+  endif
+else
+  ifdef RESULT
+    EXPR := $(notdir $(RESULT))
+    CONFIG := config/$(EXPR).json
+  endif
 endif
 
 ifndef TARGET
-  ifneq ($(shell ls $(RESULT)/*/eval_$(EVAL_SET)/*pred.csv 2> /dev/null),)
+  ifneq (,$(findstring -vpa,$(EXPR)))
     TARGET := kwdlc_pred
   else
-    ifneq ($(shell ls $(RESULT)/*/eval_$(EVAL_SET)/*noun.csv 2> /dev/null),)
+    ifneq (,$(findstring -npa,$(EXPR)))
       TARGET := kwdlc_noun
     else
       TARGET := kwdlc
@@ -76,12 +84,12 @@ $(RESULT_FILES): %/eval_$(EVAL_SET)/$(CSV_NAME): %/model_best.pth
 test-ens: $(ENS_RESULT_FILE)
 
 $(ENS_RESULT_FILE): $(CHECKPOINTS)
-	$(PYTHON) src/test.py --ens $(RESULT) -c $(dir $<)config.json --target $(EVAL_SET) -d $(GPUS)
+	$(PYTHON) src/test.py --ens $(RESULT) --target $(EVAL_SET) -d $(GPUS)
 
 .PHONY: help
 help:
 	@echo example:
-	@echo make train CONFIG=config/BaselineModel/kwdlc/4e/large-coref-cz.json GPUS=0,1 TRAIN_NUM=5
-	@echo make test RESULT=result/BaselineModel-kwdlc-4e-large-coref-cz GPU=0
-	@echo make all CONFIG=config/BaselineModel/kwdlc/4e/large-coref-cz.json GPUS=0,1 TRAIN_NUM=5
-	@echo make test-ens RESULT=result/BaselineModel-kwdlc-4e-large-coref-cz GPU=0
+	@echo make train CONFIG=config/BaselineModel-all-4e-nict-cz-vpa.json GPUS=0,1 TRAIN_NUM=5
+	@echo make test RESULT=result/BaselineModel-all-4e-nict-cz-vpa GPU=0
+	@echo make all CONFIG=config/BaselineModel-all-4e-nict-cz-vpa.json GPUS=0,1 TRAIN_NUM=5
+	@echo make test-ens RESULT=result/BaselineModel-all-4e-nict-cz-vpa GPU=0

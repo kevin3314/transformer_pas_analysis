@@ -8,7 +8,7 @@ import torch
 from sklearn.metrics import f1_score
 
 from base import BaseTrainer
-from writer.prediction_writer import PredictionKNPWriter
+from prediction.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
 import data_loader.data_loaders as module_loader
 
@@ -59,18 +59,18 @@ class Trainer(BaseTrainer):
         total_loss = 0
         for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
-            batch = tuple(t.to(self.device) for t in batch)
+            batch = {label: t.to(self.device, non_blocking=True) for label, t in batch.items()}
             current_step = (epoch - 1) * len(self.data_loader) + step
 
-            loss, *_ = self.model(*batch, progress=current_step / self.total_step)
+            loss, *_ = self.model(**batch, progress=current_step / self.total_step)
 
             if len(loss.size()) > 0:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
             loss_value = loss.item()
-            total_loss += loss_value * batch[0].size(0)
+            total_loss += loss_value * next(iter(batch.values())).size(0)
 
             if step % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
+                self.logger.info('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
                     epoch,
                     step * self.data_loader.batch_size,
                     self.data_loader.n_samples,
@@ -128,14 +128,13 @@ class Trainer(BaseTrainer):
         contingency_set: List[int] = []
         with torch.no_grad():
             for step, batch in enumerate(data_loader):
-                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
-                batch = tuple(t.to(self.device) for t in batch)
+                batch = {label: t.to(self.device, non_blocking=True) for label, t in batch.items()}
 
-                loss, *output = self.model(*batch)
+                loss, *output = self.model(**batch)
 
                 if len(loss.size()) > 0:
                     loss = loss.mean()
-                if re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
+                if re.match(r'.*(CaseInteraction|Refinement|Duplicate).*Model', self.config['arch']['type']):
                     pas_scores = output[-1]  # (b, seq, case, seq)
                 elif self.config['arch']['type'] == 'CommonsenseModel':
                     pas_scores = output[0]  # (b, seq, case, seq)
@@ -152,7 +151,7 @@ class Trainer(BaseTrainer):
                 self.writer.add_scalar(f'loss_{label}', loss.item())
 
                 if step % self.log_step == 0:
-                    self.logger.debug('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
+                    self.logger.info('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
                         step * data_loader.batch_size,
                         data_loader.n_samples,
                         100.0 * step / len(data_loader),

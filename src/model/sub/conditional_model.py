@@ -5,11 +5,11 @@ from transformers import BertConfig
 
 from base import BaseModel
 from .mask import get_mask
-from .bert import BertModel
+from .bert import BertModel, CaseAwareBertSelfAttention
 
 
 class OutputConditionalModel(BaseModel):
-    """出力層に正解の半分を与える"""
+    """出力層に pre_output の情報を与える"""
 
     def __init__(self,
                  bert_model: str,
@@ -68,7 +68,7 @@ class OutputConditionalModel(BaseModel):
 
 
 class EmbeddingConditionalModel(BaseModel):
-    """BERT の embedding に正解の半分を与える"""
+    """BERT の embedding に pre_output の情報を与える"""
 
     def __init__(self,
                  bert_model: str,
@@ -124,7 +124,7 @@ class EmbeddingConditionalModel(BaseModel):
 
 
 class AttentionConditionalModel(BaseModel):
-    """BERT の attention に正解の半分を与える"""
+    """BERT の attention に pre_output の情報を与える"""
 
     def __init__(self,
                  bert_model: str,
@@ -141,7 +141,7 @@ class AttentionConditionalModel(BaseModel):
         config = BertConfig.from_pretrained(bert_model)
         self.rel_embeddings1 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
         self.rel_embeddings2 = nn.Embedding(self.num_case * 2 + 1, int(config.hidden_size / config.num_attention_heads))
-        kwargs = {'conditional_self_attention': True,
+        kwargs = {'self_attention': 'conditional',
                   'rel_embeddings1': None,
                   'rel_embeddings2': None}
         if 'k' in atn_target:
@@ -265,3 +265,74 @@ class AttentionConditionalModel(BaseModel):
         ], dim=2)
 
         return rel_weights
+
+
+class CaseAwareAttentionConditionalModel(BaseModel):
+    """AttentionConditionalModel で格ごとの embedding ではなく格ごとの value を用意"""
+
+    def __init__(self,
+                 bert_model: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 output_aggr: str,
+                 ) -> None:
+        super().__init__()
+        self.num_case = num_case + int(coreference)
+        self.output_aggr = getattr(AttentionConditionalModel, f'_{output_aggr}_output_aggr')
+        # config = BertConfig.from_pretrained(bert_model)
+        # attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        # self.keys = nn.ModuleList(nn.Linear(config.hidden_size, attention_head_size)
+        #                           for _ in range(self.num_case * 2 + 1))
+        # self.values = nn.ModuleList(nn.Linear(config.hidden_size, attention_head_size)
+        #                             for _ in range(self.num_case * 2 + 1))
+        self.directed_num_case = self.num_case * 2 + 1
+        kwargs = {'self_attention': 'case_aware',
+                  'num_case': self.directed_num_case,
+                  'keys': None,
+                  'values': None}
+        # if 'k' in atn_target:
+        #     kwargs['keys'] = self.keys
+        # if 'v' in atn_target:
+        #     kwargs['values'] = self.values
+        self.bert: BertModel = BertModel.from_pretrained(bert_model, **kwargs)
+        self.bert.resize_token_embeddings(vocab_size)
+        for layer_module in self.bert.encoder.layer:
+            self_module: CaseAwareBertSelfAttention = layer_module.attention.self
+            weight = torch.stack([self_module.value.weight.data] * self.directed_num_case, dim=0)  # (case, hid, hid)
+            self_module.case_value.weight.data = weight.view(-1, self.bert.config.hidden_size).clone()
+        self.dropout = nn.Dropout(dropout)
+
+        bert_hidden_size = self.bert.config.hidden_size
+
+        self.l_prd = nn.Linear(bert_hidden_size, bert_hidden_size)
+        self.l_arg = nn.Linear(bert_hidden_size, bert_hidden_size * self.num_case)
+        self.outs = nn.ModuleList(nn.Linear(bert_hidden_size, 1, bias=False) for _ in range(self.num_case))
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                pre_output: torch.Tensor,      # (b, seq, case, seq)
+                ) -> torch.Tensor:  # (b, seq, case, seq)
+        batch_size, seq_len = input_ids.size()
+        mask = get_mask(attention_mask, ng_token_mask)
+        rel_weights = self.output_aggr(pre_output, mask)  # (b, seq, 1+case*2, seq)
+        # (b, seq, hid)
+        sequence_output, _ = self.bert(input_ids,
+                                       attention_mask=attention_mask,
+                                       token_type_ids=segment_ids,
+                                       rel_weights=rel_weights)
+
+        # -> (b, seq, hid) -> (b, seq, case, hid)
+        h_p = self.l_prd(self.dropout(sequence_output)).unsqueeze(2).expand(-1, -1, self.num_case, -1)
+        # -> (b, seq, case*hid) -> (b, seq, case, hid)
+        h_a = self.l_arg(self.dropout(sequence_output)).view(batch_size, seq_len, self.num_case, -1)
+        h = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+        outputs = [out(h[:, :, :, i, :]).squeeze(-1) for i, out in enumerate(self.outs)]  # [(b, seq, seq)]
+        output = torch.stack(outputs, dim=2)  # (b, seq, case, seq)
+        output += (~mask).float() * -1024.0  # (b, seq, case, seq)
+
+        return output

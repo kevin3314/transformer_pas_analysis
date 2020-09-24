@@ -1,29 +1,29 @@
+import os
 import logging
-from typing import List, Dict, Optional, NamedTuple, Tuple
+import hashlib
 from pathlib import Path
+import _pickle as cPickle
 from collections import defaultdict
+from typing import List, Dict, Optional, NamedTuple
 
-from tqdm import tqdm
 import numpy as np
+from tqdm import tqdm
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
-from data_loader.dataset.read_example import read_example, PasExample
+from .read_example import PasExample
 from utils.constants import TASK_ID
 
 
 class InputFeatures(NamedTuple):
-    tokens: List[str]  # for debug
-    orig_to_tok_index: List[int]  # for output
-    tok_to_orig_index: List[Optional[int]]  # for output
-    input_ids: List[int]  # for training
-    input_mask: List[bool]  # for training
-    segment_ids: List[int]  # for training
-    arguments_set: List[List[List[int]]]  # for training
-    overt_mask: List[List[List[int]]]  # for training
-    ng_token_mask: List[List[List[bool]]]  # for training
-    deps: List[List[int]]  # for training
+    input_ids: List[int]
+    input_mask: List[bool]
+    segment_ids: List[int]
+    arguments_set: List[List[List[int]]]
+    overt_mask: List[List[List[int]]]
+    ng_token_mask: List[List[List[bool]]]
+    deps: List[List[int]]
 
 
 class PASDataset(Dataset):
@@ -40,6 +40,7 @@ class PASDataset(Dataset):
                  pas_targets: List[str],
                  knp_string: Optional[str] = None,
                  logger=None,
+                 kc_joined_path: Optional[str] = None,
                  ) -> None:
         if path is not None:
             source = Path(path)
@@ -60,56 +61,78 @@ class PASDataset(Dataset):
         self.train_zero: bool = 'zero' in train_targets
         self.pas_targets: List[str] = pas_targets
         self.logger = logger if logger else logging.getLogger(__file__)
-        special_tokens = exophors + ['NULL'] + (['NA'] if coreference else [])
+        special_tokens = self.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: dataset_config['max_seq_length'] - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
         self.tokenizer = BertTokenizer.from_pretrained(dataset_config['bert_path'], do_lower_case=False,
                                                        tokenize_chinese_chars=False)
         self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
+        self.max_seq_length = dataset_config['max_seq_length']
         documents = list(self.reader.process_all_documents())
         self.documents: Optional[List[Document]] = documents if not training else None
-        self.examples: List[PasExample] = []
-        self.features: List[InputFeatures] = []
-        # FIXME: refactor
+
         if self.kc and not training:
-            eval_set = source.name
-            reader = KyotoReader(source.parent.parent / 'kc_joined' / eval_set,
+            assert kc_joined_path is not None
+            reader = KyotoReader(Path(kc_joined_path),
                                  target_cases=dataset_config['target_cases'],
                                  target_corefs=dataset_config['target_corefs'],
                                  extract_nes=False)
-            joined_documents = list(reader.process_all_documents())
-            self.joined_documents = joined_documents if not training else None
+            self.joined_documents = list(reader.process_all_documents())
 
+        self.examples: List[PasExample] = []
+        load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
+        save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
+        bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
         for document in tqdm(documents, desc='processing documents'):
-            example = read_example(document,
-                                   cases=self.target_cases,
-                                   exophors=self.target_exophors,
-                                   coreference=coreference,
-                                   bridging=bridging,
-                                   kc=kc,
-                                   pas_targets=pas_targets,
-                                   dataset_config=dataset_config)
-            feature = self._convert_example_to_feature(example, dataset_config['max_seq_length'])
-            if feature is None:
+            hash_ = self._hash(document, self.target_cases, self.target_exophors, coreference, bridging, kc,
+                               pas_targets, train_targets, dataset_config, dataset_config['bert_path'])
+            example_cache_path = bpa_cache_dir / hash_ / f'{document.doc_id}.pkl'
+            if example_cache_path.exists() and load_cache:
+                with example_cache_path.open('rb') as f:
+                    example = cPickle.load(f)
+            else:
+                example = PasExample()
+                example.load(document,
+                             cases=self.target_cases,
+                             exophors=self.target_exophors,
+                             coreference=coreference,
+                             bridging=bridging,
+                             kc=kc,
+                             pas_targets=pas_targets,
+                             tokenizer=self.tokenizer)
+                if save_cache:
+                    example_cache_path.parent.mkdir(exist_ok=True, parents=True)
+                    with example_cache_path.open('wb') as f:
+                        cPickle.dump(example, f)
+
+            # ignore too long document
+            if len(example.tokens) > self.max_seq_length - len(self.special_to_index):
                 continue
+
             self.examples.append(example)
-            self.features.append(feature)
+
+    @staticmethod
+    def _hash(document, *args) -> str:
+        attrs = ('cases', 'corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
+        assert set(attrs) <= set(vars(document).keys())
+        vars_document = {k: v for k, v in vars(document).items() if k in attrs}
+        string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
+        return hashlib.md5(string.encode()).hexdigest()
 
     def _convert_example_to_feature(self,
                                     example: PasExample,
-                                    max_seq_length: int) -> Optional[InputFeatures]:
+                                    ) -> Optional[InputFeatures]:
         """Loads a data file into a list of `InputBatch`s."""
 
         vocab_size = self.tokenizer.vocab_size
+        max_seq_length = self.max_seq_length
         num_special_tokens = len(self.special_to_index)
         num_relations = len(self.target_cases) + int(self.bridging) + int(self.coreference)
 
-        all_tokens, tok_to_orig_index, orig_to_tok_index = self._get_tokenized_tokens(example.words)
-        # ignore too long document
-        if len(all_tokens) > max_seq_length - num_special_tokens:
-            return None
+        tokens = example.tokens
+        tok_to_orig_index = example.tok_to_orig_index
+        orig_to_tok_index = example.orig_to_tok_index
 
-        tokens: List[str] = []
         segment_ids: List[int] = []
         arguments_set: List[List[List[int]]] = []
         candidates_set: List[List[List[int]]] = []
@@ -117,8 +140,7 @@ class PASDataset(Dataset):
         deps: List[List[int]] = []
 
         # subword loop
-        for token, orig_index in zip(all_tokens, tok_to_orig_index):
-            tokens.append(token)
+        for token, orig_index in zip(tokens, tok_to_orig_index):
             segment_ids.append(0)
 
             # subsequent subword or [CLS] token or [SEP] token
@@ -214,9 +236,6 @@ class PASDataset(Dataset):
         assert len(deps) == max_seq_length
 
         feature = InputFeatures(
-            tokens=tokens,
-            orig_to_tok_index=orig_to_tok_index,
-            tok_to_orig_index=tok_to_orig_index,
             input_ids=input_ids,
             input_mask=input_mask,
             segment_ids=segment_ids,
@@ -231,112 +250,77 @@ class PASDataset(Dataset):
 
         return feature
 
-    def _get_tokenized_tokens(self, words: List[str]) -> Tuple[List[str], List[Optional[int]], List[int]]:
-        all_tokens = []
-        tok_to_orig_index: List[Optional[int]] = []
-        orig_to_tok_index: List[int] = []
-
-        all_tokens.append('[CLS]')
-        tok_to_orig_index.append(None)  # There's no original token corresponding to [CLS] token
-
-        for i, word in enumerate(words):
-            orig_to_tok_index.append(len(all_tokens))  # assign head subword
-            sub_tokens = self.tokenizer.tokenize(word)
-            for sub_token in sub_tokens:
-                all_tokens.append(sub_token)
-                tok_to_orig_index.append(i)
-
-        all_tokens.append('[SEP]')
-        tok_to_orig_index.append(None)  # There's no original token corresponding to [SEP] token
-
-        return all_tokens, tok_to_orig_index, orig_to_tok_index
-
     def stat(self) -> dict:
-        n_examples = n_preds = n_mentions = 0
-        n_args = defaultdict(int)
-        pas_overt = pas_exo = pas_null = pas_normal = 0
-        coref_exo = coref_na = coref_normal = 0
-        zero = defaultdict(int)
+        n_mentions = n_preds_pa = n_preds_bar = 0
+        cr = defaultdict(int)
+        n_args_bar = defaultdict(int)
+        n_args_pa = defaultdict(lambda: defaultdict(int))
 
-        for example in self.examples:
-            for arguments in example.arguments_set:
-                for case, argument in arguments.items():
-                    if not argument:
-                        continue
-                    arg: str = argument[0]
-                    if case == '=':
-                        if arg in self.target_exophors:
-                            coref_exo += 1
-                        elif arg == 'NA':
-                            coref_na += 1
-                        else:
-                            coref_normal += 1
-                    else:
-                        if '%C' in arg:
-                            pas_overt += 1
-                        elif arg in self.target_exophors:
-                            pas_exo += 1
-                        elif arg == 'NULL':
-                            pas_null += 1
-                            continue
-                        else:
-                            pas_normal += 1
-                        if '%O' in arg or arg in self.target_exophors:
-                            zero[case] += 1
-                        n_args[case] += 1
-                if self.coreference:
-                    if arguments['='] is not None:
-                        n_mentions += 1
-                    if any(arg is not None for arg in list(arguments.values())[:-1]):
-                        n_preds += 1
-                else:
-                    if any(arg is not None for arg in arguments.values()):
-                        n_preds += 1
-            n_examples += 1
-
-        n_all_tokens = n_input_tokens = n_unk_tokens = 0
-        unk_id = self.tokenizer.convert_tokens_to_ids('[UNK]')
-        pad_id = 0
-        for feature in self.features:
-            for token_id in feature.input_ids:
-                n_all_tokens += 1
-                if token_id == pad_id:
+        for arguments in (x for example in self.examples for x in example.arguments_set):
+            for case, args in arguments.items():
+                if not args:
                     continue
-                n_input_tokens += 1
-                if token_id == unk_id:
-                    n_unk_tokens += 1
+                arg: str = args[0]
+                if case == '=':
+                    if arg == 'NA':
+                        cr['na'] += 1
+                        continue
+                    n_mentions += 1
+                    if arg in self.target_exophors:
+                        cr['exo'] += 1
+                    else:
+                        cr['ana'] += 1
+                else:
+                    n_args = n_args_bar if case == 'ノ' else n_args_pa[case]
+                    if arg == 'NULL':
+                        n_args['null'] += 1
+                        continue
+                    n_args['all'] += 1
+                    if arg in self.target_exophors:
+                        n_args['exo'] += 1
+                    elif '%C' in arg:
+                        n_args['overt'] += 1
+                    elif '%N' in arg:
+                        n_args['dep'] += 1
+                    elif '%O' in arg:
+                        n_args['zero'] += 1
 
-        return {'examples': n_examples,
-                'predicates': n_preds,
-                'mentions': n_mentions,
-                'ga_cases': n_args['ガ'],
-                'wo_cases': n_args['ヲ'],
-                'ni_cases': n_args['ニ'],
-                'ga2_cases': n_args['ガ２'],
-                'pas_overt': pas_overt,
-                'pas_exophor': pas_exo,
-                'pas_normal': pas_normal,
-                'pas_null': pas_null,
-                'coref_exophor': coref_exo,
-                'coref_normal': coref_normal,
-                'coref_na': coref_na,
-                'n_all_tokens': n_all_tokens,
-                'n_input_tokens': n_input_tokens,
-                'n_unk_tokens': n_unk_tokens,
-                'zero': zero
+            arguments_: List[List[str]] = list(arguments.values())
+            if self.coreference:
+                arguments_ = arguments_[:-1]
+            if self.bridging:
+                if arguments_[-1]:
+                    n_preds_bar += 1
+                arguments_ = arguments_[:-1]
+            if any(arguments_):
+                n_preds_pa += 1
+
+        n_args_pa_all = defaultdict(int)
+        for case, ans in n_args_pa.items():
+            for anal, num in ans.items():
+                n_args_pa_all[anal] += num
+        n_args_pa['all'] = n_args_pa_all
+
+        cr['mentions'] = n_mentions
+
+        return {'examples': len(self.examples),
+                'pas': {'preds': n_preds_pa, 'args': n_args_pa},
+                'bridging': {'preds': n_preds_bar, 'args': n_args_bar},
+                'coreference': cr,
+                'tokens': sum(sum(example.tokens) for example in self.examples),
                 }
 
     def __len__(self) -> int:
-        return len(self.features)
+        return len(self.examples)
 
     def __getitem__(self, idx) -> tuple:
-        feature = self.features[idx]
+        feature = self._convert_example_to_feature(self.examples[idx])
         input_ids = np.array(feature.input_ids)          # (seq)
-        input_mask = np.array(feature.input_mask)        # (seq)
+        attention_mask = np.array(feature.input_mask)    # (seq)
         segment_ids = np.array(feature.segment_ids)      # (seq)
         arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
         overt_mask = np.array(feature.overt_mask)        # (seq, case, seq)
         ng_token_mask = np.array(feature.ng_token_mask)  # (seq, case, seq)
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
-        return input_ids, input_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask
+        return input_ids, attention_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask

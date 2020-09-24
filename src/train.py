@@ -19,26 +19,26 @@ def main(config: ConfigParser, args: argparse.Namespace):
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
+    torch.backends.cudnn.benchmark = True
     # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
     # torch.autograd.set_detect_anomaly(True)
 
     logger = config.get_logger('train')
 
     # setup data_loader instances
     train_datasets = []
-    if config['train_kwdlc_dataset']['args']['path'] is not None:
+    if config['train_kwdlc_dataset'] is not None:
         train_datasets.append(config.init_obj('train_kwdlc_dataset', module_dataset, logger=logger))
-    if config['train_kc_dataset']['args']['path'] is not None:
+    if config['train_kc_dataset'] is not None:
         train_datasets.append(config.init_obj('train_kc_dataset', module_dataset, logger=logger))
     if config['train_commonsense_dataset'] is not None:
         train_datasets.append(config.init_obj('train_commonsense_dataset', module_dataset, logger=logger))
     train_dataset = ConcatDataset(train_datasets)
     valid_kwdlc_dataset = None
-    if config['valid_kwdlc_dataset']['args']['path'] is not None:
+    if config['valid_kwdlc_dataset'] is not None:
         valid_kwdlc_dataset = config.init_obj('valid_kwdlc_dataset', module_dataset, logger=logger)
     valid_kc_dataset = None
-    if config['valid_kc_dataset']['args']['path'] is not None:
+    if config['valid_kc_dataset'] is not None:
         valid_kc_dataset = config.init_obj('valid_kc_dataset', module_dataset, logger=logger)
     valid_commonsense_dataset = None
     if config['valid_commonsense_dataset'] is not None:

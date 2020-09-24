@@ -1,30 +1,28 @@
 import re
 import os
 import socket
-from typing import Dict, Tuple, Union, Optional, List
+from typing import Dict, Tuple, Union, Optional
 import configparser
 from pathlib import Path
 from datetime import datetime
 
-import torch
 import jaconv
 from pyknp import Juman, KNP
 from transformers import BertConfig
 from textformatting import ssplit
-from tqdm import tqdm
 
 import model.model as module_arch
 import data_loader.dataset as module_dataset
 import data_loader.data_loaders as module_loader
 from data_loader.dataset import PASDataset
-from utils import read_json, prepare_device
 from utils.parse_config import ConfigParser
+from test import Inference
 
 
 class Analyzer:
     """Perform PAS analysis given a sentence."""
 
-    def __init__(self, model_path: str, device: str, logger, bertknp: bool = False):
+    def __init__(self, config: ConfigParser, logger, bertknp: bool = False):
         cfg = configparser.ConfigParser()
         here = Path(__file__).parent
         cfg.read(here / 'config.ini')
@@ -39,32 +37,20 @@ class Analyzer:
         self.logger = logger
         self.bertknp = bertknp
 
-        config_path = Path(model_path).parent / 'config.json'
-        config = read_json(config_path)
-        self.config = ConfigParser(config, resume=model_path, run_id='')  # save_dir 作らせたくない
+        self.config = config
         os.environ['BPA_DISABLE_CACHE'] = '1'
 
-        dataset_config = config['test_kwdlc_dataset']['args']
-        bert_config = BertConfig.from_pretrained(dataset_config['dataset_config']['bert_path'])
-        coreference = dataset_config['coreference']
-        exophors = dataset_config['exophors']
+        dataset_args = self.config['test_kwdlc_dataset']['args']
+        bert_config = BertConfig.from_pretrained(dataset_args['dataset_config']['bert_path'])
+        coreference = dataset_args['coreference']
+        exophors = dataset_args['exophors']
         expanded_vocab_size = bert_config.vocab_size + len(exophors) + 1 + int(coreference)
-
-        os.environ['CUDA_VISIBLE_DEVICES'] = device
-        self.device, device_ids = prepare_device(1, self.logger)
 
         # build model architecture
         model = self.config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
         self.logger.info(model)
 
-        # prepare model
-        self.logger.info(f'Loading checkpoint: {model_path} ...')
-        state_dict = torch.load(model_path, map_location=self.device)['state_dict']
-        model.load_state_dict({k.replace('module.', ''): v for k, v in state_dict.items()})
-        self.model = model.to(self.device)
-        if len(device_ids) > 1:
-            self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
-        self.model.eval()
+        self.inference = Inference(self.config, model, logger=self.logger)
 
     def analyze(self, source: Union[Path, str], knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
         if isinstance(source, Path):
@@ -72,7 +58,7 @@ class Analyzer:
             save_dir = source
         else:
             save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
-            save_dir.mkdir(exist_ok=True)
+            save_dir.mkdir(exist_ok=True, parents=True)
             sents = [self.sanitize_string(sent) for sent in ssplit(source)]
             self.logger.info('input: ' + ''.join(sents))
             knp_out = ''
@@ -93,31 +79,18 @@ class Analyzer:
         return self._analysis(save_dir)
 
     def _analysis(self, path: Path) -> Tuple[list, PASDataset]:
-        dataset_config: dict = self.config['test_kwdlc_dataset']['args']
-        dataset_config['path'] = str(path)
+        self.config['test_kwdlc_dataset']['args']['path'] = str(path)
         dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
         data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
 
-        arguments_sets: List[List[List[int]]] = []
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(tqdm(data_loader, desc='PAS analysis')):
-                # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
-                batch = tuple(t.to(self.device) for t in batch)
+        _, *predictions = self.inference(data_loader)
 
-                _, *output = self.model(*batch)
+        if re.match(r'.*(CaseInteraction|Refinement|Duplicate).*Model', self.config['arch']['type']):
+            prediction = predictions[-1]  # (N, seq, case)
+        else:
+            prediction = predictions[0]  # (N, seq, case)
 
-                if self.config['arch']['type'] == 'MultitaskDepModel':
-                    pas_scores = output[0]  # (b, seq, case, seq)
-                elif re.match(r'.*(CaseInteraction|Refinement|Duplicate)Model', self.config['arch']['type']):
-                    pas_scores = output[-1]  # (b, seq, case, seq)
-                elif self.config['arch']['type'] == 'CommonsenseModel':
-                    pas_scores = output[0]  # (b, seq, case, seq)
-                else:
-                    pas_scores = output[0]  # (b, seq, case, seq)
-                arguments_set = torch.argmax(pas_scores, dim=3)  # (b, seq, case)
-                arguments_sets += arguments_set.tolist()
-
-        return arguments_sets, dataset
+        return prediction.tolist(), dataset
 
     def _apply_jumanpp(self, inp: str) -> Tuple[str, str]:
         jumanpp = Juman(command=self.juman, option=self.juman_option)

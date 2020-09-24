@@ -1,56 +1,11 @@
-import os
-import hashlib
 import logging
-from typing import List, Dict
-from pathlib import Path
-import _pickle as cPickle
+from typing import List, Dict, Tuple, Optional
 from collections import OrderedDict
 
-from pyknp import BList, Tag, Morpheme
-from kyoto_reader import Document, BaseArgument, Argument, SpecialArgument, UNCERTAIN
+from transformers import BertTokenizer
+from kyoto_reader import Document, BasePhrase, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 logger = logging.getLogger(__file__)
-
-
-def read_example(document: Document,
-                 cases: List[str],
-                 exophors: List[str],
-                 coreference: bool,
-                 bridging: bool,
-                 kc: bool,
-                 pas_targets: List[str],
-                 dataset_config: dict,
-                 ) -> 'PasExample':
-    load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
-    save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
-    bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
-    example_hash = _hash(document, cases, exophors, coreference, bridging, kc, pas_targets, dataset_config)
-    cache_path = bpa_cache_dir / example_hash / f'{document.doc_id}.pkl'
-    if cache_path.exists() and load_cache:
-        with cache_path.open('rb') as f:
-            example = cPickle.load(f)
-    else:
-        example = PasExample()
-        example.load(document,
-                     cases=cases,
-                     exophors=exophors,
-                     coreference=coreference,
-                     bridging=bridging,
-                     kc=kc,
-                     pas_targets=pas_targets)
-        if save_cache:
-            cache_path.parent.mkdir(exist_ok=True, parents=True)
-            with cache_path.open('wb') as f:
-                cPickle.dump(example, f)
-    return example
-
-
-def _hash(document, *args) -> str:
-    attrs = ('cases', 'corefs', 'relax_cases', 'extract_nes', 'use_pas_tag')
-    assert set(attrs) <= set(vars(document).keys())
-    vars_document = {k: v for k, v in vars(document).items() if k in attrs}
-    string = repr(sorted(vars_document)) + ''.join(repr(a) for a in args)
-    return hashlib.md5(string.encode()).hexdigest()
 
 
 class PasExample:
@@ -58,6 +13,9 @@ class PasExample:
 
     def __init__(self) -> None:
         self.words: List[str] = []
+        self.tokens: List[str] = []
+        self.orig_to_tok_index: List[int] = []
+        self.tok_to_orig_index: List[Optional[int]] = []
         self.arguments_set: List[Dict[str, List[str]]] = []
         self.arg_candidates_set: List[List[int]] = []
         self.ment_candidates_set: List[List[int]] = []
@@ -73,6 +31,7 @@ class PasExample:
              bridging: bool,
              kc: bool,
              pas_targets: List[str],
+             tokenizer: BertTokenizer,
              ) -> None:
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
@@ -86,49 +45,41 @@ class PasExample:
                     relax_exophors[exophor + n] = exophor
         dmid2arguments: Dict[int, Dict[str, List[BaseArgument]]] = {pred.dmid: document.get_arguments(pred)
                                                                     for pred in document.get_predicates()}
-        dmid = 0
         head_dmids = []
         for sentence in document:
             process: bool = process_all or (sentence is last_sent)
-            head_dmids += self._get_head_dmids(sentence, document.mrph2dmid)
-            for tag in sentence.tag_list():
-                mrph_list: List[Morpheme] = tag.mrph_list()
-                if not mrph_list:
-                    continue
-                target_mrph = mrph_list[0]
-                for mrph in mrph_list:
-                    if '<内容語>' in mrph.fstring:
-                        target_mrph = mrph
-                        break
-                for mrph in tag.mrph_list():
+            head_dmids += [bp.dmid for bp in sentence.bp_list()]
+            for bp in sentence.bp_list():
+                for mrph in bp.mrph_list():
                     self.words.append(mrph.midasi)
-                    self.dtids.append(document.tag2dtid[tag])
-                    self.ddeps.append(document.tag2dtid[tag.parent] if tag.parent is not None else -1)
+                    self.dtids.append(bp.dtid)
+                    self.ddeps.append(bp.parent.dtid if bp.parent is not None else -1)
                     arguments = OrderedDict((rel, []) for rel in relations)
                     arg_candidates = ment_candidates = []
-                    if mrph is target_mrph and process is True:
-                        if ('pred' in pas_targets and '用言' in tag.features) or \
-                                ('noun' in pas_targets and '非用言格解析' in tag.features):
-                            arg_candidates = [x for x in head_dmids if x != dmid]
+                    if document.mrph2dmid[mrph] == bp.dmid and process is True:
+                        if ('pred' in pas_targets and '用言' in bp.tag.features) or \
+                                ('noun' in pas_targets and '非用言格解析' in bp.tag.features):
+                            arg_candidates = [x for x in head_dmids if x != bp.dmid]
                             for case in cases:
                                 dmid2args = {dmid: arguments[case] for dmid, arguments in dmid2arguments.items()}
-                                arguments[case] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
+                                arguments[case] = self._get_args(bp.dmid, dmid2args, relax_exophors, arg_candidates)
 
                         if 'ノ' in relations:
-                            arg_candidates = [x for x in head_dmids if x != dmid]
-                            if '体言' in tag.features and '非用言格解析' not in tag.features:
+                            arg_candidates = [x for x in head_dmids if x != bp.dmid]
+                            if '体言' in bp.tag.features and '非用言格解析' not in bp.tag.features:
                                 dmid2args = {dmid: arguments['ノ'] for dmid, arguments in dmid2arguments.items()}
-                                arguments['ノ'] = self._get_args(dmid, dmid2args, relax_exophors, arg_candidates)
+                                arguments['ノ'] = self._get_args(bp.dmid, dmid2args, relax_exophors, arg_candidates)
 
                         if '=' in relations:
-                            if '体言' in tag.features:
-                                ment_candidates = [x for x in head_dmids if x < dmid]
-                                arguments['='] = self._get_mentions(tag, document, relax_exophors, ment_candidates)
+                            if '体言' in bp.tag.features:
+                                ment_candidates = [x for x in head_dmids if x < bp.dmid]
+                                arguments['='] = self._get_mentions(bp, document, relax_exophors, ment_candidates)
 
                     self.arguments_set.append(arguments)
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
-                    dmid += 1
+
+        self.tokens, self.tok_to_orig_index, self.orig_to_tok_index = self._get_tokenized_tokens(self.words, tokenizer)
 
     def _get_args(self,
                   dmid: int,
@@ -178,16 +129,15 @@ class PasExample:
         return arg_strings
 
     def _get_mentions(self,
-                      tag: Tag,
+                      bp: BasePhrase,
                       document: Document,
                       relax_exophors: Dict[str, str],
                       candidates: List[int],
                       ) -> List[str]:
-        ment_strings: List[str] = []
-        dtid = document.tag2dtid[tag]
-        if dtid in document.mentions:
-            src_mention = document.mentions[dtid]
-            tgt_mentions = document.get_siblings(src_mention)
+        if bp.dtid in document.mentions:
+            ment_strings: List[str] = []
+            src_mention = document.mentions[bp.dtid]
+            tgt_mentions = document.get_siblings(src_mention, relax=False)
             exophors = [document.entities[eid].exophor for eid in src_mention.eids
                         if document.entities[eid].is_special]
             for mention in tgt_mentions:
@@ -208,30 +158,27 @@ class PasExample:
             return ['NA']
 
     @staticmethod
-    def _get_head_dmids(sentence: BList, mrph2dmid: Dict[Morpheme, int]) -> List[int]:
-        """sentence 中の基本句それぞれについて、内容語である形態素の dmid を返す
+    def _get_tokenized_tokens(words: List[str],
+                              tokenizer: BertTokenizer,
+                              ) -> Tuple[List[str], List[Optional[int]], List[int]]:
+        all_tokens = []
+        tok_to_orig_index: List[Optional[int]] = []
+        orig_to_tok_index: List[int] = []
 
-        内容語がなかった場合、先頭の形態素の dmid を返す
+        all_tokens.append('[CLS]')
+        tok_to_orig_index.append(None)  # There's no original token corresponding to [CLS] token
 
-        Args:
-            sentence (BList): 対象の文
-            mrph2dmid (dict): 形態素IDと文書レベルの形態素IDを紐付ける辞書
+        for i, word in enumerate(words):
+            orig_to_tok_index.append(len(all_tokens))  # assign head subword
+            sub_tokens = tokenizer.tokenize(word)
+            for sub_token in sub_tokens:
+                all_tokens.append(sub_token)
+                tok_to_orig_index.append(i)
 
-        Returns:
-            list: 各基本句に含まれる内容語形態素の文書レベル形態素ID
-        """
-        head_dmids = []
-        for tag in sentence.tag_list():
-            head_dmid = None
-            for idx, mrph in enumerate(tag.mrph_list()):
-                if idx == 0:
-                    head_dmid = mrph2dmid[mrph]
-                if '<内容語>' in mrph.fstring:
-                    head_dmid = mrph2dmid[mrph]
-                    break
-            if head_dmid is not None:
-                head_dmids.append(head_dmid)
-        return head_dmids
+        all_tokens.append('[SEP]')
+        tok_to_orig_index.append(None)  # There's no original token corresponding to [SEP] token
+
+        return all_tokens, tok_to_orig_index, orig_to_tok_index
 
     def __str__(self):
         return self.__repr__()
