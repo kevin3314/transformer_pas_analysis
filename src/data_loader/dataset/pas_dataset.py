@@ -307,7 +307,7 @@ class PASDataset(Dataset):
                 'pas': {'preds': n_preds_pa, 'args': n_args_pa},
                 'bridging': {'preds': n_preds_bar, 'args': n_args_bar},
                 'coreference': cr,
-                'tokens': sum(sum(example.tokens) for example in self.examples),
+                'tokens': sum(len(example.tokens) for example in self.examples),
                 }
 
     def __len__(self) -> int:
