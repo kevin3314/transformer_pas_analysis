@@ -117,7 +117,7 @@ class PASDataset(Dataset):
 
     def _convert_example_to_feature(self,
                                     example: PasExample,
-                                    ) -> Optional[InputFeatures]:
+                                    ) -> InputFeatures:
         """Loads a data file into a list of `InputBatch`s."""
 
         vocab_size = self.tokenizer.vocab_size
