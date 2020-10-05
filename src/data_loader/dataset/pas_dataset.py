@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import _pickle as cPickle
 from collections import defaultdict
-from typing import List, Dict, Optional, NamedTuple
+from typing import List, Dict, Optional, NamedTuple, Union
 
 import numpy as np
 from tqdm import tqdm
@@ -28,7 +28,7 @@ class InputFeatures(NamedTuple):
 
 class PASDataset(Dataset):
     def __init__(self,
-                 path: Optional[str],
+                 path: Union[str, Path],
                  cases: List[str],
                  exophors: List[str],
                  coreference: bool,
@@ -38,16 +38,12 @@ class PASDataset(Dataset):
                  kc: bool,
                  train_targets: List[str],
                  pas_targets: List[str],
-                 knp_string: Optional[str] = None,
                  logger=None,
                  kc_joined_path: Optional[str] = None,
                  ) -> None:
-        if path is not None:
-            source = Path(path)
-        else:
-            assert knp_string is not None
-            source = knp_string
-        self.reader = KyotoReader(source,
+        if isinstance(path, str):
+            path = Path(path)
+        self.reader = KyotoReader(path,
                                   target_cases=dataset_config['target_cases'],
                                   target_corefs=dataset_config['target_corefs'],
                                   extract_nes=False)
