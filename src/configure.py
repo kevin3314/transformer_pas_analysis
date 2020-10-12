@@ -241,7 +241,6 @@ def main() -> None:
             'args': {
                 'batch_size': None,
                 'shuffle': None,
-                'validation_split': 0.0,
                 'num_workers': 4,
             },
         }

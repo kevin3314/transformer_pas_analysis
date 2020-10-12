@@ -1,17 +1,17 @@
 from typing import List, Tuple, Optional
 
 import torch
+import torch.nn as nn
 import numpy as np
 
 from utils.parse_config import ConfigParser
 from utils import prepare_device
-from base.base_model import BaseModel
 
 
 class Inference:
     def __init__(self,
                  config: ConfigParser,
-                 model: BaseModel,
+                 model: nn.Module,
                  precision_threshold: float = 0.0,
                  recall_threshold: float = 0.0,
                  logger=None):

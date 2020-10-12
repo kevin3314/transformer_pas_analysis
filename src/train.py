@@ -4,6 +4,7 @@ import random
 
 import transformers.optimization as module_optim
 import torch
+import torch.nn as nn
 from torch.utils.data import ConcatDataset
 import numpy as np
 
@@ -12,7 +13,6 @@ import model.metric as module_metric
 import model.model as module_arch
 from utils.parse_config import ConfigParser
 from trainer import Trainer
-from base.base_model import BaseModel
 
 
 def main(config: ConfigParser, args: argparse.Namespace):
@@ -45,7 +45,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
         valid_commonsense_dataset = config.init_obj('valid_commonsense_dataset', module_dataset, logger=logger)
 
     # build model architecture, then print to console
-    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=train_datasets[0].expanded_vocab_size)
+    model: nn.Module = config.init_obj('arch', module_arch, vocab_size=train_datasets[0].expanded_vocab_size)
     logger.info(model)
 
     # get function handles of metrics

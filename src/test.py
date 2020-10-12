@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import List, Callable, Set
 
 import numpy as np
+import torch.nn as nn
+from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 
 import data_loader.data_loaders as module_loader
@@ -14,14 +16,12 @@ from utils.parse_config import ConfigParser
 from prediction.prediction_writer import PredictionKNPWriter
 from prediction.inference import Inference
 from scorer import Scorer
-from base.base_model import BaseModel
-from base.base_data_loader import BaseDataLoader
 
 
 class Tester:
     def __init__(self, model, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
                  target, logger, predict_overt, precision_threshold, recall_threshold, result_suffix):
-        self.model: BaseModel = model
+        self.model: nn.Module = model
         self.metrics: List[Callable] = metrics
         self.config = config
         self.kwdlc_data_loader = kwdlc_data_loader
@@ -63,7 +63,7 @@ class Tester:
             log.update(self._test(self.commonsense_data_loader, 'commonsense'))
         return log
 
-    def _test(self, data_loader: BaseDataLoader, label: str):
+    def _test(self, data_loader: DataLoader, label: str):
 
         loss, *predictions = self.inference(data_loader)
 
@@ -161,7 +161,7 @@ def main(config, args):
         commonsense_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
 
     # build model architecture
-    model: BaseModel = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
+    model: nn.Module = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
     logger.info(model)
 
     # get function handles of metrics
