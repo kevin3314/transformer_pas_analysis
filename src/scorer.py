@@ -452,8 +452,8 @@ class Scorer:
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(blist.tag_list())
         all_midasis = [m.midasi for m in document.mentions.values()]
-        tid2predicate = {predicate.tid: predicate for predicate in predicates}
-        tid2anaphor = {anaphor.tid: anaphor for anaphor in anaphors}
+        tid2predicate = {predicate.tid: predicate for predicate in predicates if predicate.sid == sid}
+        tid2anaphor = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
         for tid in range(len(tree_strings)):
             cases = []
             predicate = None
