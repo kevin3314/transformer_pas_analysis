@@ -829,7 +829,7 @@ class CorefCAModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                progress: float,               # learning progress (0 ~ 1)
+                progress: float = 1.0,         # learning progress (0 ~ 1)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, seq_len = input_ids.size()
