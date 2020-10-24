@@ -286,15 +286,14 @@ class Scorer:
         all_case_result = OrderedDefaultDict(lambda: Measure())
         for case, measures in self.measures.items():
             case_result = OrderedDefaultDict(lambda: Measure())
-            for analysis, measure in measures.items():
-                case_result[analysis] = measure
-                all_case_result[analysis] += measure
+            case_result.update(measures)
             case_result['zero_all'] = case_result['zero_intra_sentential'] + \
                                       case_result['zero_inter_sentential'] + \
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            all_case_result['zero_all'] += case_result['zero_all']
-            all_case_result['all'] += case_result['all']
+            case_result['all_w_overt'] = case_result['all'] + case_result['overt']
+            for analysis, measure in case_result.items():
+                all_case_result[analysis] += measure
             result[case] = case_result
 
         if self.coreference:
@@ -302,13 +301,14 @@ class Scorer:
 
         if self.bridging:
             case_result = OrderedDefaultDict(lambda: Measure())
-            for analysis, measure in self.measures_bridging.items():
-                case_result[analysis] = measure
+            case_result.update(self.measures_bridging)
             case_result['zero_all'] = case_result['zero_intra_sentential'] + \
                                       case_result['zero_inter_sentential'] + \
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
+            case_result['all_w_overt'] = case_result['all'] + case_result['overt']
             all_case_result['bridging'] = case_result['all']
+            all_case_result['bridging_w_overt'] = case_result['all_w_overt']
 
         result['all_case'] = all_case_result
         return result
