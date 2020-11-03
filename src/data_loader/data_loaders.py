@@ -4,7 +4,6 @@ import torch
 import numpy as np
 from base import BaseDataLoader
 from data_loader.dataset.pas_dataset import PASDataset
-# from torch.utils.data import Sampler, BatchSampler
 
 
 class PASDataLoader(BaseDataLoader):
