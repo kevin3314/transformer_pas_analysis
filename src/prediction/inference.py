@@ -1,17 +1,17 @@
 from typing import List, Tuple, Optional
 
 import torch
+import torch.nn as nn
 import numpy as np
 
 from utils.parse_config import ConfigParser
 from utils import prepare_device
-from base.base_model import BaseModel
 
 
 class Inference:
     def __init__(self,
                  config: ConfigParser,
-                 model: BaseModel,
+                 model: nn.Module,
                  precision_threshold: float = 0.0,
                  recall_threshold: float = 0.0,
                  logger=None):
@@ -60,7 +60,7 @@ class Inference:
             else:
                 raise ValueError(f'unexpected output shape: {output.shape}')
 
-        return (avg_loss, *predictions)
+        return avg_loss, *predictions
 
     def _prepare_model(self, state_dict: dict):
         self.model.load_state_dict(state_dict)
@@ -83,8 +83,8 @@ class Inference:
                     loss = loss.mean()
                 outputs.append(tuple(o.cpu().numpy() for o in output))
                 total_loss += loss.item() * output[0].size(0)
-        avg_loss: float = total_loss / data_loader.n_samples
-        return (avg_loss, *(np.concatenate(outs, axis=0) for outs in zip(*outputs)))
+        avg_loss: float = total_loss / len(data_loader.dataset)
+        return avg_loss, *(np.concatenate(outs, axis=0) for outs in zip(*outputs))
 
     @staticmethod
     def _softmax(x: np.ndarray, axis: int):

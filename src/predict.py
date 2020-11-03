@@ -75,7 +75,7 @@ def draw_tree(document: Document,
 
 def main(config, args):
     logger = logging.getLogger('predict')
-    analyzer = Analyzer(config, logger=logger, bertknp=args.use_bertknp)
+    analyzer = Analyzer(config, logger=logger, remote_knp=args.remote_knp)
 
     if args.input is not None:
         source = args.input
@@ -119,9 +119,10 @@ if __name__ == '__main__':
                         help='directory where analysis result is exported')
     parser.add_argument('-tab', action='store_true', default=False,
                         help='whether to output details')
-    parser.add_argument('--use-bertknp', action='store_true', default=False,
-                        help='use BERTKNP in base phrase segmentation and parsing')
+    parser.add_argument('--remote-knp', action='store_true', default=False,
+                        help='Use KNP running on remote host. '
+                             'Make sure you specify host address and port in analyzer/config.ini')
     parser.add_argument('--skip-untagged', action='store_true', default=False,
                         help='If set, do not export documents which failed to be analyzed')
     parsed_args = parser.parse_args()
-    main(ConfigParser.from_parser(parser, run_id=''), parsed_args)
+    main(ConfigParser.from_args(parsed_args, run_id=''), parsed_args)

@@ -5,6 +5,8 @@ from typing import Dict, Tuple, Union, Optional
 import configparser
 from pathlib import Path
 from datetime import datetime
+import shutil
+from logging import Logger
 
 import jaconv
 from pyknp import Juman, KNP
@@ -22,22 +24,29 @@ from test import Inference
 class Analyzer:
     """Perform PAS analysis given a sentence."""
 
-    def __init__(self, config: ConfigParser, logger, bertknp: bool = False):
+    def __init__(self, config: ConfigParser, logger: Logger, remote_knp: bool = False):
         cfg = configparser.ConfigParser()
         here = Path(__file__).parent
         cfg.read(here / 'config.ini')
-        self.juman = cfg.get('default', 'juman_command')
-        self.knp = cfg.get('default', 'knp_command')
-        self.knp_host = cfg.get('default', 'knp_host')
-        self.knp_port = cfg.getint('default', 'knp_port')
-        self.juman_option = cfg.get('default', 'juman_option')
-        self.knp_dpnd_option = cfg.get('default', 'knp_dpnd_option')
-        self.knp_case_option = cfg.get('default', 'knp_case_option')
-        self.pos_map, self.pos_map_inv = self._read_pos_list(here / 'pos.list')
-        self.logger = logger
-        self.bertknp = bertknp
-
+        if 'default' not in cfg:
+            logger.warning('Analyzer config not found. Instead, use default values.')
+            cfg['default'] = {}
+        section = cfg['default']
+        self.juman = section.get('juman_command', shutil.which('jumanpp'))
+        self.knp = section.get('knp_command', shutil.which('knp'))
+        self.knp_host = section.get('knp_host')
+        self.knp_port = section.getint('knp_port')
+        self.juman_option = section.get('juman_option', '-s 1')
+        self.knp_dpnd_option = section.get('knp_dpnd_option', '-tab -disable-segmentation-modification -dpnd-fast')
+        self.knp_case_option = section.get('knp_case_option', '-tab -disable-segmentation-modification -case2')
+        self.pos_map, self.pos_map_inv = self._read_pos_list(section.get('pos_list', here / 'pos.list'))
         self.config = config
+        self.logger = logger
+        self.remote_knp = remote_knp
+        msg = 'You enabled remote_knp option, but no knp_host or knp_port are specified in the default section of ' \
+              'src/analyzer/config.ini'
+        assert not remote_knp or (self.knp_host and self.knp_port), msg
+
         os.environ['BPA_DISABLE_CACHE'] = '1'
 
         dataset_args = self.config['test_kwdlc_dataset']['args']
@@ -104,7 +113,7 @@ class Analyzer:
         knp = KNP(command=self.knp, jumancommand=self.juman, option=self.knp_dpnd_option)
         knp_result = knp.parse(sent)
 
-        if self.bertknp is True:
+        if self.remote_knp is True:
             _, jumanpp_conll_out = self._apply_jumanpp(sent)
             clientsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.logger.info(f'connect to {self.knp_host}:{self.knp_port}')
@@ -120,9 +129,9 @@ class Analyzer:
                     break
             clientsock.close()
             conllu_out = ''.join(buf)
-            self.logger.info(f'received {len(conllu_out)} chars from BERTKNP')
+            self.logger.info(f'received {len(conllu_out)} chars from remote KNP')
 
-            # modify KNP result by conllu result of BERTKNP
+            # modify KNP result by conllu result of remote KNP
             head_ids, dpnd_types = self._read_conllu_from_buf(conllu_out)
             self._modify_knp(knp_result, head_ids, dpnd_types)
 

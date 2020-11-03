@@ -114,7 +114,7 @@ class PasExample:
                 if arg.dmid not in candidates:
                     logger.debug(f'argument: {arg.midasi} in {self.doc_id} is not in candidates and ignored')
                     continue
-                string = str(arg.dmid)  # arg.dmid が内容語形態素を指しているという前提(kyoto-reader と密結合で良くない)
+                string = str(arg.dmid)
                 if arg.dep_type == 'overt':
                     string += '%C'
                 elif arg.dep_type == 'dep':

@@ -5,7 +5,6 @@ import torch.nn as nn
 # from transformers import BertModel
 from transformers import BertConfig
 
-from base import BaseModel
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
 from .sub.mask import get_mask
 from .sub.bert import BertModel
@@ -24,7 +23,7 @@ from .loss import (
 )
 
 
-class BaselineModel(BaseModel):
+class BaselineModel(nn.Module):
     """述語側の重みを共通に"""
 
     def __init__(self,
@@ -74,7 +73,7 @@ class BaselineModel(BaseModel):
         return loss, output
 
 
-class BaselineModelOld(BaseModel):
+class BaselineModelOld(nn.Module):
     """NLP2020に出したときのモデル"""
 
     def __init__(self,
@@ -124,7 +123,7 @@ class BaselineModelOld(BaseModel):
         return loss, output
 
 
-class RefinementModel(BaseModel):
+class RefinementModel(nn.Module):
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
@@ -163,7 +162,7 @@ class RefinementModel(BaseModel):
         return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
-class DuplicateModel(BaseModel):
+class DuplicateModel(nn.Module):
     """RefinementModel の前段の logits を後段に与えないモデル"""
 
     def __init__(self,
@@ -196,7 +195,7 @@ class DuplicateModel(BaseModel):
         return loss, base_logits, refined_logits  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
-class GoldDepModel(BaseModel):
+class GoldDepModel(nn.Module):
     """係り受けの情報を方向なしで与える"""
 
     def __init__(self,
@@ -254,7 +253,7 @@ class GoldDepModel(BaseModel):
         return loss, output
 
 
-class MultitaskDepModel(BaseModel):
+class MultitaskDepModel(nn.Module):
     """述語項構造解析と同時に構文解析も解く"""
 
     def __init__(self,
@@ -321,7 +320,7 @@ class MultitaskDepModel(BaseModel):
         return loss, output, h_dep
 
 
-class CaseInteractionModel(BaseModel):
+class CaseInteractionModel(nn.Module):
     """あるサブワード間の(例えば)ヲ格らしさを計算する際にガ格らしさやニ格らしさも加味する"""
 
     def __init__(self,
@@ -390,7 +389,7 @@ class CaseInteractionModel(BaseModel):
         return loss, output_base, output  # (), (b, seq, case, seq), (b, seq, case, seq)
 
 
-class CommonsenseModel(BaseModel):
+class CommonsenseModel(nn.Module):
     """常識推論データセットとマルチタスク"""
 
     def __init__(self,
@@ -445,7 +444,7 @@ class CommonsenseModel(BaseModel):
         return loss, output, output_contingency  # (b, seq, case, seq), (b)
 
 
-class HalfGoldConditionalModel(BaseModel):
+class HalfGoldConditionalModel(nn.Module):
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -476,7 +475,7 @@ class HalfGoldConditionalModel(BaseModel):
         return loss, output
 
 
-class FullGoldConditionalModel(BaseModel):
+class FullGoldConditionalModel(nn.Module):
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -508,7 +507,7 @@ class FullGoldConditionalModel(BaseModel):
         return loss, output
 
 
-class IterativeRefinementModel(BaseModel):
+class IterativeRefinementModel(nn.Module):
     """複数回の推論で予測を refine していく"""
 
     def __init__(self, **kwargs):
@@ -553,7 +552,7 @@ class IterativeRefinementModel(BaseModel):
         return (loss, *outputs)
 
 
-class AnnealingIterativeRefinementModel(BaseModel):
+class AnnealingIterativeRefinementModel(nn.Module):
     """学習初期は前回の予測としてでたらめなものが入力され，うまく refinement 機構が学習されないと考えられる．
     そのため，初期は正解を与え，学習が進むにつれ自身の出力を与えるようにする"""
 
@@ -604,7 +603,7 @@ class AnnealingIterativeRefinementModel(BaseModel):
         return (loss, *outputs)
 
 
-class WeightedIterativeRefinementModel(BaseModel):
+class WeightedIterativeRefinementModel(nn.Module):
     """confidence で loss を重み付け"""
 
     def __init__(self, **kwargs):
@@ -647,7 +646,7 @@ class WeightedIterativeRefinementModel(BaseModel):
         return (loss, *outputs)
 
 
-class OvertGivenIterativeRefinementModel(BaseModel):
+class OvertGivenIterativeRefinementModel(nn.Module):
     """overtのみ常に与えられる"""
 
     def __init__(self, **kwargs):
@@ -691,7 +690,7 @@ class OvertGivenIterativeRefinementModel(BaseModel):
         return (loss, *outputs)
 
 
-class OvertGivenConditionalModel(BaseModel):
+class OvertGivenConditionalModel(nn.Module):
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -724,7 +723,7 @@ class OvertGivenConditionalModel(BaseModel):
         return loss, output
 
 
-class CandidateAwareModel(BaseModel):
+class CandidateAwareModel(nn.Module):
 
     def __init__(self,
                  bert_model: str,
@@ -792,7 +791,7 @@ class CandidateAwareModel(BaseModel):
         return loss, output
 
 
-class CorefCAModel(BaseModel):
+class CorefCAModel(nn.Module):
     """
     出力層で共参照の結果を与える
     soft な重みで、別に用意した coref' の重みで変換
@@ -829,7 +828,7 @@ class CorefCAModel(BaseModel):
                 segment_ids: torch.Tensor,     # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
-                progress: float,               # learning progress (0 ~ 1)
+                progress: float = 1.0,         # learning progress (0 ~ 1)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, seq_len = input_ids.size()
@@ -868,7 +867,7 @@ class CorefCAModel(BaseModel):
         return loss, output
 
 
-class CoreferenceSeparatedModel(BaseModel):
+class CoreferenceSeparatedModel(nn.Module):
     """
     2つの BERT を使って，右側では coref を解く．左側では coref の情報を使って他の 3タスクを解く
     旧名: CoreferenceSeparatedModel3
@@ -950,7 +949,7 @@ class CoreferenceSeparatedModel(BaseModel):
         return loss, torch.cat([output, out_coref.unsqueeze(2)], dim=2)
 
 
-class CoreferenceSeparatedModel2(BaseModel):
+class CoreferenceSeparatedModel2(nn.Module):
     """
     2つの BERT を使って，右側では coref を解く．左側では coref の情報を使って他の 3タスクを解く
     CoreferenceSeparatedModel の l_context を格ごとに用意

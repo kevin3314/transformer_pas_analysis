@@ -22,14 +22,13 @@ PAS analysis process is as follows:
 
 <http://lotus.kuee.kyoto-u.ac.jp/~ueda/demo/bert-pas-analysis-demo/index.cgi>
 
-<img width="1440" alt="スクリーンショット 2020-01-30 22 43 56" src="https://user-images.githubusercontent.com/25974220/73454841-3f180580-43b2-11ea-8251-f7e90e6db743.png">
+<img width="1440" alt="demo screenshot" src="https://user-images.githubusercontent.com/25974220/73454841-3f180580-43b2-11ea-8251-f7e90e6db743.png">
 
 ## Requirements
 
 - Python 3.7.2+
 - [Juman++](https://github.com/ku-nlp/jumanpp) 2.0.0-rc3
 - [KNP](http://nlp.ist.i.kyoto-u.ac.jp/index.php?KNP) 4.2
-- BERTKNP (optional)
 
 ## Setup Environment
 
@@ -40,7 +39,7 @@ Use [poetry](https://github.com/python-poetry/poetry)
 ## Quick Start
 
 ```zsh
-MODEL=/mnt/elm/ueda/bpa/result/best/model_best.pth
+MODEL=</path/to/trained/checkpoint>
 
 python src/predict.py \
 --model $MODEL \
@@ -61,8 +60,13 @@ Options:
 - `--model, -m, -r`: path to trained checkpoint
 - `--device, -d`: GPU IDs separated by "," (if not specified, use CPU)
 - `--input, -i`: input sentence or document separated by "。"
-- `-tab`: output is KNP tab format
-- `--use-bertknp`: use BERTKNP instead of KNP (requires BERTKNP)
+- `-tab`: output results in KNP tab format if specified
+
+`predict.py` requires Juman++ and KNP for the analysis.
+Make sure you have Juman++ and KNP installed before you run the above command.
+In addition, I recommend you to create `src/analyzer/config.ini`
+so that the system can find Juman++, KNP, and their configurations.
+For details, see `src/analyzer/config.example.ini`
 
 ## Analyze a Large Number of Documents
 
@@ -71,9 +75,9 @@ Then, run `predict.py` specifying the document directory.
 
 ```zsh
 python src/predict.py \
---model /mnt/elm/ueda/bpa/result/best/model_best.pth \
---knp-dir <path-to-parsed-document-directory>
---export-dir <path-to-export-directory>
+--model </path/to/trained/checkpoint> \
+--knp-dir </path/to/parsed/document/directory>
+--export-dir <path/to/export/directory>
 ```
 
 For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/master/scripts/knp_and_pas/Makefile)
@@ -87,20 +91,20 @@ cd /somewhere
 mkdir kwdlc kc
 ```
 
-download corpora:
+Download corpora:
 
-for menbers of bitbucket.org:ku_nlp
+For members of bitbucket.org:ku_nlp
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
 - `git clone git@bitbucket.org:ku_nlp/kyotocorpus.git kc/kyotocorpus`
 
-otherwise
+Otherwise
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
 - `git clone https://github.com/ku-nlp/KyotoCorpus kc/KyotoCorpus`
 - follow [instructions of KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus#conversion-to-the-complete-annotated-corpus)
 
-add features:
+Add features:
 
-[kyoto-reader](https://github.com/ku-nlp/kyoto-reader) provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
+[kyoto-reader](https://github.com/ku-nlp/kyoto-reader), which this project depends on, provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
 Make sure you are in the virtual environment of bert_pas_analysis when you run `configure` and `idsplit` commands.
 
 ```
@@ -174,7 +178,7 @@ python src/train.py \
 -d <gpu-ids>
 ```
 
-example:
+Example:
 
 ```zsh
 python src/train.py -c config/BaselineModel-all-4e-nict-cz-vpa.json -d 0,1

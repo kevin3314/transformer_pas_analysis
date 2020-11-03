@@ -81,10 +81,11 @@ if __name__ == '__main__':
                         help='host ip address (default: 0.0.0.0)')
     parser.add_argument('--port', default=12345, type=int,
                         help='host port number (default: 12345)')
-    parser.add_argument('--use-bertknp', action='store_true', default=False,
-                        help='use BERTKNP in base phrase segmentation and parsing')
+    parser.add_argument('--remote-knp', action='store_true', default=False,
+                        help='Use KNP running on remote host. '
+                             'Make sure you specify host address and port in analyzer/config.ini')
     args = parser.parse_args()
-    config = ConfigParser.from_parser(parser, run_id='')
-    analyzer = Analyzer(config, logger=logger, bertknp=args.use_bertknp)
+    config = ConfigParser.from_args(args, run_id='')
+    analyzer = Analyzer(config, logger=logger, remote_knp=args.remote_knp)
 
     app.run(host=args.host, port=args.port, debug=False, threaded=False)

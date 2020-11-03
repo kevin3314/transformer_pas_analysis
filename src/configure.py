@@ -204,13 +204,13 @@ def main() -> None:
             train_kc_dataset['args']['training'] = True
             train_kc_dataset['args']['kc'] = True
 
-            valid_kc_dataset = copy.deepcopy(valid_kwdlc_dataset)
+            valid_kc_dataset = copy.deepcopy(dataset)
             valid_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'valid')
             valid_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'valid')
             valid_kc_dataset['args']['training'] = False
             valid_kc_dataset['args']['kc'] = True
 
-            test_kc_dataset = copy.deepcopy(test_kwdlc_dataset)
+            test_kc_dataset = copy.deepcopy(dataset)
             test_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'test')
             test_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'test')
             test_kc_dataset['args']['training'] = False
@@ -239,9 +239,8 @@ def main() -> None:
         data_loader = {
             'type': 'PASDataLoader',
             'args': {
-                'batch_size': None,
+                'batch_size': args.batch_size,
                 'shuffle': None,
-                'validation_split': 0.0,
                 'num_workers': 4,
             },
         }
