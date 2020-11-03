@@ -22,7 +22,7 @@ PAS analysis process is as follows:
 
 <http://lotus.kuee.kyoto-u.ac.jp/~ueda/demo/bert-pas-analysis-demo/index.cgi>
 
-<img width="1440" alt="スクリーンショット 2020-01-30 22 43 56" src="https://user-images.githubusercontent.com/25974220/73454841-3f180580-43b2-11ea-8251-f7e90e6db743.png">
+<img width="1440" alt="demo screenshot" src="https://user-images.githubusercontent.com/25974220/73454841-3f180580-43b2-11ea-8251-f7e90e6db743.png">
 
 ## Requirements
 
@@ -91,20 +91,20 @@ cd /somewhere
 mkdir kwdlc kc
 ```
 
-download corpora:
+Download corpora:
 
-for members of bitbucket.org:ku_nlp
+For members of bitbucket.org:ku_nlp
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
 - `git clone git@bitbucket.org:ku_nlp/kyotocorpus.git kc/kyotocorpus`
 
-otherwise
+Otherwise
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
 - `git clone https://github.com/ku-nlp/KyotoCorpus kc/KyotoCorpus`
 - follow [instructions of KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus#conversion-to-the-complete-annotated-corpus)
 
-add features:
+Add features:
 
-[kyoto-reader](https://github.com/ku-nlp/kyoto-reader) provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
+[kyoto-reader](https://github.com/ku-nlp/kyoto-reader), which this project depends on, provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
 Make sure you are in the virtual environment of bert_pas_analysis when you run `configure` and `idsplit` commands.
 
 ```
@@ -178,7 +178,7 @@ python src/train.py \
 -d <gpu-ids>
 ```
 
-example:
+Example:
 
 ```zsh
 python src/train.py -c config/BaselineModel-all-4e-nict-cz-vpa.json -d 0,1
