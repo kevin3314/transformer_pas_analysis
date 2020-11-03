@@ -3,12 +3,11 @@ import torch.nn as nn
 # from transformers import BertModel
 from transformers import BertConfig
 
-from base import BaseModel
 from .mask import get_mask
 from .bert import BertModel, CaseAwareBertSelfAttention
 
 
-class OutputConditionalModel(BaseModel):
+class OutputConditionalModel(nn.Module):
     """出力層に pre_output の情報を与える"""
 
     def __init__(self,
@@ -67,7 +66,7 @@ class OutputConditionalModel(BaseModel):
         return output
 
 
-class EmbeddingConditionalModel(BaseModel):
+class EmbeddingConditionalModel(nn.Module):
     """BERT の embedding に pre_output の情報を与える"""
 
     def __init__(self,
@@ -123,7 +122,7 @@ class EmbeddingConditionalModel(BaseModel):
         return output
 
 
-class AttentionConditionalModel(BaseModel):
+class AttentionConditionalModel(nn.Module):
     """BERT の attention に pre_output の情報を与える"""
 
     def __init__(self,
@@ -267,7 +266,7 @@ class AttentionConditionalModel(BaseModel):
         return rel_weights
 
 
-class CaseAwareAttentionConditionalModel(BaseModel):
+class CaseAwareAttentionConditionalModel(nn.Module):
     """AttentionConditionalModel で格ごとの embedding ではなく格ごとの value を用意"""
 
     def __init__(self,

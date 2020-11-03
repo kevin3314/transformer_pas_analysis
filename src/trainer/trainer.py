@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from sklearn.metrics import f1_score
 
-from base import BaseTrainer
+from .base_trainer import BaseTrainer
 from prediction.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
 import data_loader.data_loaders as module_loader
@@ -38,7 +38,7 @@ class Trainer(BaseTrainer):
                                                                  valid_commonsense_dataset)
 
         self.lr_scheduler = lr_scheduler
-        self.log_step = math.ceil(self.data_loader.n_samples / np.sqrt(self.data_loader.batch_size) / 200)
+        self.log_step = math.ceil(len(self.data_loader.dataset) / np.sqrt(self.data_loader.batch_size) / 200)
 
     def _train_epoch(self, epoch):
         """
@@ -73,7 +73,7 @@ class Trainer(BaseTrainer):
                 self.logger.info('Train Epoch: {} [{}/{} ({:.0f}%)] Time: {} Loss: {:.6f}'.format(
                     epoch,
                     step * self.data_loader.batch_size,
-                    self.data_loader.n_samples,
+                    len(self.data_loader.dataset),
                     100.0 * step / len(self.data_loader),
                     datetime.datetime.now().strftime('%H:%M:%S'),
                     loss_value))
@@ -98,7 +98,7 @@ class Trainer(BaseTrainer):
                     self.lr_scheduler.step()
 
         log = {
-            'loss': total_loss / self.data_loader.n_samples,
+            'loss': total_loss / len(self.data_loader.dataset),
         }
 
         if self.valid_kwdlc_data_loader is not None:
@@ -153,11 +153,11 @@ class Trainer(BaseTrainer):
                 if step % self.log_step == 0:
                     self.logger.info('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
                         step * data_loader.batch_size,
-                        data_loader.n_samples,
+                        len(self.data_loader.dataset),
                         100.0 * step / len(data_loader),
                         datetime.datetime.now().strftime('%H:%M:%S')))
 
-        log = {f'loss': total_loss / data_loader.n_samples}
+        log = {'loss': total_loss / len(self.data_loader.dataset)}
 
         if label in ('kwdlc', 'kc'):
             prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)

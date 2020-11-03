@@ -83,7 +83,7 @@ class Inference:
                     loss = loss.mean()
                 outputs.append(tuple(o.cpu().numpy() for o in output))
                 total_loss += loss.item() * output[0].size(0)
-        avg_loss: float = total_loss / data_loader.n_samples
+        avg_loss: float = total_loss / len(data_loader.dataset)
         return (avg_loss, *(np.concatenate(outs, axis=0) for outs in zip(*outputs)))
 
     @staticmethod

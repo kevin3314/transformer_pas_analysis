@@ -2,10 +2,8 @@ import torch
 import torch.nn as nn
 from transformers import BertModel
 
-from base import BaseModel
 
-
-class RefinementLayer1(BaseModel):
+class RefinementLayer1(nn.Module):
     """前段の予測のスコアを重みパラメータではなく、素直に与えるモデル"""
 
     def __init__(self,
@@ -60,7 +58,7 @@ class RefinementLayer1(BaseModel):
         return output  # (b, seq, case, seq)
 
 
-class RefinementLayer2(BaseModel):
+class RefinementLayer2(nn.Module):
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,
@@ -114,7 +112,7 @@ class RefinementLayer2(BaseModel):
         return output.transpose(2, 3).contiguous()  # (b, seq, case, seq)
 
 
-class RefinementLayer3(BaseModel):
+class RefinementLayer3(nn.Module):
     def __init__(self,
                  bert_model: str,
                  vocab_size: int,

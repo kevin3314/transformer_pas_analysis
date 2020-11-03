@@ -239,7 +239,7 @@ def main() -> None:
         data_loader = {
             'type': 'PASDataLoader',
             'args': {
-                'batch_size': None,
+                'batch_size': args.batch_size,
                 'shuffle': None,
                 'num_workers': 4,
             },

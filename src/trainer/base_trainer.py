@@ -80,7 +80,7 @@ class BaseTrainer:
         Full training logic
         """
         self.logger.info("***** Running training *****")
-        self.logger.info("  Num examples = %d", self.data_loader.n_samples)
+        self.logger.info("  Num examples = %d", len(self.data_loader.dataset))
         self.logger.info("  Num Epochs = %d", self.epochs)
         self.logger.info("  Instantaneous batch size per device = %d", self.batches_per_device)
         self.logger.info("  Total train batch size (w. parallel & accumulation) = %d", self.batches_per_optim)

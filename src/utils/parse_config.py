@@ -44,7 +44,7 @@ class ConfigParser:
         write_json(self.config, self.save_dir / 'config.json')
 
         # configure logging module
-        setup_logging(self.save_dir, log_config='src/logger/logger_config.json')
+        setup_logging(self.log_dir, log_config='src/logger/logger_config.json')
 
     @classmethod
     def from_parser(cls, parser, options=None, run_id=None, inherit_save_dir=False):
@@ -139,3 +139,7 @@ class ConfigParser:
     @property
     def save_dir(self) -> Path:
         return self.result_dir / self.name / self.run_id
+
+    @property
+    def log_dir(self) -> Path:
+        return self.save_dir
