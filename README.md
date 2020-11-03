@@ -29,7 +29,6 @@ PAS analysis process is as follows:
 - Python 3.7.2+
 - [Juman++](https://github.com/ku-nlp/jumanpp) 2.0.0-rc3
 - [KNP](http://nlp.ist.i.kyoto-u.ac.jp/index.php?KNP) 4.2
-- BERTKNP (optional)
 
 ## Setup Environment
 
@@ -40,7 +39,7 @@ Use [poetry](https://github.com/python-poetry/poetry)
 ## Quick Start
 
 ```zsh
-MODEL=/mnt/elm/ueda/bpa/result/best/model_best.pth
+MODEL=</path/to/trained/checkpoint>
 
 python src/predict.py \
 --model $MODEL \
@@ -61,8 +60,13 @@ Options:
 - `--model, -m, -r`: path to trained checkpoint
 - `--device, -d`: GPU IDs separated by "," (if not specified, use CPU)
 - `--input, -i`: input sentence or document separated by "。"
-- `-tab`: output is KNP tab format
-- `--use-bertknp`: use BERTKNP instead of KNP (requires BERTKNP)
+- `-tab`: output results in KNP tab format if specified
+
+`predict.py` requires Juman++ and KNP for the analysis.
+Make sure you have Juman++ and KNP installed before you run the above command.
+In addition, I recommend you to create `src/analyzer/config.ini`
+so that the system can find Juman++, KNP, and their configurations.
+For details, see `src/analyzer/config.example.ini`
 
 ## Analyze a Large Number of Documents
 
@@ -71,9 +75,9 @@ Then, run `predict.py` specifying the document directory.
 
 ```zsh
 python src/predict.py \
---model /mnt/elm/ueda/bpa/result/best/model_best.pth \
---knp-dir <path-to-parsed-document-directory>
---export-dir <path-to-export-directory>
+--model </path/to/trained/checkpoint> \
+--knp-dir </path/to/parsed/document/directory>
+--export-dir <path/to/export/directory>
 ```
 
 For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/master/scripts/knp_and_pas/Makefile)
@@ -89,7 +93,7 @@ mkdir kwdlc kc
 
 download corpora:
 
-for menbers of bitbucket.org:ku_nlp
+for members of bitbucket.org:ku_nlp
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
 - `git clone git@bitbucket.org:ku_nlp/kyotocorpus.git kc/kyotocorpus`
 
