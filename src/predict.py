@@ -124,4 +124,4 @@ if __name__ == '__main__':
     parser.add_argument('--skip-untagged', action='store_true', default=False,
                         help='If set, do not export documents which failed to be analyzed')
     parsed_args = parser.parse_args()
-    main(ConfigParser.from_parser(parser, run_id=''), parsed_args)
+    main(ConfigParser.from_args(parsed_args, run_id=''), parsed_args)

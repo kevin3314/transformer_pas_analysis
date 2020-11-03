@@ -40,7 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', default=12345, type=int,
                         help='host port number (default: 12345)')
     args = parser.parse_args()
-    config = ConfigParser.from_parser(parser, run_id='')
+    config = ConfigParser.from_args(args, run_id='')
     analyzer = Analyzer(config, logger=logger)
 
     server = SimpleXMLRPCServer((args.host, args.port))

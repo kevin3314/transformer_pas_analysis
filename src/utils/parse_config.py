@@ -25,10 +25,8 @@ class ConfigParser:
         :param run_id: Unique Identifier for training processes. Used to save checkpoints and training log.
          Timestamp is being used as default
         """
-        # load config file and apply modification
         self._config = config
         self.resume = resume
-        # self._save_dir = None
 
         if self.config['trainer']['save_dir'] == '':
             return
@@ -47,16 +45,10 @@ class ConfigParser:
         setup_logging(self.log_dir, log_config='src/logger/logger_config.json')
 
     @classmethod
-    def from_parser(cls, parser, options=None, run_id=None, inherit_save_dir=False):
+    def from_args(cls, args, run_id=None, inherit_save_dir=False):
         """
         Initialize this class from some cli arguments. Used in train, test.
         """
-        if options is None:
-            options = []
-        for opt in options:
-            parser.add_argument(*opt.flags, default=None, type=opt.type)
-        args = parser.parse_args()
-
         if args.device is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 

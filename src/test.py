@@ -203,4 +203,4 @@ if __name__ == '__main__':
                         help='custom experiment directory name')
     parsed_args = parser.parse_args()
     inherit_save_dir = (parsed_args.resume is not None and parsed_args.run_id is None)
-    main(ConfigParser.from_parser(parser, run_id=parsed_args.run_id, inherit_save_dir=inherit_save_dir), parsed_args)
+    main(ConfigParser.from_args(parsed_args, run_id=parsed_args.run_id, inherit_save_dir=inherit_save_dir), parsed_args)

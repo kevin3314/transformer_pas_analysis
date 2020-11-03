@@ -84,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--use-bertknp', action='store_true', default=False,
                         help='use BERTKNP in base phrase segmentation and parsing')
     args = parser.parse_args()
-    config = ConfigParser.from_parser(parser, run_id='')
+    config = ConfigParser.from_args(args, run_id='')
     analyzer = Analyzer(config, logger=logger, bertknp=args.use_bertknp)
 
     app.run(host=args.host, port=args.port, debug=False, threaded=False)

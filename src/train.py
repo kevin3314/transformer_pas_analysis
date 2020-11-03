@@ -1,12 +1,11 @@
 import argparse
-import collections
 import random
 
-import transformers.optimization as module_optim
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import ConcatDataset
-import numpy as np
+import transformers.optimization as module_optim
 
 import data_loader.dataset as module_dataset
 import model.metric as module_metric
@@ -84,11 +83,5 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: "")')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed for initialization')
-
-    # custom cli options to modify configuration from default values given in json file.
-    CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
-    options = [
-        CustomArgs(['--lr', '--learning_rate'], type=float, target='optimizer;args;lr'),
-        CustomArgs(['--bs', '--batch_size'], type=int, target='train_data_loader;args;batch_size')
-    ]
-    main(ConfigParser.from_parser(parser, options), parser.parse_args())
+    parsed_args = parser.parse_args()
+    main(ConfigParser.from_args(parsed_args), parsed_args)
