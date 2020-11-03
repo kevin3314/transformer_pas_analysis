@@ -15,7 +15,7 @@ kyoto-reader = { git = "https://github.com/ku-nlp/kyoto-reader.git", branch = "m
 numpy = "^1.18"
 tqdm = "^4.43"
 flask = "^1.1"
-scikit-learn = "^0.22"
+scikit-learn = "^0.23"
 jaconv = "^0.2"
 tensorboard = "^2.2"
 pandas = "^1.0"
