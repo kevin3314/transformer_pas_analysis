@@ -20,8 +20,8 @@ logger.setLevel(logging.WARNING)
 class Scorer:
     DEPTYPE2ANALYSIS = OrderedDict([('overt', 'overt'),
                                     ('dep', 'case_analysis'),
-                                    ('intra', 'zero_intra_sentential'),
-                                    ('inter', 'zero_inter_sentential'),
+                                    ('intra', 'zero_intra'),
+                                    ('inter', 'zero_inter'),
                                     ('exo', 'zero_exophora')])
 
     def __init__(self,
@@ -287,8 +287,8 @@ class Scorer:
         for case, measures in self.measures.items():
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(measures)
-            case_result['zero_all'] = case_result['zero_intra_sentential'] + \
-                                      case_result['zero_inter_sentential'] + \
+            case_result['zero_all'] = case_result['zero_intra'] + \
+                                      case_result['zero_inter'] + \
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
             case_result['all_w_overt'] = case_result['all'] + case_result['overt']
@@ -302,8 +302,8 @@ class Scorer:
         if self.bridging:
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(self.measures_bridging)
-            case_result['zero_all'] = case_result['zero_intra_sentential'] + \
-                                      case_result['zero_inter_sentential'] + \
+            case_result['zero_all'] = case_result['zero_intra'] + \
+                                      case_result['zero_inter'] + \
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
             case_result['all_w_overt'] = case_result['all'] + case_result['overt']
