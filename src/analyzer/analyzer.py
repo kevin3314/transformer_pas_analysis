@@ -10,7 +10,6 @@ from logging import Logger
 
 import jaconv
 from pyknp import Juman, KNP
-from transformers import BertConfig
 from textformatting import ssplit
 
 import model.model as module_arch
