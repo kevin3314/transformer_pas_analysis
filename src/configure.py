@@ -47,9 +47,9 @@ def main() -> None:
                         help='max batch size per GPU')
     parser.add_argument('--eval-batch-size', type=int, default=None,
                         help='number of batch size for evaluation (default: same as that of training)')
-    parser.add_argument('--coreference', '--coref', action='store_true', default=False,
+    parser.add_argument('--coreference', '--coref', '--cr', action='store_true', default=False,
                         help='perform coreference resolution')
-    parser.add_argument('--bridging', '--brg', action='store_true', default=False,
+    parser.add_argument('--bridging', '--brg', '--bar', action='store_true', default=False,
                         help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='case strings separated by ","')
@@ -67,7 +67,7 @@ def main() -> None:
                         help='Linear warmup over warmup_steps.')
     parser.add_argument('--additional-name', '--name', type=str, default=None,
                         help='additional config file name')
-    parser.add_argument('--gpus', type=int, default=2,
+    parser.add_argument('--gpus', type=int, default=8,
                         help='number of gpus to use')
     parser.add_argument('--refinement-type', '--rtype', type=int, choices=[1, 2, 3], default=1,
                         help='refinement layer type for RefinementModel')
@@ -115,9 +115,9 @@ def main() -> None:
         if 'noun' in pas_targets:
             items.append('npa')
         if args.bridging:
-            items.append('brg')
+            items.append('bar')
         if args.coreference:
-            items.append('coref')
+            items.append('cr')
         if model in ('RefinementModel', 'RefinementModel2'):
             items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:

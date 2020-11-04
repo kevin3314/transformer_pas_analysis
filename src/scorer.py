@@ -566,9 +566,9 @@ def main():
                         help='path to directory where system output KWDLC files exist (default: None)')
     parser.add_argument('--gold-dir', default=None, type=str,
                         help='path to directory where gold KWDLC files exist (default: None)')
-    parser.add_argument('--coreference', '--coref', action='store_true', default=False,
+    parser.add_argument('--coreference', '--coref', '--cr', action='store_true', default=False,
                         help='perform coreference resolution')
-    parser.add_argument('--bridging', '--brg', action='store_true', default=False,
+    parser.add_argument('--bridging', '--brg', '--bar', action='store_true', default=False,
                         help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='case strings separated by ","')
