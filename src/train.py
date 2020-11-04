@@ -44,7 +44,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
         valid_commonsense_dataset = config.init_obj('valid_commonsense_dataset', module_dataset, logger=logger)
 
     # build model architecture, then print to console
-    model: nn.Module = config.init_obj('arch', module_arch, vocab_size=train_datasets[0].expanded_vocab_size)
+    model: nn.Module = config.init_obj('arch', module_arch)
     logger.info(model)
 
     # get function handles of metrics

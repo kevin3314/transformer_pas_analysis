@@ -56,7 +56,6 @@ class PASDataset(Dataset):
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
         self.tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=False, tokenize_chinese_chars=False)
-        self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
         self.max_seq_length: int = max_seq_length
         self.bert_path: Path = Path(bert_path)
         documents = list(self.reader.process_all_documents())

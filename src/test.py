@@ -144,24 +144,21 @@ def main(config, args):
     logger = config.get_logger(args.target)
 
     # setup data_loader instances
-    expanded_vocab_size = None
     kwdlc_data_loader = None
     if config[f'{args.target}_kwdlc_dataset'] is not None:
         dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
         kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
-        expanded_vocab_size = dataset.expanded_vocab_size
     kc_data_loader = None
     if config[f'{args.target}_kc_dataset'] is not None:
         dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
         kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
-        expanded_vocab_size = dataset.expanded_vocab_size
     commonsense_data_loader = None
     if config.config.get(f'{args.target}_commonsense_dataset', None) is not None:
         dataset = config.init_obj(f'{args.target}_commonsense_dataset', module_dataset, logger=logger)
         commonsense_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
 
     # build model architecture
-    model: nn.Module = config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
+    model: nn.Module = config.init_obj('arch', module_arch)
     logger.info(model)
 
     # get function handles of metrics

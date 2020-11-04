@@ -53,8 +53,6 @@ def main() -> None:
                         help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='case strings separated by ","')
-    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
-                        help='exophor strings separated by ","')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout ratio')
     parser.add_argument('--lr', type=float, default=5e-5,
@@ -95,7 +93,7 @@ def main() -> None:
     data_root: Path = args.dataset.resolve()
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
-    exophors = args.exophors.split(',')
+    exophors = dataset_config['exophors']
     cases: List[str] = args.case_string.split(',') if args.case_string else []
     msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
     assert 'ノ' not in cases, msg
@@ -144,6 +142,7 @@ def main() -> None:
             'type': model,
             'args': {
                 'bert_model': dataset_config['bert_path'],
+                'vocab_size': dataset_config['vocab_size'] + len(exophors) + 1 + int(args.coreference),
                 'dropout': args.dropout,
                 'num_case': len(cases) + int(args.bridging),
                 'coreference': args.coreference,

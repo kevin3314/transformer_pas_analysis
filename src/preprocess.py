@@ -14,8 +14,6 @@ from transformers import BertTokenizer
 
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
-NUM_SPECIAL_TOKENS = 5
-
 
 def process_kwdlc(input_path: Path, output_path: Path) -> int:
     output_path.mkdir(exist_ok=True)
@@ -74,7 +72,7 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
 
 def process_kc(input_path: Path,
                output_path: Path,
-               max_seq_length: int,
+               max_subword_length: int,
                tokenizer: BertTokenizer,
                split: bool = False
                ) -> int:
@@ -82,7 +80,6 @@ def process_kc(input_path: Path,
         if split:
             tmp_dir = Path(tmp_dir)
             # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
-            max_subword_length = max_seq_length - 2 - NUM_SPECIAL_TOKENS
             print('splitting kc...')
             split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
             input_path = tmp_dir
@@ -122,6 +119,8 @@ def main():
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
+    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
+                        help='exophor strings separated by ","')
     parser.add_argument('--bert-path', type=str, required=True,
                         help='path to pre-trained BERT model')
     parser.add_argument('--bert-name', type=str, required=True,
@@ -130,6 +129,8 @@ def main():
 
     # make directories to save dataset
     args.out.mkdir(exist_ok=True)
+    exophors = args.exophors.split(',')
+    tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=False, tokenize_chinese_chars=False)
 
     config_path: Path = args.out / 'config.json'
     if config_path.exists():
@@ -140,6 +141,8 @@ def main():
     config.update(
         {
             'max_seq_length': args.max_seq_length,
+            'exophors': exophors,
+            'vocab_size': tokenizer.vocab_size,
             'bert_name': args.bert_name,
             'bert_path': args.bert_path,
         }
@@ -161,10 +164,10 @@ def main():
         in_dir = Path(args.kc).resolve()
         out_dir: Path = args.out / 'kc_split'
         out_dir.mkdir(exist_ok=True)
-        tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=False, tokenize_chinese_chars=False)
-        num_examples_train = process_kc(in_dir / 'train', out_dir / 'train', args.max_seq_length, tokenizer, split=True)
-        num_examples_valid = process_kc(in_dir / 'valid', out_dir / 'valid', args.max_seq_length, tokenizer, split=True)
-        num_examples_test = process_kc(in_dir / 'test', out_dir / 'test', args.max_seq_length, tokenizer, split=True)
+        max_subword_length = args.max_seq_length - len(exophors) - 4  # [CLS], [SEP], [NULL], [NA]
+        num_examples_train = process_kc(in_dir / 'train', out_dir / 'train', max_subword_length, tokenizer, split=True)
+        num_examples_valid = process_kc(in_dir / 'valid', out_dir / 'valid', max_subword_length, tokenizer, split=True)
+        num_examples_test = process_kc(in_dir / 'test', out_dir / 'test', max_subword_length, tokenizer, split=True)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kc'] = num_examples_dict
 
