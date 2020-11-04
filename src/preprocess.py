@@ -17,9 +17,9 @@ from data_loader.dataset.commonsense_dataset import CommonsenseExample
 NUM_SPECIAL_TOKENS = 5
 
 
-def process_kwdlc(input_path: Path, output_path: Path, cases: List[str], corefs: List[str]) -> int:
+def process_kwdlc(input_path: Path, output_path: Path) -> int:
     output_path.mkdir(exist_ok=True)
-    reader = KyotoReader(input_path, cases, corefs, extract_nes=False)
+    reader = KyotoReader(input_path, extract_nes=False)
     for document in tqdm(reader.process_all_documents(), desc='kwdlc', total=len(reader.did2source)):
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
@@ -72,18 +72,23 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
             end += 1
 
 
-def process_kc(input_path: Path, output_path: Path, config: dict, tokenizer: BertTokenizer, split: bool = False) -> int:
+def process_kc(input_path: Path,
+               output_path: Path,
+               max_seq_length: int,
+               tokenizer: BertTokenizer,
+               split: bool = False
+               ) -> int:
     with tempfile.TemporaryDirectory() as tmp_dir:
         if split:
             tmp_dir = Path(tmp_dir)
             # 京大コーパスは1文書が長いのでできるだけ多くの context を含むように複数文書に分割する
-            max_subword_length = config['max_seq_length'] - 2 - NUM_SPECIAL_TOKENS
+            max_subword_length = max_seq_length - 2 - NUM_SPECIAL_TOKENS
             print('splitting kc...')
             split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
             input_path = tmp_dir
 
         output_path.mkdir(exist_ok=True)
-        reader = KyotoReader(input_path, config['target_cases'], config['target_corefs'], extract_nes=False)
+        reader = KyotoReader(input_path, extract_nes=False)
         for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader.did2source)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
@@ -114,10 +119,6 @@ def main():
                         help='path to directory where commonsense inference data exists')
     parser.add_argument('--out', type=(lambda p: Path(p)), required=True,
                         help='path to directory where dataset to be located')
-    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
-                        help='Coreference strings. Separate by ","')
-    parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ',
-                        help='Case strings. Separate by ","')
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
@@ -130,8 +131,6 @@ def main():
     # make directories to save dataset
     args.out.mkdir(exist_ok=True)
 
-    target_cases: List[str] = args.case_string.split(',')
-    target_corefs: List[str] = args.coref_string.split(',')
     config_path: Path = args.out / 'config.json'
     if config_path.exists():
         with config_path.open() as f:
@@ -140,9 +139,6 @@ def main():
         config = {}
     config.update(
         {
-            'target_cases': target_cases,
-            'target_corefs': target_corefs,
-            # 'num_examples': {},
             'max_seq_length': args.max_seq_length,
             'bert_name': args.bert_name,
             'bert_path': args.bert_path,
@@ -152,38 +148,38 @@ def main():
         config['num_examples'] = {}
 
     if args.kwdlc is not None:
-        input_dir = Path(args.kwdlc).resolve()
-        output_dir: Path = args.out / 'kwdlc'
-        output_dir.mkdir(exist_ok=True)
-        num_examples_train = process_kwdlc(input_dir / 'train', output_dir / 'train', target_cases, target_corefs)
-        num_examples_valid = process_kwdlc(input_dir / 'valid', output_dir / 'valid', target_cases, target_corefs)
-        num_examples_test = process_kwdlc(input_dir / 'test', output_dir / 'test', target_cases, target_corefs)
+        in_dir = Path(args.kwdlc).resolve()
+        out_dir: Path = args.out / 'kwdlc'
+        out_dir.mkdir(exist_ok=True)
+        num_examples_train = process_kwdlc(in_dir / 'train', out_dir / 'train')
+        num_examples_valid = process_kwdlc(in_dir / 'valid', out_dir / 'valid')
+        num_examples_test = process_kwdlc(in_dir / 'test', out_dir / 'test')
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kwdlc'] = num_examples_dict
 
     if args.kc is not None:
-        input_dir = Path(args.kc).resolve()
-        output_dir: Path = args.out / 'kc_split'
-        output_dir.mkdir(exist_ok=True)
+        in_dir = Path(args.kc).resolve()
+        out_dir: Path = args.out / 'kc_split'
+        out_dir.mkdir(exist_ok=True)
         tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=False, tokenize_chinese_chars=False)
-        num_examples_train = process_kc(input_dir / 'train', output_dir / 'train', config, tokenizer, split=True)
-        num_examples_valid = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer, split=True)
-        num_examples_test = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer, split=True)
+        num_examples_train = process_kc(in_dir / 'train', out_dir / 'train', args.max_seq_length, tokenizer, split=True)
+        num_examples_valid = process_kc(in_dir / 'valid', out_dir / 'valid', args.max_seq_length, tokenizer, split=True)
+        num_examples_test = process_kc(in_dir / 'test', out_dir / 'test', args.max_seq_length, tokenizer, split=True)
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kc'] = num_examples_dict
 
-        output_dir: Path = args.out / 'kc'
-        output_dir.mkdir(exist_ok=True)
-        _ = process_kc(input_dir / 'valid', output_dir / 'valid', config, tokenizer, split=False)
-        _ = process_kc(input_dir / 'test', output_dir / 'test', config, tokenizer, split=False)
+        out_dir: Path = args.out / 'kc'
+        out_dir.mkdir(exist_ok=True)
+        _ = process_kc(in_dir / 'valid', out_dir / 'valid', args.max_seq_length, tokenizer, split=False)
+        _ = process_kc(in_dir / 'test', out_dir / 'test', args.max_seq_length, tokenizer, split=False)
 
     if args.commonsense is not None:
-        input_dir = Path(args.commonsense).resolve()
-        output_dir: Path = args.out / 'commonsense'
-        output_dir.mkdir(exist_ok=True)
-        num_examples_train = process_commonsense(input_dir / 'train.csv', output_dir / 'train.pkl')
-        num_examples_valid = process_commonsense(input_dir / 'valid.csv', output_dir / 'valid.pkl')
-        num_examples_test = process_commonsense(input_dir / 'test.csv', output_dir / 'test.pkl')
+        in_dir = Path(args.commonsense).resolve()
+        out_dir: Path = args.out / 'commonsense'
+        out_dir.mkdir(exist_ok=True)
+        num_examples_train = process_commonsense(in_dir / 'train.csv', out_dir / 'train.pkl')
+        num_examples_valid = process_commonsense(in_dir / 'valid.csv', out_dir / 'valid.pkl')
+        num_examples_test = process_commonsense(in_dir / 'test.csv', out_dir / 'test.pkl')
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['commonsense'] = num_examples_dict
 

@@ -574,8 +574,6 @@ def main():
                         help='case strings separated by ","')
     parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
                         help='exophor strings separated by ","')
-    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
-                        help='coreference strings separated by ","')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
     parser.add_argument('--pas-target', choices=['', 'pred', 'noun', 'all'], default='pred',
@@ -586,17 +584,9 @@ def main():
                         help='path to csv file which prediction result is exported (default: None)')
     args = parser.parse_args()
 
-    reader_gold = KyotoReader(
-        Path(args.gold_dir),
-        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ'.split(','),
-        target_corefs=args.coref_string.split(','),
-        extract_nes=False,
-        use_pas_tag=False,
-    )
+    reader_gold = KyotoReader(Path(args.gold_dir), extract_nes=False, use_pas_tag=False)
     reader_pred = KyotoReader(
         Path(args.prediction_dir),
-        target_cases=reader_gold.target_cases,
-        target_corefs=reader_gold.target_corefs,
         extract_nes=False,
         use_pas_tag=args.read_prediction_from_pas_tag,
     )

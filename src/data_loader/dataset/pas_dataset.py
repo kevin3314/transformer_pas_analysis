@@ -1,5 +1,6 @@
 import os
 import logging
+from logging import Logger
 import hashlib
 from pathlib import Path
 import _pickle as cPickle
@@ -33,7 +34,8 @@ class PASDataset(Dataset):
                  exophors: List[str],
                  coreference: bool,
                  bridging: bool,
-                 dataset_config: dict,
+                 max_seq_length: int,
+                 bert_path: Union[str, Path],
                  training: bool,
                  kc: bool,
                  train_targets: List[str],
@@ -41,47 +43,40 @@ class PASDataset(Dataset):
                  logger=None,
                  kc_joined_path: Optional[str] = None,
                  ) -> None:
-        if isinstance(path, str):
-            path = Path(path)
-        self.reader = KyotoReader(path,
-                                  target_cases=dataset_config['target_cases'],
-                                  target_corefs=dataset_config['target_corefs'],
-                                  extract_nes=False)
+        self.reader = KyotoReader(Path(path), extract_nes=False)
         self.target_cases: List[str] = [c for c in cases if c in self.reader.target_cases and c != 'ノ']
         self.target_exophors: List[str] = [e for e in exophors if e in ALL_EXOPHORS]
         self.coreference: bool = coreference
         self.bridging: bool = bridging
         self.kc: bool = kc
-        self.train_overt: bool = 'overt' in train_targets
-        self.train_case: bool = 'case' in train_targets
-        self.train_zero: bool = 'zero' in train_targets
+        self.train_targets: List[str] = train_targets
         self.pas_targets: List[str] = pas_targets
-        self.logger = logger if logger else logging.getLogger(__file__)
+        self.logger: Logger = logger or logging.getLogger(__file__)
         special_tokens = self.target_exophors + ['NULL'] + (['NA'] if coreference else [])
-        self.special_to_index: Dict[str, int] = {token: dataset_config['max_seq_length'] - i - 1 for i, token
+        self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
-        self.tokenizer = BertTokenizer.from_pretrained(dataset_config['bert_path'], do_lower_case=False,
-                                                       tokenize_chinese_chars=False)
+        self.tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=False, tokenize_chinese_chars=False)
         self.expanded_vocab_size: int = self.tokenizer.vocab_size + len(special_tokens)
-        self.max_seq_length = dataset_config['max_seq_length']
+        self.max_seq_length: int = max_seq_length
+        self.bert_path: Path = Path(bert_path)
         documents = list(self.reader.process_all_documents())
         self.documents: Optional[List[Document]] = documents if not training else None
 
         if self.kc and not training:
             assert kc_joined_path is not None
-            reader = KyotoReader(Path(kc_joined_path),
-                                 target_cases=dataset_config['target_cases'],
-                                 target_corefs=dataset_config['target_corefs'],
-                                 extract_nes=False)
+            reader = KyotoReader(Path(kc_joined_path), extract_nes=False)
             self.joined_documents = list(reader.process_all_documents())
 
-        self.examples: List[PasExample] = []
+        self.examples = self._load(documents)
+
+    def _load(self, documents: List[Document]) -> List[PasExample]:
+        examples: List[PasExample] = []
         load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
         save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
         bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
         for document in tqdm(documents, desc='processing documents'):
-            hash_ = self._hash(document, self.target_cases, self.target_exophors, coreference, bridging, kc,
-                               pas_targets, train_targets, dataset_config, dataset_config['bert_path'])
+            hash_ = self._hash(document, self.target_cases, self.target_exophors, self.coreference, self.bridging,
+                               self.kc, self.pas_targets, self.train_targets, str(self.bert_path))
             example_cache_path = bpa_cache_dir / hash_ / f'{document.doc_id}.pkl'
             if example_cache_path.exists() and load_cache:
                 with example_cache_path.open('rb') as f:
@@ -91,10 +86,10 @@ class PASDataset(Dataset):
                 example.load(document,
                              cases=self.target_cases,
                              exophors=self.target_exophors,
-                             coreference=coreference,
-                             bridging=bridging,
-                             kc=kc,
-                             pas_targets=pas_targets,
+                             coreference=self.coreference,
+                             bridging=self.bridging,
+                             kc=self.kc,
+                             pas_targets=self.pas_targets,
                              tokenizer=self.tokenizer)
                 if save_cache:
                     example_cache_path.parent.mkdir(exist_ok=True, parents=True)
@@ -105,7 +100,8 @@ class PASDataset(Dataset):
             if len(example.tokens) > self.max_seq_length - len(self.special_to_index):
                 continue
 
-            self.examples.append(example)
+            examples.append(example)
+        return examples
 
     @staticmethod
     def _hash(document, *args) -> str:
@@ -162,16 +158,16 @@ class PASDataset(Dataset):
                     else:
                         # pas (arg_string: 著者, 8%C, 15%O, NULL, ...)
                         if arg_string in self.special_to_index:
-                            if self.train_zero is False:
+                            if 'zero' not in self.train_targets:
                                 continue
                             arguments[i].append(self.special_to_index[arg_string])
                         else:
                             arg_index, flag = int(arg_string[:-2]), arg_string[-1]
                             if flag == 'C':
                                 overts[i].append(orig_to_tok_index[arg_index])
-                            if (flag == 'C' and self.train_overt is False) or \
-                               (flag == 'N' and self.train_case is False) or \
-                               (flag == 'O' and self.train_zero is False):
+                            if (flag == 'C' and 'overt' not in self.train_targets) or \
+                               (flag == 'N' and 'case' not in self.train_targets) or \
+                               (flag == 'O' and 'zero' not in self.train_targets):
                                 continue
                             arguments[i].append(orig_to_tok_index[arg_index])
 

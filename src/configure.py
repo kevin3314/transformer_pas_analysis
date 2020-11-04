@@ -169,7 +169,8 @@ def main() -> None:
                 'exophors': exophors,
                 'coreference': args.coreference,
                 'bridging': args.bridging,
-                'dataset_config': dataset_config,
+                'max_seq_length': dataset_config['max_seq_length'],
+                'bert_path': dataset_config['bert_path'],
                 'training': None,
                 'kc': None,
                 'train_targets': args.train_target,
@@ -242,6 +243,7 @@ def main() -> None:
                 'batch_size': args.batch_size,
                 'shuffle': None,
                 'num_workers': 4,
+                'pin_memory': True,
             },
         }
 
