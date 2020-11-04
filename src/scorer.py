@@ -453,38 +453,50 @@ class Scorer:
         assert len(tree_strings) == len(blist.tag_list())
         all_midasis = [m.midasi for m in document.mentions.values()]
         tid2predicate = {predicate.tid: predicate for predicate in predicates if predicate.sid == sid}
-        tid2anaphor = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
+        tid2mention = {mention.tid: mention for mention in mentions if mention.sid == sid}
+        tid2bridging = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
         for tid in range(len(tree_strings)):
-            cases = []
-            predicate = None
             if tid in tid2predicate:
-                cases += self.cases
                 predicate = tid2predicate[tid]
-            if tid in tid2anaphor:
-                cases += ['ノ']
-                predicate = tid2anaphor[tid]
-            if predicate is None:
-                continue
-            tree_strings[tid] += '  '
-            arguments = document.get_arguments(predicate)
-            for case in cases:
-                args = arguments[case]
-                if case == 'ガ':
-                    args += arguments['判ガ']
-                if case == 'ノ':
-                    args += arguments['ノ？']
+                tree_strings[tid] += '  '
+                arguments = document.get_arguments(predicate)
+                for case in self.cases:
+                    args = arguments[case]
+                    if case == 'ガ':
+                        args += arguments['判ガ']
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
+                    color: str = 'gray'
+                    if result == 'overt':
+                        color = 'green'
+                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
+                        color = 'blue'
+                    elif result == 'wrong':
+                        if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
+                            color = 'red'
+                    targets = set()
+                    for arg in args:
+                        target = arg.midasi
+                        if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                            target += str(arg.dtid)
+                        targets.add(target)
+                    if html:
+                        tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                    else:
+                        tree_strings[tid] += f'{",".join(targets)}:{case} '
+
+            if self.bridging and tid in tid2bridging:
+                anaphor = tid2bridging[tid]
+                arguments = document.get_arguments(anaphor)
+                args = arguments['ノ'] + arguments['ノ？']
+                result = self.comp_result.get((document.doc_id, anaphor.dtid, 'ノ'), None)
                 color: str = 'gray'
-                result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
                 if result == 'overt':
                     color = 'green'
                 elif result in Scorer.DEPTYPE2ANALYSIS.values():
                     color = 'blue'
                 elif result == 'wrong':
-                    for arg in args:
-                        if isinstance(arg, Argument):
-                            color = 'red'
-                        elif arg.midasi in self.relax_exophors:
-                            color = 'red'
+                    if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
+                        color = 'red'
                 targets = set()
                 for arg in args:
                     target = arg.midasi
@@ -492,11 +504,12 @@ class Scorer:
                         target += str(arg.dtid)
                     targets.add(target)
                 if html:
-                    tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                    tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:ノ</font> '
                 else:
-                    tree_strings[tid] += f'{",".join(targets)}:{case} '
-        if self.coreference:
-            for src_mention in filter(lambda m: m.sid == sid, mentions):
+                    tree_strings[tid] += f'{",".join(targets)}:ノ '
+
+            if self.coreference and tid in tid2mention:
+                src_mention = tid2mention[tid]
                 tgt_mentions_relaxed = self._filter_mentions(
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
@@ -509,8 +522,6 @@ class Scorer:
                     entity = document.entities[eid]
                     if entity.exophor in self.relax_exophors.values():
                         targets.add(entity.exophor)
-                if not targets:
-                    continue
                 result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
                 result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
                 tid = src_mention.tid
