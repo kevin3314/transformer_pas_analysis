@@ -133,9 +133,10 @@ class PredictionKNPWriter:
 
             # <格解析結果:>タグから overt case を見つける(inference用)
             match = self.case_analysis_pat.search(line)
+            # dtidに対応する基本句に対して overt で係っている形態素のdmid
             overt_dict: Dict[str, int] = \
                 {k: v for k, v in self._extract_overt_from_knp_result(match, document.sentences[sent_idx]).items()
-                 if k in self.cases}
+                 if k in self.cases}  # ノ格は表層格から overt 判定できないので overt_dict に追加しない
 
             rel_removed: str = self.rel_pat.sub('', line)  # remove gold data
             assert '<rel ' not in rel_removed
