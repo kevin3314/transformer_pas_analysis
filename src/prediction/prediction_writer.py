@@ -198,19 +198,19 @@ class PredictionKNPWriter:
             gold_arguments: Dict[str, List[str]] = example.arguments_set[dmid]
             assert len(self.relations) == len(arguments)
             assert self.relations == list(gold_arguments.keys())
-            for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
+            for (relation, gold_args), argument in zip(gold_arguments.items(), arguments):
                 # 助詞などの非解析対象形態素については gold_args が空になっている
                 # inference時、解析対象形態素は ['NULL'] となる
                 if not gold_args:
                     continue
-                if self.use_gold_overt and case in overt_dict:
+                if self.use_gold_overt and relation in overt_dict:
                     # overt
-                    prediction_dmid = overt_dict[case]
+                    prediction_dmid = overt_dict[relation]
                 elif argument in self.index_to_special:
                     # special
                     special_anaphor = self.index_to_special[argument]
                     if special_anaphor in self.exophors:  # exclude NULL and NA
-                        rels.append(RelTag(case, special_anaphor, None, None))
+                        rels.append(RelTag(relation, special_anaphor, None, None))
                     continue
                 elif example.tok_to_orig_index[argument] is None:
                     # [SEP] or [CLS]
@@ -220,7 +220,7 @@ class PredictionKNPWriter:
                     # normal
                     prediction_dmid = example.tok_to_orig_index[argument]
                 prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
-                rels.append(RelTag(case, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
+                rels.append(RelTag(relation, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
 
         return ''.join(rel.to_string() for rel in rels)
 
