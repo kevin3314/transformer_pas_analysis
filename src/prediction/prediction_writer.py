@@ -30,11 +30,11 @@ class PredictionKNPWriter:
                  ) -> None:
         self.examples: List[PasExample] = dataset.examples
         self.cases: List[str] = dataset.target_cases
+        self.bridging: bool = dataset.bridging
+        self.coreference: bool = dataset.coreference
         self.relations: List[str] = dataset.target_cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
-        self.coreference: bool = dataset.coreference
-        self.bridging: bool = dataset.bridging
         self.documents: List[Document] = dataset.documents
         self.logger = logger
         self.use_gold_overt = use_gold_overt
