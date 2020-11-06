@@ -456,9 +456,9 @@ class Scorer:
         tid2mention = {mention.tid: mention for mention in mentions if mention.sid == sid}
         tid2bridging = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
         for tid in range(len(tree_strings)):
+            tree_strings[tid] += '  '
             if tid in tid2predicate:
                 predicate = tid2predicate[tid]
-                tree_strings[tid] += '  '
                 arguments = document.get_arguments(predicate)
                 for case in self.cases:
                     args = arguments[case]

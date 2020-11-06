@@ -29,6 +29,7 @@ class PredictionKNPWriter:
                  ) -> None:
         self.examples: List[PasExample] = dataset.examples
         self.cases: List[str] = dataset.target_cases
+        self.relations: List[str] = dataset.target_cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.coreference: bool = dataset.coreference
@@ -155,46 +156,41 @@ class PredictionKNPWriter:
                     ) -> str:
         overt_dict = {}  # dtidに対応する基本句に対して overt で係っている形態素のdmid
         for child in bp.children:
-            if dep_case := child.tag.features.get('係', '').rstrip('格'):
+            dep_case = child.tag.features.get('係', '').rstrip('格')
+            if dep_case in self.cases:  # ノ格は表層格からは判断できないので overt_dict に追加しない
                 overt_dict[dep_case] = child.dmid
         rels: List[RelTag] = []
         dmid2bp = {document.mrph2dmid[mrph]: bp for bp in document.bp_list() for mrph in bp.mrph_list()}
         assert len(example.arguments_set) == len(dmid2bp)  # number of mrphs in a document
-        relations: List[str] = self.cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         for mrph in bp.mrph_list():
             dmid = document.mrph2dmid[mrph]
             token_index = example.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
             # {'ガ': ['14%O', '著者'], 'ヲ': ['23%C'], 'ニ': ['NULL'], 'ガ２': ['NULL'], '=': []}
             gold_arguments: Dict[str, List[str]] = example.arguments_set[dmid]
-            assert len(relations) == len(arguments)
-            assert relations == list(gold_arguments.keys())
+            assert len(self.relations) == len(arguments)
+            assert self.relations == list(gold_arguments.keys())
             for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
                 # 助詞などの非解析対象形態素については gold_args が空になっている
-                # inference時は ['NULL'] となる
+                # inference時、解析対象形態素は ['NULL'] となる
                 if not gold_args:
                     continue
-                # overt (train/test)
-                if self.use_gold_overt and any(arg.endswith('%C') for arg in gold_args):
-                    # use gold data for overt case
-                    prediction_dmid = int([arg for arg in gold_args if arg.endswith('%C')][0][:-2])
-                # overt (inference)
-                elif self.use_gold_overt and case in overt_dict:
+                if self.use_gold_overt and case in overt_dict:
+                    # overt
                     prediction_dmid = overt_dict[case]
-                else:
+                elif argument in self.index_to_special:
                     # special
-                    if argument in self.index_to_special:
-                        special_anaphor = self.index_to_special[argument]
-                        if special_anaphor in self.exophors:  # exclude NULL and NA
-                            rels.append(RelTag(case, special_anaphor, None, None))
-                        continue
+                    special_anaphor = self.index_to_special[argument]
+                    if special_anaphor in self.exophors:  # exclude NULL and NA
+                        rels.append(RelTag(case, special_anaphor, None, None))
+                    continue
+                elif example.tok_to_orig_index[argument] is None:
                     # [SEP] or [CLS]
-                    elif example.tok_to_orig_index[argument] is None:
-                        self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
-                        continue
+                    self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
+                    continue
+                else:
                     # normal
-                    else:
-                        prediction_dmid = example.tok_to_orig_index[argument]
+                    prediction_dmid = example.tok_to_orig_index[argument]
                 prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
                 rels.append(RelTag(case, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
 
