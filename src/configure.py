@@ -106,7 +106,7 @@ def main() -> None:
         if 'IterativeRefinement' in model:
             items.append(refinement_iter)
         items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
-        if pas_targets or args.bridging:
+        if pas_targets:
             items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
         if 'pred' in pas_targets:
             items.append('vpa')
@@ -241,7 +241,7 @@ def main() -> None:
             'args': {
                 'batch_size': args.batch_size,
                 'shuffle': None,
-                'num_workers': 4,
+                'num_workers': 1 if args.debug else 4,
                 'pin_memory': True,
             },
         }

@@ -307,8 +307,7 @@ class Scorer:
                                       case_result['zero_exophora']
             case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
             case_result['all_w_overt'] = case_result['all'] + case_result['overt']
-            all_case_result['bridging'] = case_result['all']
-            all_case_result['bridging_w_overt'] = case_result['all_w_overt']
+            all_case_result['bridging'] = case_result['all_w_overt']
 
         result['all_case'] = all_case_result
         return result

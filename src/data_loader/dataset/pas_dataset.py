@@ -144,31 +144,27 @@ class PASDataset(Dataset):
 
             arguments: List[List[int]] = [[] for _ in range(num_relations)]
             overts: List[List[int]] = [[] for _ in range(num_relations)]
-            for i, (case, arg_strings) in enumerate(example.arguments_set[orig_index].items()):
-                if not arg_strings:
-                    continue
+            for i, (rel, arg_strings) in enumerate(example.arguments_set[orig_index].items()):
                 for arg_string in arg_strings:
-                    if case == '=':
-                        # coreference (arg_string: 著者, 23, NA, ...)
-                        if arg_string in self.special_to_index:
-                            arguments[i].append(self.special_to_index[arg_string])
-                        else:
-                            arguments[i].append(orig_to_tok_index[int(arg_string)])
+                    # arg_string: 著者, 8%C, 15%O, 2, NULL, ...
+                    flag = None
+                    if arg_string[-2:] in ('%C', '%N', '%O'):
+                        flag = arg_string[-1]
+                        arg_string = arg_string[:-2]
+                    if arg_string in self.special_to_index:
+                        tok_index = self.special_to_index[arg_string]
                     else:
-                        # pas (arg_string: 著者, 8%C, 15%O, NULL, ...)
-                        if arg_string in self.special_to_index:
-                            if 'zero' not in self.train_targets:
-                                continue
-                            arguments[i].append(self.special_to_index[arg_string])
-                        else:
-                            arg_index, flag = int(arg_string[:-2]), arg_string[-1]
-                            if flag == 'C':
-                                overts[i].append(orig_to_tok_index[arg_index])
-                            if (flag == 'C' and 'overt' not in self.train_targets) or \
-                               (flag == 'N' and 'case' not in self.train_targets) or \
-                               (flag == 'O' and 'zero' not in self.train_targets):
-                                continue
-                            arguments[i].append(orig_to_tok_index[arg_index])
+                        tok_index = orig_to_tok_index[int(arg_string)]
+                    if rel in self.target_cases:
+                        if arg_string in self.target_exophors and 'zero' not in self.train_targets:
+                            continue
+                        if flag == 'C':
+                            overts[i].append(tok_index)
+                        if (flag == 'C' and 'overt' not in self.train_targets) or \
+                           (flag == 'N' and 'case' not in self.train_targets) or \
+                           (flag == 'O' and 'zero' not in self.train_targets):
+                            continue
+                    arguments[i].append(tok_index)
 
             arguments_set.append(arguments)
             overts_set.append(overts)
