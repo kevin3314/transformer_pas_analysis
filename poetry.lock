@@ -501,7 +501,7 @@ test = ["pytest", "requests"]
 
 [[package]]
 name = "kyoto-reader"
-version = "1.2.0"
+version = "1.3.2"
 description = "A KWDLC and KyotoCorpus parser"
 category = "main"
 optional = false
@@ -510,6 +510,7 @@ develop = false
 
 [package.dependencies]
 jaconv = "*"
+joblib = "*"
 pyknp = "*"
 
 [package.extras]
@@ -519,7 +520,7 @@ testing = ["pytest"]
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
 reference = "master"
-resolved_reference = "e4aa80dfbb5c679e9e23e4944e3176a4b520f0f0"
+resolved_reference = "0eabd31bd740024b91626e5e651432748f866102"
 
 [[package]]
 name = "markdown"
