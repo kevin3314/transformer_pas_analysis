@@ -520,7 +520,7 @@ testing = ["pytest"]
 type = "git"
 url = "https://github.com/ku-nlp/kyoto-reader.git"
 reference = "master"
-resolved_reference = "0eabd31bd740024b91626e5e651432748f866102"
+resolved_reference = "95069cf1391d176bffaa9f2f1d6013830480266f"
 
 [[package]]
 name = "markdown"
