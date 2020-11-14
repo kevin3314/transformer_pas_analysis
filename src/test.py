@@ -92,7 +92,7 @@ class Tester:
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
         prediction_writer = PredictionKNPWriter(data_loader.dataset,
                                                 self.logger,
-                                                use_gold_overt=(not self.predict_overt))
+                                                use_knp_overt=(not self.predict_overt))
         documents_pred = prediction_writer.write(arguments_set, prediction_output_dir)
         if corpus == 'kc':
             documents_gold = data_loader.dataset.joined_documents

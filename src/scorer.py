@@ -523,13 +523,10 @@ class Scorer:
                         targets.add(entity.exophor)
                 result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
                 result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
-                tid = src_mention.tid
-                tree_strings[tid] += '  ＝:'
                 if html:
-                    tree_strings[tid] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
-                                         + ','.join(targets) + '</span> '
+                    tree_strings[tid] += f'<font color="{result2color[result]}">＝:{",".join(targets)}</font>'
                 else:
-                    tree_strings[tid] += ','.join(targets)
+                    tree_strings[tid] += '＝:' + ','.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 

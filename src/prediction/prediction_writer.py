@@ -5,7 +5,8 @@ from logging import Logger
 from pathlib import Path
 from typing import List, Optional, Dict, NamedTuple, Union, TextIO
 
-from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase, Sentence
+from pyknp import KNP
+from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
 
 from data_loader.dataset import PASDataset
 from data_loader.dataset.read_example import PasExample
@@ -17,16 +18,15 @@ class PredictionKNPWriter:
     Args:
         dataset (PASDataset): 解析対象のデータセット
         logger (Logger): ロガー
-        use_gold_overt (bool): overt についてシステムの解析結果ではなく，データセットに付与されているものを使うかどうか
+        use_knp_overt (bool): overt について本システムの解析結果ではなく、KNP の格解析結果を使用する (default: True)
     """
-    rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
-    tag_pat = re.compile(r'^\+ -?\d+\w ?')
-    case_analysis_pat = re.compile(r'<格解析結果:(.+?)>')
+    REL_PAT = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
+    TAG_PAT = re.compile(r'^\+ -?\d+\w ?')
 
     def __init__(self,
                  dataset: PASDataset,
                  logger: Logger,
-                 use_gold_overt: bool = True,
+                 use_knp_overt: bool = True,
                  ) -> None:
         self.examples: List[PasExample] = dataset.examples
         self.cases: List[str] = dataset.target_cases
@@ -37,9 +37,10 @@ class PredictionKNPWriter:
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
         self.documents: List[Document] = dataset.documents
         self.logger = logger
-        self.use_gold_overt = use_gold_overt
+        self.use_knp_overt = use_knp_overt
         self.kc: bool = dataset.kc
         self.reader = dataset.reader
+        self.knp = KNP(option='-tab -case2')
 
     def write(self,
               arguments_sets: List[List[List[int]]],
@@ -72,7 +73,7 @@ class PredictionKNPWriter:
                 output_knp_lines = []
                 for line in input_knp_lines:
                     if line.startswith('+ '):
-                        line = self.rel_pat.sub('', line)  # remove gold data
+                        line = self.REL_PAT.sub('', line)  # remove gold data
                         assert '<rel ' not in line
                     output_knp_lines.append(line)
 
@@ -121,6 +122,8 @@ class PredictionKNPWriter:
                      arguments_set: List[List[int]],  # (max_seq_len, cases)
                      document: Document,
                      ) -> List[str]:
+        overts = self._extract_overt(knp_lines, document)
+
         output_knp_lines = []
         dtid = 0
         sent_idx = 0
@@ -131,22 +134,15 @@ class PredictionKNPWriter:
                     sent_idx += 1
                 continue
 
-            # <格解析結果:>タグから overt case を見つける(inference用)
-            match = self.case_analysis_pat.search(line)
-            # dtidに対応する基本句に対して overt で係っている形態素のdmid
-            overt_dict: Dict[str, int] = \
-                {k: v for k, v in self._extract_overt_from_knp_result(match, document.sentences[sent_idx]).items()
-                 if k in self.cases}  # ノ格は表層格から overt 判定できないので overt_dict に追加しない
-
-            rel_removed: str = self.rel_pat.sub('', line)  # remove gold data
+            rel_removed: str = self.REL_PAT.sub('', line)  # remove gold data
             assert '<rel ' not in rel_removed
-            match = self.tag_pat.match(rel_removed)
+            match = self.TAG_PAT.match(rel_removed)
             if match is not None:
                 rel_string = self._rel_string(document.bp_list()[dtid],
                                               example,
                                               arguments_set,
                                               document,
-                                              overt_dict)
+                                              overts[dtid])
                 rel_idx = match.end()
                 output_knp_lines.append(rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:])
             else:
@@ -157,28 +153,32 @@ class PredictionKNPWriter:
 
         return output_knp_lines
 
-    @staticmethod
-    def _extract_overt_from_knp_result(match: Optional,
-                                       sentence: Sentence,
-                                       ) -> Dict[str, int]:
-        if match is None:
-            return {}
-        case_analysis_result = match.group(1)
-        c0 = case_analysis_result.find(':')
-        c1 = case_analysis_result.find(':', c0 + 1)
-
-        if case_analysis_result.count(':') < 2:  # For copula
-            return {}
-
-        overt_dict = {}
-        for k in case_analysis_result[c1 + 1:].split(';'):
-            items = k.split('/')
-            case = items[0]
-            caseflag = items[1]
-            if caseflag == 'C':
-                tid = int(items[3])
-                overt_dict[case] = sentence.bps[tid].dmid
-        return overt_dict
+    def _extract_overt(self,
+                       knp_lines: List[str],
+                       document: Document,
+                       ) -> Dict[int, Dict[str, int]]:
+        overts: Dict[int, Dict[str, int]] = defaultdict(dict)
+        blists = []
+        buff = ''
+        for line in knp_lines:
+            buff += line + '\n'
+            if line == 'EOS':
+                blists.append(self.knp.reparse_knp_result(buff.strip()))
+                buff = ''
+        assert len(document) == len(blists)
+        for sentence, blist in zip(document, blists):
+            tag_list = blist.tag_list()
+            assert len(sentence.bps) == len(tag_list)
+            for bp, tag in zip(sentence.bps, tag_list):
+                assert bp.tid == tag.tag_id
+                if tag.pas is None:
+                    continue
+                for case, args in tag.pas.arguments.items():
+                    if case not in self.cases:  # ノ格は表層格から overt 判定できないので overts に追加しない
+                        continue
+                    for arg in filter(lambda a: a.flag == 'C', args):
+                        overts[bp.dtid][case] = sentence.bps[arg.tid].dmid
+        return overts
 
     def _rel_string(self,
                     bp: BasePhrase,
@@ -203,7 +203,7 @@ class PredictionKNPWriter:
                 # inference時、解析対象形態素は ['NULL'] となる
                 if not gold_args:
                     continue
-                if self.use_gold_overt and relation in overt_dict:
+                if self.use_knp_overt and relation in overt_dict:
                     # overt
                     prediction_dmid = overt_dict[relation]
                 elif argument in self.index_to_special:
