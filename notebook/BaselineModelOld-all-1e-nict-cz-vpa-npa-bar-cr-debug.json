@@ -1,0 +1,281 @@
+{
+  "name": "BaselineModelOld-all-1e-nict-cz-vpa-npa-bar-cr-debug",
+  "n_gpu": 0,
+  "arch": {
+    "type": "BaselineModelOld",
+    "args": {
+      "bert_model": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "vocab_size": 32022,
+      "dropout": 0.0,
+      "num_case": 5,
+      "coreference": true
+    }
+  },
+  "train_kwdlc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kwdlc/train",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人",
+        "不特定:物"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "max_seq_length": 128,
+      "bert_path": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "training": true,
+      "kc": false,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "train_kc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kc_split/train",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人",
+        "不特定:物"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "max_seq_length": 128,
+      "bert_path": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "training": true,
+      "kc": true,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "train_commonsense_dataset": null,
+  "valid_kwdlc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kwdlc/valid",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人",
+        "不特定:物"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "max_seq_length": 128,
+      "bert_path": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "training": false,
+      "kc": false,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "valid_kc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kc_split/valid",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人",
+        "不特定:物"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "max_seq_length": 128,
+      "bert_path": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "training": false,
+      "kc": true,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ],
+      "kc_joined_path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kc/valid"
+    }
+  },
+  "valid_commonsense_dataset": null,
+  "test_kwdlc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kwdlc/test",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人",
+        "不特定:物"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "max_seq_length": 128,
+      "bert_path": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "training": false,
+      "kc": false,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ]
+    }
+  },
+  "test_kc_dataset": {
+    "type": "PASDataset",
+    "args": {
+      "path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kc_split/test",
+      "cases": [
+        "ガ",
+        "ヲ",
+        "ニ",
+        "ガ２"
+      ],
+      "exophors": [
+        "著者",
+        "読者",
+        "不特定:人",
+        "不特定:物"
+      ],
+      "coreference": true,
+      "bridging": true,
+      "max_seq_length": 128,
+      "bert_path": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
+      "training": false,
+      "kc": true,
+      "train_targets": [
+        "case",
+        "zero"
+      ],
+      "pas_targets": [
+        "pred",
+        "noun"
+      ],
+      "kc_joined_path": "/Users/NobuhiroUeda/PycharmProjects/bert_pas_analysis/data/bldsample/kc/test"
+    }
+  },
+  "test_commonsense_dataset": null,
+  "train_data_loader": {
+    "type": "PASDataLoader",
+    "args": {
+      "batch_size": 8,
+      "shuffle": false,
+      "num_workers": 1,
+      "pin_memory": true
+    }
+  },
+  "valid_data_loader": {
+    "type": "PASDataLoader",
+    "args": {
+      "batch_size": 8,
+      "shuffle": false,
+      "num_workers": 1,
+      "pin_memory": true
+    }
+  },
+  "test_data_loader": {
+    "type": "PASDataLoader",
+    "args": {
+      "batch_size": 8,
+      "shuffle": false,
+      "num_workers": 1,
+      "pin_memory": true
+    }
+  },
+  "optimizer": {
+    "type": "AdamW",
+    "args": {
+      "lr": 5e-05,
+      "eps": 1e-08,
+      "weight_decay": 0.01
+    }
+  },
+  "metrics": [
+    "case_analysis_f1_ga",
+    "case_analysis_f1_wo",
+    "case_analysis_f1_ni",
+    "case_analysis_f1_ga2",
+    "case_analysis_f1",
+    "zero_anaphora_f1_ga",
+    "zero_anaphora_f1_wo",
+    "zero_anaphora_f1_ni",
+    "zero_anaphora_f1_ga2",
+    "zero_anaphora_f1_inter",
+    "zero_anaphora_f1_intra",
+    "zero_anaphora_f1_exophora",
+    "zero_anaphora_f1",
+    "coreference_f1",
+    "bridging_anaphora_f1"
+  ],
+  "lr_scheduler": {
+    "type": "get_linear_schedule_with_warmup",
+    "args": {
+      "num_warmup_steps": 0.2,
+      "num_training_steps": 2
+    }
+  },
+  "trainer": {
+    "epochs": 1,
+    "batch_size": 8,
+    "max_bpg": 8,
+    "save_dir": "result/",
+    "save_start_epoch": 1,
+    "verbosity": 2,
+    "monitor": "max val_kwdlc_zero_anaphora_f1",
+    "early_stop": 10,
+    "tensorboard": true
+  }
+}
