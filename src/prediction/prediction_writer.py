@@ -4,6 +4,8 @@ from collections import defaultdict
 from logging import Logger
 from pathlib import Path
 from typing import List, Optional, Dict, NamedTuple, Union, TextIO
+import configparser
+import shutil
 
 from pyknp import KNP
 from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
@@ -40,7 +42,16 @@ class PredictionKNPWriter:
         self.use_knp_overt = use_knp_overt
         self.kc: bool = dataset.kc
         self.reader = dataset.reader
-        self.knp = KNP(option='-tab -case2')
+        cfg = configparser.ConfigParser()
+        cfg_path = Path(__file__).parent.parent / 'analyzer' / 'config.ini'
+        cfg.read(cfg_path)
+        if 'default' not in cfg:
+            logger.warning('Analyzer config not found. Instead, use default values.')
+            cfg['default'] = {}
+        section = cfg['default']
+        knp_command = section.get('knp_command', shutil.which('knp'))
+        jumanpp_command = section.get('juman_command', shutil.which('jumanpp'))
+        self.knp = KNP(command=knp_command, option='-tab -case2', jumancommand=jumanpp_command)
 
     def write(self,
               arguments_sets: List[List[List[int]]],
