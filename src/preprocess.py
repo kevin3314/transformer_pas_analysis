@@ -18,10 +18,10 @@ from data_loader.dataset.commonsense_dataset import CommonsenseExample
 def process_kwdlc(input_path: Path, output_path: Path) -> int:
     output_path.mkdir(exist_ok=True)
     reader = KyotoReader(input_path, extract_nes=False)
-    for document in tqdm(reader.process_all_documents(), desc='kwdlc', total=len(reader.did2source)):
+    for document in tqdm(reader.process_all_documents(), desc='kwdlc', total=len(reader)):
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
-    return len(reader.did2source)
+    return len(reader)
 
 
 def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokenizer: BertTokenizer):
@@ -86,11 +86,11 @@ def process_kc(input_path: Path,
 
         output_path.mkdir(exist_ok=True)
         reader = KyotoReader(input_path, extract_nes=False)
-        for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader.did2source)):
+        for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
 
-    return len(reader.did2source)
+    return len(reader)
 
 
 def process_commonsense(input_path: Path, output_path: Path) -> int:
