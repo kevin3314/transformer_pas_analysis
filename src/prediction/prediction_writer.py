@@ -174,10 +174,15 @@ class PredictionKNPWriter:
         for line in knp_lines:
             buff += line + '\n'
             if line == 'EOS':
-                blists.append(self.knp.reparse_knp_result(buff.strip()))
+                try:
+                    blists.append(self.knp.reparse_knp_result(buff.strip()))
+                except Exception:
+                    blists.append(None)
                 buff = ''
         assert len(document) == len(blists)
         for sentence, blist in zip(document, blists):
+            if blist is None:
+                continue
             tag_list = blist.tag_list()
             assert len(sentence.bps) == len(tag_list)
             for bp, tag in zip(sentence.bps, tag_list):
