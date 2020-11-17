@@ -1,8 +1,8 @@
 {
-  "name": "BaselineModelOld-all-1e-nict-cz-vpa-npa-bar-cr-debug",
+  "name": "BaselineModel-all-1e-nict-cz-vpa-npa-bar-cr-debug",
   "n_gpu": 0,
   "arch": {
-    "type": "BaselineModelOld",
+    "type": "BaselineModel",
     "args": {
       "bert_model": "/Users/NobuhiroUeda/Data/bert/NICT_BERT-base_JapaneseWikipedia_32K_BPE",
       "vocab_size": 32022,
