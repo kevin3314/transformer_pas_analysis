@@ -43,8 +43,7 @@ class PredictionKNPWriter:
         self.kc: bool = dataset.kc
         self.reader = dataset.reader
         cfg = configparser.ConfigParser()
-        cfg_path = Path(__file__).parent.parent / 'analyzer' / 'config.ini'
-        cfg.read(cfg_path)
+        cfg.read(Path(__file__).parent.parent / 'analyzer' / 'config.ini')
         if 'default' not in cfg:
             logger.warning('Analyzer config not found. Instead, use default values.')
             cfg['default'] = {}
@@ -209,34 +208,32 @@ class PredictionKNPWriter:
         dmid2bp = {document.mrph2dmid[mrph]: bp for bp in document.bp_list() for mrph in bp.mrph_list()}
         assert len(example.arguments_set) == len(dmid2bp)
         for mrph in bp.mrph_list():
-            dmid = document.mrph2dmid[mrph]
-            token_index = example.orig_to_tok_index[dmid]
+            dmid: int = document.mrph2dmid[mrph]
+            token_index: int = example.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
-            # {'ガ': ['14%O', '著者'], 'ヲ': ['23%C'], 'ニ': ['NULL'], 'ガ２': ['NULL'], '=': []}
-            gold_arguments: Dict[str, List[str]] = example.arguments_set[dmid]
+            # 助詞などの非解析対象形態素については gold_args が空になっている
+            # inference時、解析対象形態素は ['NULL'] となる
+            is_targets: Dict[str, bool] = {rel: bool(args) for rel, args in example.arguments_set[dmid].items()}
             assert len(self.relations) == len(arguments)
-            assert self.relations == list(gold_arguments.keys())
-            for (relation, gold_args), argument in zip(gold_arguments.items(), arguments):
-                # 助詞などの非解析対象形態素については gold_args が空になっている
-                # inference時、解析対象形態素は ['NULL'] となる
-                if not gold_args:
+            for relation, argument in zip(self.relations, arguments):
+                if not is_targets[relation]:
                     continue
                 if self.use_knp_overt and relation in overt_dict:
                     # overt
                     prediction_dmid = overt_dict[relation]
                 elif argument in self.index_to_special:
                     # special
-                    special_anaphor = self.index_to_special[argument]
-                    if special_anaphor in self.exophors:  # exclude NULL and NA
-                        rels.append(RelTag(relation, special_anaphor, None, None))
-                    continue
-                elif example.tok_to_orig_index[argument] is None:
-                    # [SEP] or [CLS]
-                    self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
+                    special_arg = self.index_to_special[argument]
+                    if special_arg in self.exophors:  # exclude [NULL] and [NA]
+                        rels.append(RelTag(relation, special_arg, None, None))
                     continue
                 else:
                     # normal
                     prediction_dmid = example.tok_to_orig_index[argument]
+                    if prediction_dmid is None:
+                        # [SEP] or [CLS]
+                        self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
+                        continue
                 prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
                 rels.append(RelTag(relation, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
 
