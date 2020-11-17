@@ -287,11 +287,9 @@ class Scorer:
         for case, measures in self.measures.items():
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(measures)
-            case_result['zero_all'] = case_result['zero_intra'] + \
-                                      case_result['zero_inter'] + \
-                                      case_result['zero_exophora']
-            case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            case_result['all_w_overt'] = case_result['all'] + case_result['overt']
+            case_result['zero'] = case_result['zero_intra'] + case_result['zero_inter'] + case_result['zero_exophora']
+            case_result['case_zero'] = case_result['zero'] + case_result['case_analysis']
+            case_result['all'] = case_result['case_zero'] + case_result['overt']
             for analysis, measure in case_result.items():
                 all_case_result[analysis] += measure
             result[case] = case_result
@@ -302,12 +300,10 @@ class Scorer:
         if self.bridging:
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(self.measures_bridging)
-            case_result['zero_all'] = case_result['zero_intra'] + \
-                                      case_result['zero_inter'] + \
-                                      case_result['zero_exophora']
-            case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            case_result['all_w_overt'] = case_result['all'] + case_result['overt']
-            all_case_result['bridging'] = case_result['all_w_overt']
+            case_result['zero'] = case_result['zero_intra'] + case_result['zero_inter'] + case_result['zero_exophora']
+            case_result['case_zero'] = case_result['zero'] + case_result['case_analysis']
+            case_result['all'] = case_result['case_zero'] + case_result['overt']
+            all_case_result['bridging'] = case_result['all']
 
         result['all_case'] = all_case_result
         return result
