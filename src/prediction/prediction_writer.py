@@ -177,6 +177,8 @@ class PredictionKNPWriter:
                 try:
                     blists.append(self.knp.reparse_knp_result(buff.strip()))
                 except Exception:
+                    self.logger.warning(f"overt extraction from '{document.doc_id}' was partly skipped due to an error "
+                                        f"occurred in KNP")
                     blists.append(None)
                 buff = ''
         assert len(document) == len(blists)
