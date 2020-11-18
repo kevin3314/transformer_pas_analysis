@@ -15,10 +15,10 @@ from transformers import BertTokenizer
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
 
-def process_kwdlc(input_path: Path, output_path: Path) -> int:
+def process(input_path: Path, output_path: Path, corpus: str) -> int:
     output_path.mkdir(exist_ok=True)
     reader = KyotoReader(input_path, extract_nes=False)
-    for document in tqdm(reader.process_all_documents(), desc='kwdlc', total=len(reader)):
+    for document in tqdm(reader.process_all_documents(), desc=corpus, total=len(reader)):
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
     return len(reader)
@@ -112,6 +112,8 @@ def main():
                         help='path to directory where KWDLC data exists')
     parser.add_argument('--kc', type=str, default=None,
                         help='path to directory where Kyoto Corpus data exists')
+    parser.add_argument('--fuman', type=str, default=None,
+                        help='path to directory where Fuman Corpus data exists')
     parser.add_argument('--commonsense', type=str, default=None,
                         help='path to directory where commonsense inference data exists')
     parser.add_argument('--out', type=(lambda p: Path(p)), required=True,
@@ -154,9 +156,9 @@ def main():
         in_dir = Path(args.kwdlc).resolve()
         out_dir: Path = args.out / 'kwdlc'
         out_dir.mkdir(exist_ok=True)
-        num_examples_train = process_kwdlc(in_dir / 'train', out_dir / 'train')
-        num_examples_valid = process_kwdlc(in_dir / 'valid', out_dir / 'valid')
-        num_examples_test = process_kwdlc(in_dir / 'test', out_dir / 'test')
+        num_examples_train = process(in_dir / 'train', out_dir / 'train', 'kwdlc')
+        num_examples_valid = process(in_dir / 'valid', out_dir / 'valid', 'kwdlc')
+        num_examples_test = process(in_dir / 'test', out_dir / 'test', 'kwdlc')
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['kwdlc'] = num_examples_dict
 
@@ -175,6 +177,16 @@ def main():
         out_dir.mkdir(exist_ok=True)
         _ = process_kc(in_dir / 'valid', out_dir / 'valid', args.max_seq_length, tokenizer, split=False)
         _ = process_kc(in_dir / 'test', out_dir / 'test', args.max_seq_length, tokenizer, split=False)
+
+    if args.kwdlc is not None:
+        in_dir = Path(args.fuman).resolve()
+        out_dir: Path = args.out / 'fuman'
+        out_dir.mkdir(exist_ok=True)
+        num_examples_train = process(in_dir / 'train', out_dir / 'train', 'fuman')
+        num_examples_valid = process(in_dir / 'valid', out_dir / 'valid', 'fumane')
+        num_examples_test = process(in_dir / 'test', out_dir / 'test', 'fuman')
+        num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
+        config['num_examples']['fuman'] = num_examples_dict
 
     if args.commonsense is not None:
         in_dir = Path(args.commonsense).resolve()
