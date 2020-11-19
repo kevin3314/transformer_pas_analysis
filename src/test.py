@@ -63,29 +63,27 @@ class Tester:
             log.update(self._test(self.commonsense_data_loader, 'commonsense'))
         return log
 
-    def _test(self, data_loader: DataLoader, label: str):
+    def _test(self, data_loader: DataLoader, corpus: str):
 
         loss, *predictions = self.inference(data_loader)
 
         log = {}
-        if label in ('kwdlc', 'kc'):
+        if corpus != 'commonsense':
             if re.match(r'.*(CaseInteraction|Refinement|Duplicate).*Model', self.config['arch']['type']):
-                *pre_predictoins, prediction = predictions
-                for i, pre_predictoin in enumerate(pre_predictoins):
-                    arguments_sets = pre_predictoin.tolist()
-                    result = self._eval_pas(arguments_sets, data_loader, corpus=label, suffix=f'_{i}')
-                    log.update({f'{self.target}_{label}_{k}_{i}': v for k, v in result.items()})
+                *pre_predictions, prediction = predictions
+                for i, pre_prediction in enumerate(pre_predictions):
+                    arguments_sets = pre_prediction.tolist()
+                    result = self._eval_pas(arguments_sets, data_loader, corpus=corpus, suffix=f'_{i}')
+                    log.update({f'{self.target}_{corpus}_{k}_{i}': v for k, v in result.items()})
             else:
                 prediction = predictions[0]  # (N, seq, case, seq)
-            result = self._eval_pas(prediction.tolist(), data_loader, corpus=label)
-        elif label == 'commonsense':
+            result = self._eval_pas(prediction.tolist(), data_loader, corpus=corpus)
+        else:
             assert self.config['arch']['type'] == 'CommonsenseModel'
             result = self._eval_commonsense(predictions[1].tolist(), data_loader)
-        else:
-            raise ValueError(f'unknown label: {label}')
         result['loss'] = loss
 
-        log.update({f'{self.target}_{label}_{k}': v for k, v in result.items()})
+        log.update({f'{self.target}_{corpus}_{k}': v for k, v in result.items()})
         return log
 
     def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):

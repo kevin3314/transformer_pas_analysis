@@ -121,7 +121,7 @@ def main():
     parser.add_argument('--max-seq-length', type=int, default=128,
                         help='The maximum total input sequence length after WordPiece tokenization. Sequences '
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
-    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
+    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人,不特定:物',
                         help='exophor strings separated by ","')
     parser.add_argument('--bert-path', type=str, required=True,
                         help='path to pre-trained BERT model')
@@ -183,7 +183,7 @@ def main():
         out_dir: Path = args.out / 'fuman'
         out_dir.mkdir(exist_ok=True)
         num_examples_train = process(in_dir / 'train', out_dir / 'train', 'fuman')
-        num_examples_valid = process(in_dir / 'valid', out_dir / 'valid', 'fumane')
+        num_examples_valid = process(in_dir / 'valid', out_dir / 'valid', 'fuman')
         num_examples_test = process(in_dir / 'test', out_dir / 'test', 'fuman')
         num_examples_dict = {'train': num_examples_train, 'valid': num_examples_valid, 'test': num_examples_test}
         config['num_examples']['fuman'] = num_examples_dict

@@ -2,7 +2,7 @@ import json
 import math
 import copy
 import argparse
-from typing import List
+from typing import List, Any
 from pathlib import Path
 import itertools
 import inspect
@@ -71,7 +71,7 @@ def main() -> None:
                         help='refinement layer type for RefinementModel')
     parser.add_argument('--save-start-epoch', type=int, default=1,
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
-    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'all'], default=['all'], nargs='*',
+    parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'fuman'], default=['kwdlc', 'kc'], nargs='*',
                         help='corpus to use in training')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
                         help='dependency type to train')
@@ -99,13 +99,14 @@ def main() -> None:
     assert 'ノ' not in cases, msg
     pas_targets_list = [['pred'] * (t in ('pred', 'all')) + ['noun'] * (t in ('noun', 'all')) for t in args.pas_target]
 
-    for model, corpus, n_epoch, pas_targets, conditional_model, output_aggr, refinement_iter, atn_target in \
-            itertools.product(args.model, args.corpus, args.epoch, pas_targets_list, args.conditional_model,
+    for model, n_epoch, pas_targets, conditional_model, output_aggr, refinement_iter, atn_target in \
+            itertools.product(args.model, args.epoch, pas_targets_list, args.conditional_model,
                               args.output_aggr, args.refinement_iter, args.atn_target):
-        items = [model]
+        items: List[Any] = [model]
         if 'IterativeRefinement' in model:
             items.append(refinement_iter)
-        items += [corpus, f'{n_epoch}e', dataset_config['bert_name']]
+        corpus2abbr = {'kwdlc': 'w', 'kc': 'n', 'fuman': 'f'}
+        items += [''.join(corpus2abbr[c] for c in args.corpus), f'{n_epoch}e', dataset_config['bert_name']]
         if pas_targets:
             items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
         if 'pred' in pas_targets:
@@ -131,10 +132,12 @@ def main() -> None:
         name = '-'.join(str(x) for x in items)
 
         num_train_examples = 0
-        if corpus in ('kwdlc', 'all'):
+        if 'kwdlc' in args.corpus:
             num_train_examples += dataset_config['num_examples']['kwdlc']['train']
-        if corpus in ('kc', 'all'):
+        if 'kc' in args.corpus:
             num_train_examples += dataset_config['num_examples']['kc']['train']
+        if 'fuman' in args.corpus:
+            num_train_examples += dataset_config['num_examples']['fuman']['train']
         if model == 'CommonsenseModel':
             num_train_examples += dataset_config['num_examples']['commonsense']['train']
 
@@ -176,49 +179,32 @@ def main() -> None:
                 'pas_targets': pas_targets,
             },
         }
+        train_datasets = {}
+        valid_datasets = {}
+        test_datasets = {}
+        for corpus in args.corpus:
+            train_dataset = copy.deepcopy(dataset)
+            train_dataset['args']['path'] = str(data_root / (corpus if corpus != 'kc' else 'kc_split') / 'train')
+            train_dataset['args']['training'] = True
+            train_dataset['args']['kc'] = (corpus == 'kc')
+            train_datasets[corpus] = train_dataset
 
-        train_kwdlc_dataset = None
-        valid_kwdlc_dataset = None
-        test_kwdlc_dataset = None
-        train_kc_dataset = None
-        valid_kc_dataset = None
-        test_kc_dataset = None
-        if corpus in ('kwdlc', 'all'):
-            train_kwdlc_dataset = copy.deepcopy(dataset)
-            train_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'train')
-            train_kwdlc_dataset['args']['training'] = True
-            train_kwdlc_dataset['args']['kc'] = False
+            valid_dataset = copy.deepcopy(dataset)
+            valid_dataset['args']['path'] = str(data_root / corpus / 'valid')
+            if corpus == 'kc':
+                valid_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'valid')
+            valid_dataset['args']['training'] = False
+            valid_dataset['args']['kc'] = (corpus == 'kc')
+            valid_datasets[corpus] = valid_dataset
 
-            valid_kwdlc_dataset = copy.deepcopy(dataset)
-            valid_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'valid')
-            valid_kwdlc_dataset['args']['training'] = False
-            valid_kwdlc_dataset['args']['kc'] = False
+            test_dataset = copy.deepcopy(dataset)
+            test_dataset['args']['path'] = str(data_root / corpus / 'test')
+            if corpus == 'kc':
+                test_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'test')
+            test_dataset['args']['training'] = False
+            test_dataset['args']['kc'] = (corpus == 'kc')
+            test_datasets[corpus] = test_dataset
 
-            test_kwdlc_dataset = copy.deepcopy(dataset)
-            test_kwdlc_dataset['args']['path'] = str(data_root / 'kwdlc' / 'test')
-            test_kwdlc_dataset['args']['training'] = False
-            test_kwdlc_dataset['args']['kc'] = False
-        if corpus in ('kc', 'all'):
-            train_kc_dataset = copy.deepcopy(dataset)
-            train_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'train')
-            train_kc_dataset['args']['training'] = True
-            train_kc_dataset['args']['kc'] = True
-
-            valid_kc_dataset = copy.deepcopy(dataset)
-            valid_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'valid')
-            valid_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'valid')
-            valid_kc_dataset['args']['training'] = False
-            valid_kc_dataset['args']['kc'] = True
-
-            test_kc_dataset = copy.deepcopy(dataset)
-            test_kc_dataset['args']['path'] = str(data_root / 'kc_split' / 'test')
-            test_kc_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'test')
-            test_kc_dataset['args']['training'] = False
-            test_kc_dataset['args']['kc'] = True
-
-        train_commonsense_dataset = None
-        valid_commonsense_dataset = None
-        test_commonsense_dataset = None
         if model == 'CommonsenseModel':
             commonsense_dataset = {
                 'type': 'CommonsenseDataset',
@@ -231,10 +217,15 @@ def main() -> None:
             }
             train_commonsense_dataset = copy.deepcopy(commonsense_dataset)
             train_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'train.pkl')
+            train_datasets['commonsense'] = train_commonsense_dataset
+
             valid_commonsense_dataset = copy.deepcopy(commonsense_dataset)
             valid_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'valid.pkl')
+            valid_datasets['commonsense'] = valid_commonsense_dataset
+
             test_commonsense_dataset = copy.deepcopy(commonsense_dataset)
             test_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'test.pkl')
+            test_datasets['commonsense'] = test_commonsense_dataset
 
         data_loader = {
             'type': 'PASDataLoader',
@@ -245,17 +236,16 @@ def main() -> None:
                 'pin_memory': True,
             },
         }
-
+        data_loaders = {}
         train_data_loader = copy.deepcopy(data_loader)
         train_data_loader['args']['shuffle'] = (not args.debug)
+        data_loaders['train'] = train_data_loader
 
         valid_data_loader = copy.deepcopy(data_loader)
         valid_data_loader['args']['batch_size'] = args.eval_batch_size if args.eval_batch_size else args.batch_size
         valid_data_loader['args']['shuffle'] = False
-
-        test_data_loader = copy.deepcopy(data_loader)
-        test_data_loader['args']['batch_size'] = args.eval_batch_size if args.eval_batch_size else args.batch_size
-        test_data_loader['args']['shuffle'] = False
+        data_loaders['valid'] = valid_data_loader
+        data_loaders['test'] = copy.deepcopy(valid_data_loader)
 
         optimizer = {
             'type': 'AdamW',
@@ -322,10 +312,14 @@ def main() -> None:
         else:
             mnt_metric = 'loss'
             mnt_mode = 'min'
-        if corpus in ('kwdlc', 'all'):
+        if 'kwdlc' in args.corpus:
             mnt_metric = 'val_kwdlc_' + mnt_metric
-        else:
+        elif 'kc' in args.corpus:
             mnt_metric = 'val_kc_' + mnt_metric
+        elif 'fuman' in args.corpus:
+            mnt_metric = 'val_fuman_' + mnt_metric
+        else:
+            raise ValueError('no corpus to evaluate')
         trainer = {
             'epochs': n_epoch,
             'batch_size': args.batch_size,
@@ -342,18 +336,10 @@ def main() -> None:
             name=name,
             n_gpu=args.gpus,
             arch=arch,
-            train_kwdlc_dataset=train_kwdlc_dataset,
-            train_kc_dataset=train_kc_dataset,
-            train_commonsense_dataset=train_commonsense_dataset,
-            valid_kwdlc_dataset=valid_kwdlc_dataset,
-            valid_kc_dataset=valid_kc_dataset,
-            valid_commonsense_dataset=valid_commonsense_dataset,
-            test_kwdlc_dataset=test_kwdlc_dataset,
-            test_kc_dataset=test_kc_dataset,
-            test_commonsense_dataset=test_commonsense_dataset,
-            train_data_loader=train_data_loader,
-            valid_data_loader=valid_data_loader,
-            test_data_loader=test_data_loader,
+            train_datasets=train_datasets,
+            valid_datasets=valid_datasets,
+            test_datasets=test_datasets,
+            data_loaders=data_loaders,
             optimizer=optimizer,
             metrics=metrics,
             lr_scheduler=lr_scheduler,

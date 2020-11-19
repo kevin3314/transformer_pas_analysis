@@ -33,10 +33,10 @@ class BaseTrainer:
         self.gradient_accumulation_steps = math.ceil(self.batches_per_optim / (max_bpg * self.num_devices))
         batches_per_step = min(self.batches_per_optim, max_bpg * self.num_devices)
         if self.gradient_accumulation_steps > 1:
-            self.config['valid_data_loader']['args']['batch_size'] = batches_per_step
+            self.config['data_loaders']['valid']['args']['batch_size'] = batches_per_step
         self.batches_per_device = math.ceil(batches_per_step / self.num_devices)
-        self.config['train_data_loader']['args']['batch_size'] = batches_per_step
-        self.data_loader = self.config.init_obj('train_data_loader', module_loader, train_dataset)
+        self.config['data_loaders']['train']['args']['batch_size'] = batches_per_step
+        self.data_loader = self.config.init_obj('data_loaders.train', module_loader, train_dataset)
         self.total_step = len(self.data_loader) * self.epochs
         self.optimization_step_per_epoch = math.ceil(len(self.data_loader) / self.gradient_accumulation_steps)
         self.total_optimization_step = self.optimization_step_per_epoch * self.epochs
