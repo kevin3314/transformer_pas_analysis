@@ -178,7 +178,7 @@ def main():
         _ = process_kc(in_dir / 'valid', out_dir / 'valid', args.max_seq_length, tokenizer, split=False)
         _ = process_kc(in_dir / 'test', out_dir / 'test', args.max_seq_length, tokenizer, split=False)
 
-    if args.kwdlc is not None:
+    if args.fuman is not None:
         in_dir = Path(args.fuman).resolve()
         out_dir: Path = args.out / 'fuman'
         out_dir.mkdir(exist_ok=True)
