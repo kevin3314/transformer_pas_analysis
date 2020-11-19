@@ -85,7 +85,7 @@ def process_kc(input_path: Path,
             input_path = tmp_dir
 
         output_path.mkdir(exist_ok=True)
-        reader = KyotoReader(input_path, extract_nes=False)
+        reader = KyotoReader(input_path, extract_nes=False, did_from_sid=False)
         for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
