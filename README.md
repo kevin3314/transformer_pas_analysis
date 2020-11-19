@@ -28,7 +28,7 @@ PAS analysis process is as follows:
 
 - Python 3.7.2+
 - [Juman++](https://github.com/ku-nlp/jumanpp) 2.0.0-rc3
-- [KNP](http://nlp.ist.i.kyoto-u.ac.jp/index.php?KNP) 4.2
+- [KNP](https://github.com/ku-nlp/knp) 5.0
 
 ## Setup Environment
 
@@ -39,7 +39,7 @@ Use [poetry](https://github.com/python-poetry/poetry)
 ## Quick Start
 
 ```zsh
-MODEL=</path/to/trained/checkpoint>
+MODEL=/path/to/trained/checkpoint
 
 python src/predict.py \
 --model $MODEL \
@@ -75,9 +75,9 @@ Then, run `predict.py` specifying the document directory.
 
 ```zsh
 python src/predict.py \
---model </path/to/trained/checkpoint> \
---knp-dir </path/to/parsed/document/directory>
---export-dir <path/to/export/directory>
+--model /path/to/trained/checkpoint \
+--knp-dir /path/to/parsed/document/directory
+--export-dir path/to/export/directory
 ```
 
 For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/master/scripts/knp_and_pas/Makefile)
@@ -154,18 +154,18 @@ The resultant files will be located at `config/`.
 
 ```zsh
 python src/configure.py \
--c <path-to-config-directory> \
+-c /path/to/config/directory \
 -d /somewhere/dataset \
 -e <num-epochs> \
 -b <batch-size> \
 --model <model-name> \
---corpus all
+--corpus kwdlc kc
 ```
 
 example:
 
 ```zsh
-python src/configure.py -c config -d data/dataset -e 4 8 -b 8 --model BaselineModel --corpus kwdlc all
+python src/configure.py -c config -d data/dataset -e 4 8 -b 8 --model BaselineModel --corpus kwdlc kc
 ```
 
 ### Training Models
@@ -174,7 +174,7 @@ Launch the trainer with a configuration.
 
 ```zsh
 python src/train.py \
--c <path-to-config-file> \
+-c /path/to/config/file \
 -d <gpu-ids>
 ```
 
@@ -188,7 +188,7 @@ python src/train.py -c config/BaselineModel-all-4e-nict-cz-vpa.json -d 0,1
 
 ```zsh
 python src/test.py \
--r <path-to-trained-model> \
+-r /path/to/trained/model \
 -d <gpu-ids>
 ```
 
@@ -198,7 +198,7 @@ You can perform ensemble test as well:
 
 ```zsh
 python src/test.py \
---ens <path-to-model-set-directory> \
+--ens /path/to/model/set/directory \
 -d <gpu-ids>
 ```
 
@@ -206,8 +206,8 @@ python src/test.py \
 
 ```zsh
 python src/scorer.py \
---prediction-dir <system-output-directory> \
---gold-dir <gold-directory> \
+--prediction-dir /path/to/system/output/directory \
+--gold-dir /path/to/gold/directory \
 --read-prediction-from-pas-tag
 ```
 
@@ -218,25 +218,25 @@ You can also perform training and testing via make command.
 Here is an example of training your own model for 5 times with different random seeds:
 
 ```zsh
-make train GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=5
+make train GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
 ```
 
 Testing command is as follows (outputs confidence interval):
 
 ```zsh
-make test GPUS=<gpu-ids> RESULT=<path-to-result-dir>
+make test GPUS=<gpu-ids> RESULT=/path/to/result/dir
 ```
 
 This command executes above two commands all at once.
 
 ```zsh
-make all GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=5
+make all GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
 ```
 
 Ensemble test is also available.
 
 ```zsh
-make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
+make test-ens GPUS=<gpu-ids> RESULT=/path/to/result/dir
 ```
 
 ## Environment Variables
@@ -249,6 +249,7 @@ make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 
 - Kyoto University Web Document Leads Corpus ([KWDLC](https://github.com/ku-nlp/KWDLC))
 - Kyoto University Text Corpus ([KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus))
+- Fuman Corpus
 
 ## Licence
 
