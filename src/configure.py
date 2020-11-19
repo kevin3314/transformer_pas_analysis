@@ -190,7 +190,7 @@ def main() -> None:
             train_datasets[corpus] = train_dataset
 
             valid_dataset = copy.deepcopy(dataset)
-            valid_dataset['args']['path'] = str(data_root / corpus / 'valid')
+            valid_dataset['args']['path'] = str(data_root / (corpus if corpus != 'kc' else 'kc_split') / 'valid')
             if corpus == 'kc':
                 valid_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'valid')
             valid_dataset['args']['training'] = False
@@ -198,7 +198,7 @@ def main() -> None:
             valid_datasets[corpus] = valid_dataset
 
             test_dataset = copy.deepcopy(dataset)
-            test_dataset['args']['path'] = str(data_root / corpus / 'test')
+            test_dataset['args']['path'] = str(data_root / (corpus if corpus != 'kc' else 'kc_split') / 'test')
             if corpus == 'kc':
                 test_dataset['args']['kc_joined_path'] = str(data_root / 'kc' / 'test')
             test_dataset['args']['training'] = False

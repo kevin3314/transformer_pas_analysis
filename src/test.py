@@ -19,14 +19,12 @@ from scorer import Scorer
 
 
 class Tester:
-    def __init__(self, model, metrics, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                 target, logger, predict_overt, precision_threshold, recall_threshold, result_suffix):
+    def __init__(self, model, metrics, config, data_loaders, target, logger, predict_overt, precision_threshold,
+                 recall_threshold, result_suffix):
         self.model: nn.Module = model
         self.metrics: List[Callable] = metrics
         self.config = config
-        self.kwdlc_data_loader = kwdlc_data_loader
-        self.kc_data_loader = kc_data_loader
-        self.commonsense_data_loader = commonsense_data_loader
+        self.data_loaders = data_loaders
         self.target: str = target
         self.logger = logger
         self.predict_overt: bool = predict_overt
@@ -39,10 +37,9 @@ class Tester:
         self.save_dir: Path = config.save_dir / f'eval_{target}{result_suffix}'
         self.save_dir.mkdir(exist_ok=True)
         pas_targets: Set[str] = set()
-        if kwdlc_data_loader is not None:
-            pas_targets |= set(kwdlc_data_loader.dataset.pas_targets)
-        if kc_data_loader is not None:
-            pas_targets |= set(kc_data_loader.dataset.pas_targets)
+        for corpus, data_loader in self.data_loaders.items():
+            if corpus != 'commonsense':
+                pas_targets |= set(data_loader.dataset.pas_targets)
         self.pas_targets: List[str] = []
         if 'pred' in pas_targets:
             self.pas_targets.append('pred')
@@ -55,12 +52,8 @@ class Tester:
 
     def test(self):
         log = {}
-        if self.kwdlc_data_loader is not None:
-            log.update(self._test(self.kwdlc_data_loader, 'kwdlc'))
-        if self.kc_data_loader is not None:
-            log.update(self._test(self.kc_data_loader, 'kc'))
-        if self.commonsense_data_loader is not None:
-            log.update(self._test(self.commonsense_data_loader, 'commonsense'))
+        for corpus, data_loader in self.data_loaders.items():
+            log.update(self._test(data_loader, corpus))
         return log
 
     def _test(self, data_loader: DataLoader, corpus: str):
@@ -142,18 +135,10 @@ def main(config, args):
     logger = config.get_logger(args.target)
 
     # setup data_loader instances
-    kwdlc_data_loader = None
-    if config[f'{args.target}_kwdlc_dataset'] is not None:
-        dataset = config.init_obj(f'{args.target}_kwdlc_dataset', module_dataset, logger=logger)
-        kwdlc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
-    kc_data_loader = None
-    if config[f'{args.target}_kc_dataset'] is not None:
-        dataset = config.init_obj(f'{args.target}_kc_dataset', module_dataset, logger=logger)
-        kc_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
-    commonsense_data_loader = None
-    if config.config.get(f'{args.target}_commonsense_dataset', None) is not None:
-        dataset = config.init_obj(f'{args.target}_commonsense_dataset', module_dataset, logger=logger)
-        commonsense_data_loader = config.init_obj(f'{args.target}_data_loader', module_loader, dataset)
+    data_loaders = {}
+    for corpus in config[f'{args.target}_datasets'].keys():
+        dataset = config.init_obj(f'{args.target}_datasets.{corpus}', module_dataset, logger=logger)
+        data_loaders[corpus] = config.init_obj(f'data_loaders.{args.target}', module_loader, dataset)
 
     # build model architecture
     model: nn.Module = config.init_obj('arch', module_arch)
@@ -162,9 +147,8 @@ def main(config, args):
     # get function handles of metrics
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    tester = Tester(model, metric_fns, config, kwdlc_data_loader, kc_data_loader, commonsense_data_loader,
-                    args.target, logger, args.predict_overt, args.precision_threshold, args.recall_threshold,
-                    args.result_suffix)
+    tester = Tester(model, metric_fns, config, data_loaders, args.target, logger, args.predict_overt,
+                    args.precision_threshold, args.recall_threshold, args.result_suffix)
 
     log = tester.test()
 

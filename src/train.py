@@ -26,12 +26,12 @@ def main(config: ConfigParser, args: argparse.Namespace):
 
     # setup data_loader instances
     train_datasets = []
-    for corpus, train_dataset in config['train_datasets'].items():
+    for corpus in config['train_datasets'].keys():
         train_datasets.append(config.init_obj(f'train_datasets.{corpus}', module_dataset, logger=logger))
     train_dataset = ConcatDataset(train_datasets)
 
     valid_datasets = {}
-    for corpus, valid_dataset in config['valid_datasets'].items():
+    for corpus in config['valid_datasets'].keys():
         valid_datasets[corpus] = config.init_obj(f'valid_datasets.{corpus}', module_dataset, logger=logger)
 
     # build model architecture, then print to console
