@@ -81,9 +81,9 @@ class Analyzer:
         return self._analysis(save_dir)
 
     def _analysis(self, path: Path) -> Tuple[list, PASDataset]:
-        self.config['test_kwdlc_dataset']['args']['path'] = str(path)
-        dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
-        data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
+        self.config['test_datasets']['kwdlc']['args']['path'] = str(path)
+        dataset = self.config.init_obj('test_datasets.kwdlc', module_dataset)
+        data_loader = self.config.init_obj('data_loaders.test', module_loader, dataset)
 
         _, *predictions = self.inference(data_loader)
 

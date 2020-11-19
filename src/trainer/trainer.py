@@ -133,11 +133,11 @@ class Trainer(BaseTrainer):
                 if step % self.log_step == 0:
                     self.logger.info('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
                         step * data_loader.batch_size,
-                        len(self.data_loader.dataset),
+                        len(data_loader.dataset),
                         100.0 * step / len(data_loader),
                         datetime.datetime.now().strftime('%H:%M:%S')))
 
-        log = {'loss': total_loss / len(self.data_loader.dataset)}
+        log = {'loss': total_loss / len(data_loader.dataset)}
 
         if corpus != 'commonsense':
             prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
