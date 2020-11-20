@@ -68,9 +68,9 @@ def draw_tree(document: Document,
                 targets.add(target)
             if html:
                 color = 'black' if targets else 'gray'
-                tree_strings[bp.tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                tree_strings[bp.tid] += f'<font color="{color}">{",".join(targets)}:ノ</font> '
             else:
-                tree_strings[bp.tid] += f'{",".join(targets)}:{case} '
+                tree_strings[bp.tid] += f'{",".join(targets)}:ノ '
         if coreference and is_coreference_target(bp):
             if bp.tid in tid2mention:
                 src_mention = tid2mention[bp.tid]
