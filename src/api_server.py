@@ -52,7 +52,7 @@ def api():
     cases = dataset.target_cases + ['ノ'] * dataset.bridging
     for sid in document.sid2sentence.keys():
         with io.StringIO() as string:
-            draw_tree(document, sid, cases, dataset.coreference, string)
+            draw_tree(document, sid, cases, dataset.bridging, dataset.coreference, string)
             tree_string = string.getvalue()
         logger.info('output:\n' + tree_string)
         html_string += tree_string
