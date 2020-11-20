@@ -1,7 +1,6 @@
 import math
 from abc import abstractmethod
 from logger import TensorboardWriter
-from pathlib import Path
 
 import torch
 from numpy import inf
@@ -57,8 +56,6 @@ class BaseTrainer:
             self.early_stop = cfg_trainer.get('early_stop', inf)
 
         self.start_epoch = 1
-
-        self.checkpoint_dir: Path = config.save_dir
 
         # setup visualization writer instance
         self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
@@ -142,11 +139,11 @@ class BaseTrainer:
             'monitor_best': self.mnt_best,
             'config': self.config
         }
-        save_path = self.checkpoint_dir / f'checkpoint-epoch{epoch}.pth'
+        save_path = self.config.save_dir / f'checkpoint-epoch{epoch}.pth'
         self.logger.info("Saving checkpoint: {} ...".format(save_path))
         torch.save(state, str(save_path))
         if save_best:
-            best_path = self.checkpoint_dir / 'model_best.pth'
+            best_path = self.config.save_dir / 'model_best.pth'
             self.logger.info("Saving current best: model_best.pth ...")
             if best_path.exists():
                 best_path.unlink()
