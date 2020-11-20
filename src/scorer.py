@@ -10,7 +10,7 @@ from collections import OrderedDict
 from pyknp import BList
 from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 
-from utils.util import OrderedDefaultDict
+from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 from utils.constants import CASE2YOMI
 
 logger = logging.getLogger(__name__)
@@ -64,25 +64,25 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             for predicate_pred in document_pred.get_predicates():
-                features = predicate_pred.tag.features
-                if (pas_target in ('pred', 'all') and '用言' in features) or \
-                        (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
+                if is_pas_target(predicate_pred,
+                                 verbal=(pas_target in ('pred', 'all')),
+                                 nominal=(pas_target in ('noun', 'all'))):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
-                if self.bridging and '体言' in features and '非用言格解析' not in features:
+                if self.bridging and is_bridging_target(predicate_pred):
                     self.did2bridgings_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
-                features = predicate_gold.tag.features
-                if (pas_target in ('pred', 'all') and '用言' in features) or \
-                        (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
+                if is_pas_target(predicate_gold,
+                                 verbal=(pas_target in ('pred', 'all')),
+                                 nominal=(pas_target in ('noun', 'all'))):
                     self.did2predicates_gold[doc_id].append(predicate_gold)
-                if self.bridging and '体言' in features and '非用言格解析' not in features:
+                if self.bridging and is_bridging_target(predicate_gold):
                     self.did2bridgings_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
-                if '体言' in mention_pred.tag.features:
+                if is_coreference_target(mention_pred):
                     self.did2mentions_pred[doc_id].append(mention_pred)
             for mention_gold in document_gold.mentions.values():
-                if '体言' in mention_gold.tag.features:
+                if is_coreference_target(mention_gold):
                     self.did2mentions_gold[doc_id].append(mention_gold)
 
         for doc_id in self.doc_ids:
