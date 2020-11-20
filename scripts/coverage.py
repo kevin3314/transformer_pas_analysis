@@ -45,6 +45,7 @@ class RetValue:
 
 def hiyougen(tag: Tag):
     return '非用言格解析' in tag.features
+    # return '非用言格解析' in tag.features or any(('連用形名詞化' in mrph.fstring) for mrph in tag.mrph_list())
 
 
 def judge_pred(tag: Tag) -> bool:
