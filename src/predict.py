@@ -20,6 +20,7 @@ def draw_tree(document: Document,
               bridging: bool = False,
               coreference: bool = False,
               fh: Optional[TextIO] = None,
+              html: bool = False,
               ) -> None:
     """sid で指定された文の述語項構造・共参照関係をツリー形式で fh に書き出す
 
@@ -30,6 +31,8 @@ def draw_tree(document: Document,
         bridging (bool): 橋渡し照応関係も表示するかどうか
         coreference (bool): 共参照関係も表示するかどうか
         fh (Optional[TextIO]): 出力ストリーム
+        html (bool): html 形式で出力するかどうか
+
     """
     blist: BList = document.sid2sentence[sid].blist
     with io.StringIO() as string:
@@ -50,7 +53,11 @@ def draw_tree(document: Document,
                     if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
                         target += str(arg.dtid)
                     targets.add(target)
-                tree_strings[bp.tid] += f'{",".join(targets)}:{case} '
+                if html:
+                    color = 'black' if targets else 'gray'
+                    tree_strings[bp.tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                else:
+                    tree_strings[bp.tid] += f'{",".join(targets)}:{case} '
         if bridging and is_bridging_target(bp):
             args = document.get_arguments(bp).get('ノ', [])
             targets = set()
@@ -59,7 +66,11 @@ def draw_tree(document: Document,
                 if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
                     target += str(arg.dtid)
                 targets.add(target)
-            tree_strings[bp.tid] += f'{",".join(targets)}:ノ '
+            if html:
+                color = 'black' if targets else 'gray'
+                tree_strings[bp.tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+            else:
+                tree_strings[bp.tid] += f'{",".join(targets)}:{case} '
         if coreference and is_coreference_target(bp):
             if bp.tid in tid2mention:
                 src_mention = tid2mention[bp.tid]
@@ -74,10 +85,13 @@ def draw_tree(document: Document,
                     entity = document.entities[eid]
                     if entity.is_special:
                         targets.add(entity.exophor)
-                tree_strings[bp.tid] += '＝:'
-                tree_strings[bp.tid] += ','.join(targets)
             else:
-                tree_strings[bp.tid] += '＝:'
+                targets = set()
+            if html:
+                color = 'black' if targets else 'gray'
+                tree_strings[bp.tid] += f'<font color="{color}">＝:{",".join(targets)}</font>'
+            else:
+                tree_strings[bp.tid] += f'＝:{",".join(targets)}'
     print('\n'.join(tree_strings), file=fh)
 
 
