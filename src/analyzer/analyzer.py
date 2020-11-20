@@ -66,15 +66,15 @@ class Analyzer:
             knp_out = ''
             for i, sent in enumerate(sents):
                 knp_out_ = self._apply_knp(sent)
-                knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
+                knp_out_ = knp_out_.replace('# S-ID:1', f'# S-ID:0-{i + 1}')
                 knp_out += knp_out_
-            with save_dir.joinpath(f'doc.knp').open(mode='wt') as f:
+            with save_dir.joinpath(f'0.knp').open(mode='wt') as f:
                 f.write(knp_out)
 
         return self._analysis(save_dir)
 
     def analyze_from_knp(self, knp_out: str, knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
-        save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir = Path(knp_dir or 'log') / datetime.now().strftime(r'%m%d_%H%M%S')
         save_dir.mkdir(exist_ok=True)
         with save_dir.joinpath('doc.knp').open(mode='wt') as f:
             f.write(knp_out)
