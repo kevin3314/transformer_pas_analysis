@@ -1,22 +1,20 @@
 # BERT based PAS analysis
 
-Japanese Predicate Argument Structure (PAS) Analyzer using BERT.
+Japanese Predicate Argument Structure (PAS) Analyzer.
 
 ## Description
 
-This project is mainly for Japanese PAS analysis,
-but provides following other analyses as well.
+This project performs the following analyses in a multi-task manner:
+- Verbal Predicate argument structure Analysis (VPA)
+- Nominal Predicate argument structure Analysis (NPA)
+- Bridging Anaphora Resolution (BAR)
+- Coreference Resolution (CR)
 
-- Coreference resolution
-- Bridging anaphora resolution
-- Nominal predicate argument structure analysis
-
-PAS analysis process is as follows:
-
-1. Apply Juman++ and (BERT)KNP to input text and split into base phrases
-2. Extract predicates from base phrases by seeing whether the phrase has "<用言>" feature
-3. Split each phrases into subwords using BPE
-4. For each predicate subword, select its arguments
+The process is as follows:
+1. Apply Juman++ and KNP to an input text and split the text into base phrases
+2. Extract predicates from base phrases by seeing whether the phrase has "<用言>" feature, which was tagged by KNP
+3. Split each phrase into subwords using BPE
+4. For each predicate subword, select its arguments using BERT
 
 ## Demo
 
@@ -57,7 +55,7 @@ Result:
 
 Options:
 
-- `--model, -m, -r`: path to trained checkpoint
+- `--model, -m, -r`: a path to trained checkpoint
 - `--device, -d`: GPU IDs separated by "," (if not specified, use CPU)
 - `--input, -i`: input sentence or document separated by "。"
 - `-tab`: output results in KNP tab format if specified
@@ -82,7 +80,7 @@ python src/predict.py \
 
 For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/master/scripts/knp_and_pas/Makefile)
 
-## Training Your Own Model
+## Training Your Model
 
 ### Preparing Corpus
 
@@ -104,8 +102,9 @@ Otherwise
 
 Add features:
 
-[kyoto-reader](https://github.com/ku-nlp/kyoto-reader), which this project depends on, provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
-Make sure you are in the virtual environment of bert_pas_analysis when you run `configure` and `idsplit` commands.
+[kyoto-reader](https://github.com/ku-nlp/kyoto-reader), which this project depends on,
+provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpora.
+Make sure you are in the virtual environment of this project when you run `configure` and `idsplit` commands.
 
 ```
 $ git clone https://github.com/ku-nlp/JumanDIC
@@ -144,8 +143,8 @@ python src/preprocess.py \
 --bert-path /somewhere/NICT_BERT-base_JapaneseWikipedia_32K_BPE
 ```
 
-Don't care if many "sentence not found" messages are shown when processing kc.
-It is a natural result of splitting document.
+Don't care if many "sentence not found" messages are shown when processing KyotoCorpus.
+It is a natural result of splitting kc documents.
 
 ### Configuring Settings
 
@@ -192,9 +191,10 @@ python src/test.py \
 -d <gpu-ids>
 ```
 
-If you specify the config file, the setting will be overwritten.
+If you specify a config file besides the trained model, the setting will be overwritten. \
 
-You can perform ensemble test as well:
+You can perform an ensemble test as well.
+In this case, `test.py` gather all files named `model_best.pth` under the directory specified in `--ens` option.
 
 ```zsh
 python src/test.py \
@@ -213,9 +213,9 @@ python src/scorer.py \
 
 ## Perform Training Process with Make
 
-You can also perform training and testing via make command.
+You can also perform training and testing using `make` command.
 
-Here is an example of training your own model for 5 times with different random seeds:
+Here is an example of training your own model 5 times with different random seeds:
 
 ```zsh
 make train GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
@@ -224,24 +224,24 @@ make train GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
 Testing command is as follows (outputs confidence interval):
 
 ```zsh
-make test GPUS=<gpu-ids> RESULT=/path/to/result/dir
+make test GPUS=<gpu-ids> RESULT=/path/to/result/directory
 ```
 
-This command executes above two commands all at once.
+This command executes two commands above all at once.
 
 ```zsh
 make all GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
 ```
 
-Ensemble test is also available.
+Ensemble test:
 
 ```zsh
-make test-ens GPUS=<gpu-ids> RESULT=/path/to/result/dir
+make test-ens GPUS=<gpu-ids> RESULT=/path/to/result/directory
 ```
 
 ## Environment Variables
 
-- `BPA_CACHE_DIR`: A directory where processed document is cached. Default is `/data/$USER/bpa_cache`.
+- `BPA_CACHE_DIR`: A directory where processed documents are cached. Default value is `/data/$USER/bpa_cache`.
 - `BPA_OVERWRITE_CACHE`: If set, bert_pas_analysis doesn't load cache even if it exists.
 - `BPA_DISABLE_CACHE`: If set, bert_pas_analysis doesn't load or save cache.
 
