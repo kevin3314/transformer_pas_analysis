@@ -73,3 +73,17 @@ class TensorboardWriter:
             except AttributeError:
                 raise AttributeError("type object '{}' has no attribute '{}'".format(self.selected_module, name))
             return attr
+
+
+class Timer:
+    def __init__(self):
+        self.cache = datetime.now()
+
+    def check(self):
+        now = datetime.now()
+        duration = now - self.cache
+        self.cache = now
+        return duration.total_seconds()
+
+    def reset(self):
+        self.cache = datetime.now()

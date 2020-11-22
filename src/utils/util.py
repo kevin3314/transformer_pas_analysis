@@ -1,17 +1,10 @@
 import json
 from pathlib import Path
-from datetime import datetime
 from collections import OrderedDict
 from collections.abc import Callable
 
 import torch
 from kyoto_reader import BasePhrase
-
-
-def ensure_dir(dirname):
-    dirname = Path(dirname)
-    if not dirname.is_dir():
-        dirname.mkdir(parents=True, exist_ok=False)
 
 
 def read_json(fname):
@@ -24,20 +17,6 @@ def read_json(fname):
 def write_json(content, fname):
     with fname.open('wt') as handle:
         json.dump(content, handle, ensure_ascii=False, indent=2, sort_keys=False)
-
-
-class Timer:
-    def __init__(self):
-        self.cache = datetime.now()
-
-    def check(self):
-        now = datetime.now()
-        duration = now - self.cache
-        self.cache = now
-        return duration.total_seconds()
-
-    def reset(self):
-        self.cache = datetime.now()
 
 
 class OrderedDefaultDict(OrderedDict):
