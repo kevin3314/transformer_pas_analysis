@@ -1,6 +1,5 @@
 import math
 from abc import abstractmethod
-from logger import TensorboardWriter
 
 import torch
 from numpy import inf
@@ -56,9 +55,6 @@ class BaseTrainer:
             self.early_stop = cfg_trainer.get('early_stop', inf)
 
         self.start_epoch = 1
-
-        # setup visualization writer instance
-        self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
 
         if config.resume is not None:
             self._resume_checkpoint(config.resume)

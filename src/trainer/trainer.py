@@ -11,6 +11,7 @@ from .base_trainer import BaseTrainer
 from prediction.prediction_writer import PredictionKNPWriter
 from scorer import Scorer
 import data_loader.data_loaders as module_loader
+from logger import TensorboardWriter
 
 
 class Trainer(BaseTrainer):
@@ -28,6 +29,7 @@ class Trainer(BaseTrainer):
             self.valid_data_loaders[corpus] = config.init_obj('data_loaders.valid', module_loader, valid_dataset)
         self.lr_scheduler = lr_scheduler
         self.log_step = math.ceil(len(self.data_loader.dataset) / np.sqrt(self.data_loader.batch_size) / 200)
+        self.writer = TensorboardWriter(config.log_dir)
 
     def _train_epoch(self, epoch):
         """
@@ -90,12 +92,12 @@ class Trainer(BaseTrainer):
             'loss': total_loss / len(self.data_loader.dataset),
         }
         for corpus, valid_data_loader in self.valid_data_loaders.items():
-            val_log = self._valid_epoch(epoch, valid_data_loader, corpus)
+            val_log = self._valid_epoch(valid_data_loader, corpus)
             log.update(**{f'val_{corpus}_{k}': v for k, v in val_log.items()})
 
         return log
 
-    def _valid_epoch(self, epoch, data_loader, corpus):
+    def _valid_epoch(self, data_loader, corpus):
         """
         Validate after training an epoch
         :return: A log that contains information about validation
@@ -127,9 +129,6 @@ class Trainer(BaseTrainer):
 
                 total_loss += loss.item() * pas_scores.size(0)
 
-                self.writer.set_step((epoch - 1) * len(data_loader) + step, 'valid')
-                self.writer.add_scalar(f'loss_{corpus}', loss.item())
-
                 if step % self.log_step == 0:
                     self.logger.info('Validation [{}/{} ({:.0f}%)] Time: {}'.format(
                         step * data_loader.batch_size,
@@ -138,6 +137,7 @@ class Trainer(BaseTrainer):
                         datetime.datetime.now().strftime('%H:%M:%S')))
 
         log = {'loss': total_loss / len(data_loader.dataset)}
+        self.writer.add_scalar(f'loss/{corpus}', log['loss'])
 
         if corpus != 'commonsense':
             prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
@@ -174,5 +174,5 @@ class Trainer(BaseTrainer):
         f1_metrics = np.zeros(len(self.metrics))
         for i, metric in enumerate(self.metrics):
             f1_metrics[i] += metric(result)
-            self.writer.add_scalar(f'{corpus}_{metric.__name__}', f1_metrics[i])
+            self.writer.add_scalar(f'{metric.__name__}/{corpus}', f1_metrics[i])
         return f1_metrics

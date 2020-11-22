@@ -329,7 +329,6 @@ def main() -> None:
             'verbosity': 2 if args.debug else 1,  # 0: WARNING, 1: INFO, 2: DEBUG
             'monitor': f'{mnt_mode} {mnt_metric}',
             'early_stop': 10,
-            'tensorboard': True,
         }
 
         config.write(
