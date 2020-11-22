@@ -140,20 +140,18 @@ class Trainer(BaseTrainer):
         self.writer.add_scalar(f'loss/{corpus}', log['loss'])
 
         if corpus != 'commonsense':
-            prediction_writer = PredictionKNPWriter(data_loader.dataset, self.logger)
+            dataset = data_loader.dataset
+            prediction_writer = PredictionKNPWriter(dataset, self.logger)
             documents_pred = prediction_writer.write(arguments_set, None)
-            if corpus == 'kc':
-                documents_gold = data_loader.dataset.joined_documents
-            else:
-                documents_gold = data_loader.dataset.documents
+            documents_gold = dataset.joined_documents if corpus == 'kc' else dataset.documents
             targets2label = {tuple(): '', ('pred',): 'pred', ('noun',): 'noun', ('pred', 'noun'): 'all'}
 
             scorer = Scorer(documents_pred, documents_gold,
-                            target_cases=data_loader.dataset.target_cases,
-                            target_exophors=data_loader.dataset.target_exophors,
-                            coreference=data_loader.dataset.coreference,
-                            bridging=data_loader.dataset.bridging,
-                            pas_target=targets2label[tuple(data_loader.dataset.pas_targets)])
+                            target_cases=dataset.target_cases,
+                            target_exophors=dataset.target_exophors,
+                            coreference=dataset.coreference,
+                            bridging=dataset.bridging,
+                            pas_target=targets2label[tuple(dataset.pas_targets)])
 
             val_metrics = self._eval_metrics(scorer.result_dict(), corpus)
 

@@ -5,13 +5,13 @@ from typing import List, Callable, Set
 
 import numpy as np
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 
 import data_loader.data_loaders as module_loader
 import data_loader.dataset as module_dataset
 import model.metric as module_metric
 import model.model as module_arch
+from data_loader.dataset import PASDataset
 from utils.parse_config import ConfigParser
 from prediction.prediction_writer import PredictionKNPWriter
 from prediction.inference import Inference
@@ -56,7 +56,7 @@ class Tester:
             log.update(self._test(data_loader, corpus))
         return log
 
-    def _test(self, data_loader: DataLoader, corpus: str):
+    def _test(self, data_loader, corpus: str):
 
         loss, *predictions = self.inference(data_loader)
 
@@ -66,11 +66,11 @@ class Tester:
                 *pre_predictions, prediction = predictions
                 for i, pre_prediction in enumerate(pre_predictions):
                     arguments_sets = pre_prediction.tolist()
-                    result = self._eval_pas(arguments_sets, data_loader, corpus=corpus, suffix=f'_{i}')
+                    result = self._eval_pas(arguments_sets, data_loader.dataset, corpus=corpus, suffix=f'_{i}')
                     log.update({f'{self.target}_{corpus}_{k}_{i}': v for k, v in result.items()})
             else:
                 prediction = predictions[0]  # (N, seq, case, seq)
-            result = self._eval_pas(prediction.tolist(), data_loader, corpus=corpus)
+            result = self._eval_pas(prediction.tolist(), data_loader.dataset, corpus=corpus)
         else:
             assert self.config['arch']['type'] == 'CommonsenseModel'
             result = self._eval_commonsense(predictions[1].tolist(), data_loader)
@@ -79,24 +79,21 @@ class Tester:
         log.update({f'{self.target}_{corpus}_{k}': v for k, v in result.items()})
         return log
 
-    def _eval_pas(self, arguments_set, data_loader, corpus: str, suffix: str = ''):
+    def _eval_pas(self, arguments_set, dataset: PASDataset, corpus: str, suffix: str = ''):
         prediction_output_dir = self.save_dir / f'{corpus}_out{suffix}'
-        prediction_writer = PredictionKNPWriter(data_loader.dataset,
+        prediction_writer = PredictionKNPWriter(dataset,
                                                 self.logger,
                                                 use_knp_overt=(not self.predict_overt))
         documents_pred = prediction_writer.write(arguments_set, prediction_output_dir)
-        if corpus == 'kc':
-            documents_gold = data_loader.dataset.joined_documents
-        else:
-            documents_gold = data_loader.dataset.documents
+        documents_gold = dataset.joined_documents if corpus == 'kc' else dataset.documents
 
         result = {}
         for pas_target in self.pas_targets:
             scorer = Scorer(documents_pred, documents_gold,
-                            target_cases=data_loader.dataset.target_cases,
-                            target_exophors=data_loader.dataset.target_exophors,
-                            coreference=data_loader.dataset.coreference,
-                            bridging=data_loader.dataset.bridging,
+                            target_cases=dataset.target_cases,
+                            target_exophors=dataset.target_exophors,
+                            coreference=dataset.coreference,
+                            bridging=dataset.bridging,
                             pas_target=pas_target)
 
             stem = corpus
