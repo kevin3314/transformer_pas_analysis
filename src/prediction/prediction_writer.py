@@ -4,8 +4,11 @@ from collections import defaultdict
 from logging import Logger
 from pathlib import Path
 from typing import List, Optional, Dict, NamedTuple, Union, TextIO
+import configparser
+import shutil
 
-from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase, Sentence
+from pyknp import KNP
+from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
 
 from data_loader.dataset import PASDataset
 from data_loader.dataset.read_example import PasExample
@@ -17,28 +20,37 @@ class PredictionKNPWriter:
     Args:
         dataset (PASDataset): 解析対象のデータセット
         logger (Logger): ロガー
-        use_gold_overt (bool): overt についてシステムの解析結果ではなく，データセットに付与されているものを使うかどうか
+        use_knp_overt (bool): overt について本システムの解析結果ではなく、KNP の格解析結果を使用する (default: True)
     """
-    rel_pat = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
-    tag_pat = re.compile(r'^\+ -?\d+\w ?')
-    case_analysis_pat = re.compile(r'<格解析結果:(.+?)>')
+    REL_PAT = re.compile(r'<rel type="([^\s]+?)"(?: mode="([^>]+?)")? target="(.*?)"(?: sid="(.*?)" id="(.+?)")?/>')
+    TAG_PAT = re.compile(r'^\+ -?\d+\w ?')
 
     def __init__(self,
                  dataset: PASDataset,
                  logger: Logger,
-                 use_gold_overt: bool = True,
+                 use_knp_overt: bool = True,
                  ) -> None:
         self.examples: List[PasExample] = dataset.examples
         self.cases: List[str] = dataset.target_cases
+        self.bridging: bool = dataset.bridging
+        self.coreference: bool = dataset.coreference
+        self.relations: List[str] = dataset.target_cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         self.exophors: List[str] = dataset.target_exophors
         self.index_to_special: Dict[int, str] = {idx: token for token, idx in dataset.special_to_index.items()}
-        self.coreference: bool = dataset.coreference
-        self.bridging: bool = dataset.bridging
         self.documents: List[Document] = dataset.documents
         self.logger = logger
-        self.use_gold_overt = use_gold_overt
+        self.use_knp_overt = use_knp_overt
         self.kc: bool = dataset.kc
         self.reader = dataset.reader
+        cfg = configparser.ConfigParser()
+        cfg.read(Path(__file__).parent.parent / 'analyzer' / 'config.ini')
+        if 'default' not in cfg:
+            logger.warning('Analyzer config not found. Instead, use default values.')
+            cfg['default'] = {}
+        section = cfg['default']
+        knp_command = section.get('knp_command', shutil.which('knp'))
+        jumanpp_command = section.get('juman_command', shutil.which('jumanpp'))
+        self.knp = KNP(command=knp_command, option='-tab -case2', jumancommand=jumanpp_command)
 
     def write(self,
               arguments_sets: List[List[List[int]]],
@@ -71,7 +83,7 @@ class PredictionKNPWriter:
                 output_knp_lines = []
                 for line in input_knp_lines:
                     if line.startswith('+ '):
-                        line = self.rel_pat.sub('', line)  # remove gold data
+                        line = self.REL_PAT.sub('', line)  # remove gold data
                         assert '<rel ' not in line
                     output_knp_lines.append(line)
 
@@ -120,6 +132,8 @@ class PredictionKNPWriter:
                      arguments_set: List[List[int]],  # (max_seq_len, cases)
                      document: Document,
                      ) -> List[str]:
+        overts = self._extract_overt(knp_lines, document)
+
         output_knp_lines = []
         dtid = 0
         sent_idx = 0
@@ -130,19 +144,15 @@ class PredictionKNPWriter:
                     sent_idx += 1
                 continue
 
-            # <格解析結果:>タグから overt case を見つける(inference用)
-            match = self.case_analysis_pat.search(line)
-            overt_dict = self._extract_overt_from_knp_result(match, document.sentences[sent_idx])
-
-            rel_removed: str = self.rel_pat.sub('', line)  # remove gold data
+            rel_removed: str = self.REL_PAT.sub('', line)  # remove gold data
             assert '<rel ' not in rel_removed
-            match = self.tag_pat.match(rel_removed)
+            match = self.TAG_PAT.match(rel_removed)
             if match is not None:
                 rel_string = self._rel_string(document.bp_list()[dtid],
                                               example,
                                               arguments_set,
                                               document,
-                                              overt_dict)
+                                              overts[dtid])
                 rel_idx = match.end()
                 output_knp_lines.append(rel_removed[:rel_idx] + rel_string + rel_removed[rel_idx:])
             else:
@@ -153,28 +163,39 @@ class PredictionKNPWriter:
 
         return output_knp_lines
 
-    @staticmethod
-    def _extract_overt_from_knp_result(match: Optional,
-                                       sentence: Sentence,
-                                       ) -> Dict[str, int]:
-        if match is None:
-            return {}
-        case_analysis_result = match.group(1)
-        c0 = case_analysis_result.find(':')
-        c1 = case_analysis_result.find(':', c0 + 1)
-
-        if case_analysis_result.count(':') < 2:  # For copula
-            return {}
-
-        overt_dict = {}
-        for k in case_analysis_result[c1 + 1:].split(';'):
-            items = k.split('/')
-            caseflag = items[1]
-            if caseflag == 'C':
-                case = items[0]
-                tid = int(items[3])
-                overt_dict[case] = sentence.bps[tid].dmid
-        return overt_dict
+    def _extract_overt(self,
+                       knp_lines: List[str],
+                       document: Document,
+                       ) -> Dict[int, Dict[str, int]]:
+        overts: Dict[int, Dict[str, int]] = defaultdict(dict)
+        blists = []
+        buff = ''
+        for line in knp_lines:
+            buff += line + '\n'
+            if line == 'EOS':
+                try:
+                    blists.append(self.knp.reparse_knp_result(buff.strip()))
+                except Exception:
+                    self.logger.warning(f"overt extraction from '{document.doc_id}' was partly skipped due to an error "
+                                        f"occurred in KNP")
+                    blists.append(None)
+                buff = ''
+        assert len(document) == len(blists)
+        for sentence, blist in zip(document, blists):
+            if blist is None:
+                continue
+            tag_list = blist.tag_list()
+            assert len(sentence.bps) == len(tag_list)
+            for bp, tag in zip(sentence.bps, tag_list):
+                assert bp.tid == tag.tag_id
+                if tag.pas is None:
+                    continue
+                for case, args in tag.pas.arguments.items():
+                    if case not in self.cases:  # ノ格は表層格から overt 判定できないので overts に追加しない
+                        continue
+                    for arg in filter(lambda a: a.flag == 'C', args):
+                        overts[bp.dtid][case] = sentence.bps[arg.tid].dmid
+        return overts
 
     def _rel_string(self,
                     bp: BasePhrase,
@@ -186,42 +207,35 @@ class PredictionKNPWriter:
         rels: List[RelTag] = []
         dmid2bp = {document.mrph2dmid[mrph]: bp for bp in document.bp_list() for mrph in bp.mrph_list()}
         assert len(example.arguments_set) == len(dmid2bp)
-        relations: List[str] = self.cases + (['ノ'] * self.bridging) + (['='] * self.coreference)
         for mrph in bp.mrph_list():
-            dmid = document.mrph2dmid[mrph]
-            token_index = example.orig_to_tok_index[dmid]
+            dmid: int = document.mrph2dmid[mrph]
+            token_index: int = example.orig_to_tok_index[dmid]
             arguments: List[int] = arguments_set[token_index]
-            # {'ガ': ['14%O', '著者'], 'ヲ': ['23%C'], 'ニ': ['NULL'], 'ガ２': ['NULL'], '=': []}
-            gold_arguments: Dict[str, List[str]] = example.arguments_set[dmid]
-            assert len(relations) == len(arguments)
-            assert relations == list(gold_arguments.keys())
-            for (case, gold_args), argument in zip(gold_arguments.items(), arguments):
-                # 助詞などの非解析対象形態素については gold_args が空になっている
-                if not gold_args:
+            # 助詞などの非解析対象形態素については gold_args が空になっている
+            # inference時、解析対象形態素は ['NULL'] となる
+            is_targets: Dict[str, bool] = {rel: bool(args) for rel, args in example.arguments_set[dmid].items()}
+            assert len(self.relations) == len(arguments)
+            for relation, argument in zip(self.relations, arguments):
+                if not is_targets[relation]:
                     continue
-                # overt (train/test)
-                if self.use_gold_overt and any(arg.endswith('%C') for arg in gold_args):
-                    # use gold data for overt case
-                    prediction_dmid = int([arg for arg in gold_args if arg.endswith('%C')][0][:-2])
-                # overt (inference)
-                elif self.use_gold_overt and case in overt_dict:
-                    prediction_dmid = overt_dict[case]
-                else:
+                if self.use_knp_overt and relation in overt_dict:
+                    # overt
+                    prediction_dmid = overt_dict[relation]
+                elif argument in self.index_to_special:
                     # special
-                    if argument in self.index_to_special:
-                        special_anaphor = self.index_to_special[argument]
-                        if special_anaphor in self.exophors:  # exclude NULL and NA
-                            rels.append(RelTag(case, special_anaphor, None, None))
-                        continue
-                    # [SEP] or [CLS]
-                    elif example.tok_to_orig_index[argument] is None:
+                    special_arg = self.index_to_special[argument]
+                    if special_arg in self.exophors:  # exclude [NULL] and [NA]
+                        rels.append(RelTag(relation, special_arg, None, None))
+                    continue
+                else:
+                    # normal
+                    prediction_dmid = example.tok_to_orig_index[argument]
+                    if prediction_dmid is None:
+                        # [SEP] or [CLS]
                         self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
                         continue
-                    # normal
-                    else:
-                        prediction_dmid = example.tok_to_orig_index[argument]
                 prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
-                rels.append(RelTag(case, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
+                rels.append(RelTag(relation, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
 
         return ''.join(rel.to_string() for rel in rels)
 

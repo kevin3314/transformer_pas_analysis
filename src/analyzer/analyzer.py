@@ -10,7 +10,6 @@ from logging import Logger
 
 import jaconv
 from pyknp import Juman, KNP
-from transformers import BertConfig
 from textformatting import ssplit
 
 import model.model as module_arch
@@ -49,14 +48,8 @@ class Analyzer:
 
         os.environ['BPA_DISABLE_CACHE'] = '1'
 
-        dataset_args = self.config['test_kwdlc_dataset']['args']
-        bert_config = BertConfig.from_pretrained(dataset_args['dataset_config']['bert_path'])
-        coreference = dataset_args['coreference']
-        exophors = dataset_args['exophors']
-        expanded_vocab_size = bert_config.vocab_size + len(exophors) + 1 + int(coreference)
-
         # build model architecture
-        model = self.config.init_obj('arch', module_arch, vocab_size=expanded_vocab_size)
+        model = self.config.init_obj('arch', module_arch)
         self.logger.info(model)
 
         self.inference = Inference(self.config, model, logger=self.logger)
@@ -73,24 +66,24 @@ class Analyzer:
             knp_out = ''
             for i, sent in enumerate(sents):
                 knp_out_ = self._apply_knp(sent)
-                knp_out_ = knp_out_.replace('S-ID:1', f'S-ID:{i + 1}')
+                knp_out_ = knp_out_.replace('# S-ID:1', f'# S-ID:0-{i + 1}')
                 knp_out += knp_out_
-            with save_dir.joinpath(f'doc.knp').open(mode='wt') as f:
+            with save_dir.joinpath(f'0.knp').open(mode='wt') as f:
                 f.write(knp_out)
 
         return self._analysis(save_dir)
 
     def analyze_from_knp(self, knp_out: str, knp_dir: Optional[str] = None) -> Tuple[list, PASDataset]:
-        save_dir = Path(knp_dir) if knp_dir is not None else Path('log') / datetime.now().strftime(r'%m%d_%H%M%S')
+        save_dir = Path(knp_dir or 'log') / datetime.now().strftime(r'%m%d_%H%M%S')
         save_dir.mkdir(exist_ok=True)
         with save_dir.joinpath('doc.knp').open(mode='wt') as f:
             f.write(knp_out)
         return self._analysis(save_dir)
 
     def _analysis(self, path: Path) -> Tuple[list, PASDataset]:
-        self.config['test_kwdlc_dataset']['args']['path'] = str(path)
-        dataset = self.config.init_obj(f'test_kwdlc_dataset', module_dataset)
-        data_loader = self.config.init_obj(f'test_data_loader', module_loader, dataset)
+        self.config['test_datasets']['kwdlc']['args']['path'] = str(path)
+        dataset = self.config.init_obj('test_datasets.kwdlc', module_dataset)
+        data_loader = self.config.init_obj('data_loaders.test', module_loader, dataset)
 
         _, *predictions = self.inference(data_loader)
 

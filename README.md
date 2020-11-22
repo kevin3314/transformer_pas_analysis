@@ -1,22 +1,20 @@
 # BERT based PAS analysis
 
-Japanese Predicate Argument Structure (PAS) Analyzer using BERT.
+Japanese Predicate Argument Structure (PAS) Analyzer.
 
 ## Description
 
-This project is mainly for Japanese PAS analysis,
-but provides following other analyses as well.
+This project performs the following analyses in a multi-task manner:
+- Verbal Predicate argument structure Analysis (VPA)
+- Nominal Predicate argument structure Analysis (NPA)
+- Bridging Anaphora Resolution (BAR)
+- Coreference Resolution (CR)
 
-- Coreference resolution
-- Bridging anaphora resolution
-- Nominal predicate argument structure analysis
-
-PAS analysis process is as follows:
-
-1. Apply Juman++ and (BERT)KNP to input text and split into base phrases
-2. Extract predicates from base phrases by seeing whether the phrase has "<用言>" feature
-3. Split each phrases into subwords using BPE
-4. For each predicate subword, select its arguments
+The process is as follows:
+1. Apply Juman++ and KNP to an input text and split the text into base phrases
+2. Extract predicates from base phrases by seeing whether the phrase has "<用言>" feature, which was tagged by KNP
+3. Split each phrase into subwords using BPE
+4. For each predicate subword, select its arguments using BERT
 
 ## Demo
 
@@ -28,7 +26,7 @@ PAS analysis process is as follows:
 
 - Python 3.7.2+
 - [Juman++](https://github.com/ku-nlp/jumanpp) 2.0.0-rc3
-- [KNP](http://nlp.ist.i.kyoto-u.ac.jp/index.php?KNP) 4.2
+- [KNP](https://github.com/ku-nlp/knp) 5.0
 
 ## Setup Environment
 
@@ -39,7 +37,7 @@ Use [poetry](https://github.com/python-poetry/poetry)
 ## Quick Start
 
 ```zsh
-MODEL=</path/to/trained/checkpoint>
+MODEL=/path/to/trained/checkpoint
 
 python src/predict.py \
 --model $MODEL \
@@ -57,7 +55,7 @@ Result:
 
 Options:
 
-- `--model, -m, -r`: path to trained checkpoint
+- `--model, -m, -r`: a path to trained checkpoint
 - `--device, -d`: GPU IDs separated by "," (if not specified, use CPU)
 - `--input, -i`: input sentence or document separated by "。"
 - `-tab`: output results in KNP tab format if specified
@@ -70,19 +68,26 @@ For details, see `src/analyzer/config.example.ini`
 
 ## Analyze a Large Number of Documents
 
-Given raw sentences, first you need to apply (BERT)KNP to them and split into documents.
-Then, run `predict.py` specifying the document directory.
+Given raw sentences, first you need to apply KNP to them and create `.knp` files.
+Then, run `predict.py` specifying the directory where created `.knp` files exist in the option `--knp-dir`.
+When the analysis finishes, `.knp` files with `<rel >` and `<述語項構造:>` tags are exported to the directory
+specified in `--export-dir` option.
+To utilize this result, I recommend you to use [kyoto-reader](https://github.com/ku-nlp/kyoto-reader).
 
 ```zsh
 python src/predict.py \
---model </path/to/trained/checkpoint> \
---knp-dir </path/to/parsed/document/directory>
---export-dir <path/to/export/directory>
+--model /path/to/trained/checkpoint \
+--knp-dir /path/to/parsed/document/directory
+--export-dir path/to/export/directory
 ```
 
-For details, see Makefile [here](https://bitbucket.org/ku_nlp/causal-graph/src/master/scripts/knp_and_pas/Makefile)
+Note: \
+Each .knp file, which KNP created, contains a line indicating the sentence id of the following lines: `# S-ID:***`.
+This project regard S-ID without its tail as the document id.
+For example, the document id of a sentence whose S-ID is `w201106-0000060050-1` is `w201106-0000060050`.
+Sentences that have the same document ids are analyzed as a single document.
 
-## Training Your Own Model
+## Training Your Model
 
 ### Preparing Corpus
 
@@ -104,8 +109,9 @@ Otherwise
 
 Add features:
 
-[kyoto-reader](https://github.com/ku-nlp/kyoto-reader), which this project depends on, provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpus.
-Make sure you are in the virtual environment of bert_pas_analysis when you run `configure` and `idsplit` commands.
+[kyoto-reader](https://github.com/ku-nlp/kyoto-reader), which this project depends on,
+provides [some commands](https://kyoto-reader.readthedocs.io/en/latest/#corpus-preprocessor) to preprocess corpora.
+Make sure you are in the virtual environment of this project when you run `configure` and `idsplit` commands.
 
 ```
 $ git clone https://github.com/ku-nlp/JumanDIC
@@ -144,8 +150,8 @@ python src/preprocess.py \
 --bert-path /somewhere/NICT_BERT-base_JapaneseWikipedia_32K_BPE
 ```
 
-Don't care if many "sentence not found" messages are shown when processing kc.
-It is a natural result of splitting document.
+Don't care if many "sentence not found" messages are shown when processing KyotoCorpus.
+It is a natural result of splitting kc documents.
 
 ### Configuring Settings
 
@@ -154,18 +160,18 @@ The resultant files will be located at `config/`.
 
 ```zsh
 python src/configure.py \
--c <path-to-config-directory> \
+-c /path/to/config/directory \
 -d /somewhere/dataset \
 -e <num-epochs> \
 -b <batch-size> \
 --model <model-name> \
---corpus all
+--corpus kwdlc kc
 ```
 
 example:
 
 ```zsh
-python src/configure.py -c config -d data/dataset -e 4 8 -b 8 --model BaselineModel --corpus kwdlc all
+python src/configure.py -c config -d data/dataset -e 4 8 -b 8 --model BaselineModel --corpus kwdlc kc
 ```
 
 ### Training Models
@@ -174,7 +180,7 @@ Launch the trainer with a configuration.
 
 ```zsh
 python src/train.py \
--c <path-to-config-file> \
+-c /path/to/config/file \
 -d <gpu-ids>
 ```
 
@@ -188,17 +194,18 @@ python src/train.py -c config/BaselineModel-all-4e-nict-cz-vpa.json -d 0,1
 
 ```zsh
 python src/test.py \
--r <path-to-trained-model> \
+-r /path/to/trained/model \
 -d <gpu-ids>
 ```
 
-If you specify the config file, the setting will be overwritten.
+If you specify a config file besides the trained model, the setting will be overwritten. \
 
-You can perform ensemble test as well:
+You can perform an ensemble test as well.
+In this case, `test.py` gather all files named `model_best.pth` under the directory specified in `--ens` option.
 
 ```zsh
 python src/test.py \
---ens <path-to-model-set-directory> \
+--ens /path/to/model/set/directory \
 -d <gpu-ids>
 ```
 
@@ -206,42 +213,42 @@ python src/test.py \
 
 ```zsh
 python src/scorer.py \
---prediction-dir <system-output-directory> \
---gold-dir <gold-directory> \
+--prediction-dir /path/to/system/output/directory \
+--gold-dir /path/to/gold/directory \
 --read-prediction-from-pas-tag
 ```
 
 ## Perform Training Process with Make
 
-You can also perform training and testing via make command.
+You can also perform training and testing using `make` command.
 
-Here is an example of training your own model for 5 times with different random seeds:
+Here is an example of training your own model 5 times with different random seeds:
 
 ```zsh
-make train GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=5
+make train GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
 ```
 
 Testing command is as follows (outputs confidence interval):
 
 ```zsh
-make test GPUS=<gpu-ids> RESULT=<path-to-result-dir>
+make test GPUS=<gpu-ids> RESULT=/path/to/result/directory
 ```
 
-This command executes above two commands all at once.
+This command executes two commands above all at once.
 
 ```zsh
-make all GPUS=<gpu-ids> CONFIG=<path-to-config-file> TRAIN_NUM=5
+make all GPUS=<gpu-ids> CONFIG=/path/to/config/file TRAIN_NUM=5
 ```
 
-Ensemble test is also available.
+Ensemble test:
 
 ```zsh
-make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
+make test-ens GPUS=<gpu-ids> RESULT=/path/to/result/directory
 ```
 
 ## Environment Variables
 
-- `BPA_CACHE_DIR`: A directory where processed document is cached. Default is `/data/$USER/bpa_cache`.
+- `BPA_CACHE_DIR`: A directory where processed documents are cached. Default value is `/data/$USER/bpa_cache`.
 - `BPA_OVERWRITE_CACHE`: If set, bert_pas_analysis doesn't load cache even if it exists.
 - `BPA_DISABLE_CACHE`: If set, bert_pas_analysis doesn't load or save cache.
 
@@ -249,6 +256,7 @@ make test-ens GPUS=<gpu-ids> RESULT=<path-to-result-dir>
 
 - Kyoto University Web Document Leads Corpus ([KWDLC](https://github.com/ku-nlp/KWDLC))
 - Kyoto University Text Corpus ([KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus))
+- Fuman Corpus
 
 ## Licence
 

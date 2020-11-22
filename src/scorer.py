@@ -10,7 +10,7 @@ from collections import OrderedDict
 from pyknp import BList
 from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 
-from utils.util import OrderedDefaultDict
+from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 from utils.constants import CASE2YOMI
 
 logger = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ logger.setLevel(logging.WARNING)
 
 class Scorer:
     DEPTYPE2ANALYSIS = OrderedDict([('overt', 'overt'),
-                                    ('dep', 'case_analysis'),
-                                    ('intra', 'zero_intra_sentential'),
-                                    ('inter', 'zero_inter_sentential'),
+                                    ('dep', 'case'),
+                                    ('intra', 'zero_intra'),
+                                    ('inter', 'zero_inter'),
                                     ('exo', 'zero_exophora')])
 
     def __init__(self,
@@ -64,25 +64,25 @@ class Scorer:
             document_pred = self.did2document_pred[doc_id]
             document_gold = self.did2document_gold[doc_id]
             for predicate_pred in document_pred.get_predicates():
-                features = predicate_pred.tag.features
-                if (pas_target in ('pred', 'all') and '用言' in features) or \
-                        (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
+                if is_pas_target(predicate_pred,
+                                 verbal=(pas_target in ('pred', 'all')),
+                                 nominal=(pas_target in ('noun', 'all'))):
                     self.did2predicates_pred[doc_id].append(predicate_pred)
-                if self.bridging and '体言' in features and '非用言格解析' not in features:
+                if self.bridging and is_bridging_target(predicate_pred):
                     self.did2bridgings_pred[doc_id].append(predicate_pred)
             for predicate_gold in document_gold.get_predicates():
-                features = predicate_gold.tag.features
-                if (pas_target in ('pred', 'all') and '用言' in features) or \
-                        (pas_target in ('noun', 'all') and '非用言格解析' in features and '体言' in features):
+                if is_pas_target(predicate_gold,
+                                 verbal=(pas_target in ('pred', 'all')),
+                                 nominal=(pas_target in ('noun', 'all'))):
                     self.did2predicates_gold[doc_id].append(predicate_gold)
-                if self.bridging and '体言' in features and '非用言格解析' not in features:
+                if self.bridging and is_bridging_target(predicate_gold):
                     self.did2bridgings_gold[doc_id].append(predicate_gold)
 
             for mention_pred in document_pred.mentions.values():
-                if '体言' in mention_pred.tag.features:
+                if is_coreference_target(mention_pred):
                     self.did2mentions_pred[doc_id].append(mention_pred)
             for mention_gold in document_gold.mentions.values():
-                if '体言' in mention_gold.tag.features:
+                if is_coreference_target(mention_gold):
                     self.did2mentions_gold[doc_id].append(mention_gold)
 
         for doc_id in self.doc_ids:
@@ -287,11 +287,9 @@ class Scorer:
         for case, measures in self.measures.items():
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(measures)
-            case_result['zero_all'] = case_result['zero_intra_sentential'] + \
-                                      case_result['zero_inter_sentential'] + \
-                                      case_result['zero_exophora']
-            case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            case_result['all_w_overt'] = case_result['all'] + case_result['overt']
+            case_result['zero'] = case_result['zero_intra'] + case_result['zero_inter'] + case_result['zero_exophora']
+            case_result['case_zero'] = case_result['zero'] + case_result['case']
+            case_result['all'] = case_result['case_zero'] + case_result['overt']
             for analysis, measure in case_result.items():
                 all_case_result[analysis] += measure
             result[case] = case_result
@@ -302,13 +300,10 @@ class Scorer:
         if self.bridging:
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(self.measures_bridging)
-            case_result['zero_all'] = case_result['zero_intra_sentential'] + \
-                                      case_result['zero_inter_sentential'] + \
-                                      case_result['zero_exophora']
-            case_result['all'] = case_result['case_analysis'] + case_result['zero_all']
-            case_result['all_w_overt'] = case_result['all'] + case_result['overt']
+            case_result['zero'] = case_result['zero_intra'] + case_result['zero_inter'] + case_result['zero_exophora']
+            case_result['case_zero'] = case_result['zero'] + case_result['case']
+            case_result['all'] = case_result['case_zero'] + case_result['overt']
             all_case_result['bridging'] = case_result['all']
-            all_case_result['bridging_w_overt'] = case_result['all_w_overt']
 
         result['all_case'] = all_case_result
         return result
@@ -453,38 +448,50 @@ class Scorer:
         assert len(tree_strings) == len(blist.tag_list())
         all_midasis = [m.midasi for m in document.mentions.values()]
         tid2predicate = {predicate.tid: predicate for predicate in predicates if predicate.sid == sid}
-        tid2anaphor = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
+        tid2mention = {mention.tid: mention for mention in mentions if mention.sid == sid}
+        tid2bridging = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
         for tid in range(len(tree_strings)):
-            cases = []
-            predicate = None
-            if tid in tid2predicate:
-                cases += self.cases
-                predicate = tid2predicate[tid]
-            if tid in tid2anaphor:
-                cases += ['ノ']
-                predicate = tid2anaphor[tid]
-            if predicate is None:
-                continue
             tree_strings[tid] += '  '
-            arguments = document.get_arguments(predicate)
-            for case in cases:
-                args = arguments[case]
-                if case == 'ガ':
-                    args += arguments['判ガ']
-                if case == 'ノ':
-                    args += arguments['ノ？']
+            if tid in tid2predicate:
+                predicate = tid2predicate[tid]
+                arguments = document.get_arguments(predicate)
+                for case in self.cases:
+                    args = arguments[case]
+                    if case == 'ガ':
+                        args += arguments['判ガ']
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
+                    color: str = 'gray'
+                    if result == 'overt':
+                        color = 'green'
+                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
+                        color = 'blue'
+                    elif result == 'wrong':
+                        if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
+                            color = 'red'
+                    targets = set()
+                    for arg in args:
+                        target = arg.midasi
+                        if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                            target += str(arg.dtid)
+                        targets.add(target)
+                    if html:
+                        tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                    else:
+                        tree_strings[tid] += f'{",".join(targets)}:{case} '
+
+            if self.bridging and tid in tid2bridging:
+                anaphor = tid2bridging[tid]
+                arguments = document.get_arguments(anaphor)
+                args = arguments['ノ'] + arguments['ノ？']
+                result = self.comp_result.get((document.doc_id, anaphor.dtid, 'ノ'), None)
                 color: str = 'gray'
-                result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
                 if result == 'overt':
                     color = 'green'
                 elif result in Scorer.DEPTYPE2ANALYSIS.values():
                     color = 'blue'
                 elif result == 'wrong':
-                    for arg in args:
-                        if isinstance(arg, Argument):
-                            color = 'red'
-                        elif arg.midasi in self.relax_exophors:
-                            color = 'red'
+                    if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
+                        color = 'red'
                 targets = set()
                 for arg in args:
                     target = arg.midasi
@@ -492,11 +499,12 @@ class Scorer:
                         target += str(arg.dtid)
                     targets.add(target)
                 if html:
-                    tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                    tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:ノ</font> '
                 else:
-                    tree_strings[tid] += f'{",".join(targets)}:{case} '
-        if self.coreference:
-            for src_mention in filter(lambda m: m.sid == sid, mentions):
+                    tree_strings[tid] += f'{",".join(targets)}:ノ '
+
+            if self.coreference and tid in tid2mention:
+                src_mention = tid2mention[tid]
                 tgt_mentions_relaxed = self._filter_mentions(
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
@@ -509,17 +517,12 @@ class Scorer:
                     entity = document.entities[eid]
                     if entity.exophor in self.relax_exophors.values():
                         targets.add(entity.exophor)
-                if not targets:
-                    continue
                 result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
                 result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
-                tid = src_mention.tid
-                tree_strings[tid] += '  ＝:'
                 if html:
-                    tree_strings[tid] += f'<span style="background-color:#e0e0e0;color:{result2color[result]}">' \
-                                         + ','.join(targets) + '</span> '
+                    tree_strings[tid] += f'<font color="{result2color[result]}">＝:{",".join(targets)}</font>'
                 else:
-                    tree_strings[tid] += ','.join(targets)
+                    tree_strings[tid] += '＝:' + ','.join(targets)
 
         print('\n'.join(tree_strings), file=fh)
 
@@ -566,16 +569,14 @@ def main():
                         help='path to directory where system output KWDLC files exist (default: None)')
     parser.add_argument('--gold-dir', default=None, type=str,
                         help='path to directory where gold KWDLC files exist (default: None)')
-    parser.add_argument('--coreference', '--coref', action='store_true', default=False,
+    parser.add_argument('--coreference', '--coref', '--cr', action='store_true', default=False,
                         help='perform coreference resolution')
-    parser.add_argument('--bridging', '--brg', action='store_true', default=False,
+    parser.add_argument('--bridging', '--brg', '--bar', action='store_true', default=False,
                         help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='case strings separated by ","')
     parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
                         help='exophor strings separated by ","')
-    parser.add_argument('--coref-string', type=str, default='=,=構,=≒,=構≒',
-                        help='coreference strings separated by ","')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
     parser.add_argument('--pas-target', choices=['', 'pred', 'noun', 'all'], default='pred',
@@ -586,17 +587,9 @@ def main():
                         help='path to csv file which prediction result is exported (default: None)')
     args = parser.parse_args()
 
-    reader_gold = KyotoReader(
-        Path(args.gold_dir),
-        target_cases='ガ,ヲ,ニ,ガ２,ノ,ノ？,判ガ'.split(','),
-        target_corefs=args.coref_string.split(','),
-        extract_nes=False,
-        use_pas_tag=False,
-    )
+    reader_gold = KyotoReader(Path(args.gold_dir), extract_nes=False, use_pas_tag=False)
     reader_pred = KyotoReader(
         Path(args.prediction_dir),
-        target_cases=reader_gold.target_cases,
-        target_corefs=reader_gold.target_corefs,
         extract_nes=False,
         use_pas_tag=args.read_prediction_from_pas_tag,
     )
