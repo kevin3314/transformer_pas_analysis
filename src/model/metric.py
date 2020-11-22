@@ -1,21 +1,21 @@
 def case_analysis_f1_ga(result: dict):
-    return result['ガ']['case_analysis'].f1
+    return result['ガ']['case'].f1
 
 
 def case_analysis_f1_wo(result: dict):
-    return result['ヲ']['case_analysis'].f1
+    return result['ヲ']['case'].f1
 
 
 def case_analysis_f1_ni(result: dict):
-    return result['ニ']['case_analysis'].f1
+    return result['ニ']['case'].f1
 
 
 def case_analysis_f1_ga2(result: dict):
-    return result['ガ２']['case_analysis'].f1
+    return result['ガ２']['case'].f1
 
 
 def case_analysis_f1(result: dict):
-    return result['all_case']['case_analysis'].f1
+    return result['all_case']['case'].f1
 
 
 def zero_anaphora_f1_ga(result: dict):

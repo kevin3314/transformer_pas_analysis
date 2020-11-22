@@ -19,7 +19,7 @@ logger.setLevel(logging.WARNING)
 
 class Scorer:
     DEPTYPE2ANALYSIS = OrderedDict([('overt', 'overt'),
-                                    ('dep', 'case_analysis'),
+                                    ('dep', 'case'),
                                     ('intra', 'zero_intra'),
                                     ('inter', 'zero_inter'),
                                     ('exo', 'zero_exophora')])
@@ -288,7 +288,7 @@ class Scorer:
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(measures)
             case_result['zero'] = case_result['zero_intra'] + case_result['zero_inter'] + case_result['zero_exophora']
-            case_result['case_zero'] = case_result['zero'] + case_result['case_analysis']
+            case_result['case_zero'] = case_result['zero'] + case_result['case']
             case_result['all'] = case_result['case_zero'] + case_result['overt']
             for analysis, measure in case_result.items():
                 all_case_result[analysis] += measure
@@ -301,7 +301,7 @@ class Scorer:
             case_result = OrderedDefaultDict(lambda: Measure())
             case_result.update(self.measures_bridging)
             case_result['zero'] = case_result['zero_intra'] + case_result['zero_inter'] + case_result['zero_exophora']
-            case_result['case_zero'] = case_result['zero'] + case_result['case_analysis']
+            case_result['case_zero'] = case_result['zero'] + case_result['case']
             case_result['all'] = case_result['case_zero'] + case_result['overt']
             all_case_result['bridging'] = case_result['all']
 
