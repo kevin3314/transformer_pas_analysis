@@ -507,7 +507,7 @@ class IterativeRefinementModel(nn.Module):
         return loss, *outputs
 
 
-class FrozenRefinementModel(nn.Module):
+class FrozenIterativeRefinementModel(nn.Module):
     """初期予測レイヤに学習済みモデルを使用し、パラメータを更新しない"""
 
     def __init__(self, **kwargs):
