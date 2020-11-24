@@ -32,6 +32,7 @@ class BaselineModel(nn.Module):
                  dropout: float,
                  num_case: int,
                  coreference: bool,
+                 **_
                  ) -> None:
         super().__init__()
 
@@ -459,6 +460,56 @@ class FullGoldConditionalModel(nn.Module):
 
 class IterativeRefinementModel(nn.Module):
     """複数回の推論で予測を refine していく"""
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        conditional_model = kwargs.pop('conditional_model')
+        self.num_iter = kwargs.pop('num_iter')
+        self.initial_model = BaselineModel(**kwargs)
+        if conditional_model == 'emb':
+            self.conditional_model = EmbeddingConditionalModel(**kwargs)
+        elif conditional_model == 'atn':
+            self.conditional_model = AttentionConditionalModel(**kwargs)
+        elif conditional_model == 'catn':
+            self.conditional_model = CaseAwareAttentionConditionalModel(**kwargs)
+        elif conditional_model == 'out':
+            self.conditional_model = OutputConditionalModel(**kwargs)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                **_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        outputs, losses = [], []
+        loss, output = self.initial_model(input_ids,
+                                          attention_mask=attention_mask,
+                                          segment_ids=segment_ids,
+                                          ng_token_mask=ng_token_mask,
+                                          target=target)
+        outputs.append(output)
+        losses.append(loss)
+        for _ in range(self.num_iter):
+            # (b, seq, case, seq)
+            pre_output = outputs[-1].detach()
+            output = self.conditional_model(input_ids=input_ids,
+                                            attention_mask=attention_mask,
+                                            segment_ids=segment_ids,
+                                            ng_token_mask=ng_token_mask,
+                                            pre_output=pre_output)
+            loss = cross_entropy_pas_loss(output, target)
+            outputs.append(output)
+            losses.append(loss)
+        loss = torch.stack(losses).mean()
+
+        return loss, *outputs
+
+
+class SingleIterativeRefinementModel(nn.Module):
+    """初期予測も同一のモデルで行うIterativeRefinementModel
+    旧名: IterativeRefinementModel"""
 
     def __init__(self, **kwargs):
         super().__init__()
