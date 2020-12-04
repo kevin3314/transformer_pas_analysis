@@ -49,10 +49,9 @@ def api():
         </style>
         ''')
     html_string += '<pre>\n'
-    cases = dataset.target_cases + ['ノ'] * dataset.bridging
     for sid in document.sid2sentence.keys():
         with io.StringIO() as string:
-            draw_tree(document, sid, cases, dataset.bridging, dataset.coreference, string, html=True)
+            draw_tree(document, sid, dataset.target_cases, dataset.bridging, dataset.coreference, string, html=True)
             tree_string = string.getvalue()
         logger.info('output:\n' + tree_string)
         html_string += tree_string
