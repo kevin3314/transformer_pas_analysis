@@ -5,12 +5,14 @@ Japanese Predicate Argument Structure (PAS) Analyzer.
 ## Description
 
 This project performs the following analyses in a multi-task manner:
+
 - Verbal Predicate argument structure Analysis (VPA)
 - Nominal Predicate argument structure Analysis (NPA)
 - Bridging Anaphora Resolution (BAR)
 - Coreference Resolution (CR)
 
 The process is as follows:
+
 1. Apply Juman++ and KNP to an input text and split the text into base phrases
 2. Extract predicates from base phrases by seeing whether the phrase has "<用言>" feature, which was tagged by KNP
 3. Split each phrase into subwords using BPE
@@ -98,14 +100,16 @@ mkdir kwdlc kc
 
 Download corpora:
 
-For members of bitbucket.org:ku_nlp
+For members of github.com:ku-nlp
+
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
-- `git clone git@bitbucket.org:ku_nlp/kyotocorpus.git kc/kyotocorpus`
+- `git clone https://github.com/ku-nlp/KyotoCorpusFull.git kc/KyotoCorpus`
 
 Otherwise
+
 - `git clone https://github.com/ku-nlp/KWDLC kwdlc/KWDLC`
 - `git clone https://github.com/ku-nlp/KyotoCorpus kc/KyotoCorpus`
-- follow [instructions of KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus#conversion-to-the-complete-annotated-corpus)
+  - follow [instructions of KyotoCorpus](https://github.com/ku-nlp/KyotoCorpus#conversion-to-the-complete-annotated-corpus)
 
 Add features:
 
@@ -119,7 +123,7 @@ $ configure --corpus-dir /somewhere/kwdlc/KWDLC/knp \
 --data-dir /somewhere/kwdlc \
 --juman-dic-dir /somewhere/JumanDIC/dic
 created Makefile at /somewhere/kwdlc
-$ configure --corpus-dir /somewhere/kc/kyotocorpus/knp \
+$ configure --corpus-dir /somewhere/kc/KyotoCorpus/knp \
 --data-dir /somewhere/kc \
 --juman-dic-dir /somewhere/JumanDIC/dic
 created Makefile at /somewhere/kc
@@ -132,9 +136,9 @@ $ idsplit --corpus-dir /somewhere/kwdlc/knp \
 --test /somewhere/kwdlc/KWDLC/id/split_for_pas/test.id
 $ idsplit --corpus-dir /somewhere/kc/knp \
 --output-dir /somewhere/kc \
---train /somewhere/kc/kyotocorpus/id/split_for_pas/train.full.id \
---valid /somewhere/kc/kyotocorpus/id/split_for_pas/dev.full.id \
---test /somewhere/kc/kyotocorpus/id/split_for_pas/test.full.id
+--train /somewhere/kc/KyotoCorpus/id/split_for_pas/train.full.id \
+--valid /somewhere/kc/KyotoCorpus/id/split_for_pas/dev.full.id \
+--test /somewhere/kc/KyotoCorpus/id/split_for_pas/test.full.id
 ```
 
 ### Preprocessing Documents
