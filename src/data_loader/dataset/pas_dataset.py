@@ -66,15 +66,15 @@ class PASDataset(Dataset):
             reader = KyotoReader(Path(kc_joined_path), extract_nes=False)
             self.joined_documents = list(reader.process_all_documents())
 
-        self.examples = self._load(documents)
+        self.examples = self._load(documents, str(path))
 
-    def _load(self, documents: List[Document]) -> List[PasExample]:
+    def _load(self, documents: List[Document], path: str) -> List[PasExample]:
         examples: List[PasExample] = []
         load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
         save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
         bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
         for document in tqdm(documents, desc='processing documents'):
-            hash_ = self._hash(document, self.target_cases, self.target_exophors, self.coreference, self.bridging,
+            hash_ = self._hash(document, path, self.target_cases, self.target_exophors, self.coreference, self.bridging,
                                self.kc, self.pas_targets, self.train_targets, str(self.bert_path))
             example_cache_path = bpa_cache_dir / hash_ / f'{document.doc_id}.pkl'
             if example_cache_path.exists() and load_cache:
