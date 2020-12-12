@@ -48,6 +48,7 @@ class Trainer(BaseTrainer):
         self.optimizer.zero_grad()
 
         total_loss = 0
+        accum_count = 0
         for step, batch in enumerate(self.data_loader):
             # (input_ids, input_mask, segment_ids, ng_token_mask, target, deps, task)
             batch = {label: t.to(self.device, non_blocking=True) for label, t in batch.items()}
@@ -57,7 +58,7 @@ class Trainer(BaseTrainer):
 
             if len(loss.size()) > 0:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
-            loss_value = loss.item()
+            loss_value = loss.item()  # mean loss for this step
             total_loss += loss_value * next(iter(batch.values())).size(0)
 
             if step % self.log_step == 0:
@@ -69,22 +70,22 @@ class Trainer(BaseTrainer):
                     datetime.datetime.now().strftime('%H:%M:%S'),
                     loss_value))
 
-            if step < (len(self.data_loader) // self.gradient_accumulation_steps) * self.gradient_accumulation_steps:
-                gradient_accumulation_steps = self.gradient_accumulation_steps
-            else:
-                gradient_accumulation_steps = len(self.data_loader) % self.gradient_accumulation_steps
+            gradient_accumulation_steps = self.gradient_accumulation_steps
+            if step >= (len(self.data_loader) // self.gradient_accumulation_steps) * self.gradient_accumulation_steps:
+                gradient_accumulation_steps = len(self.data_loader) % self.gradient_accumulation_steps  # fraction
             if gradient_accumulation_steps > 1:
-                loss = loss / gradient_accumulation_steps
+                loss = loss / gradient_accumulation_steps  # scale loss
             loss.backward()
-            if (step + 1) % gradient_accumulation_steps == 0:
-                self.writer.set_step(
-                    (epoch - 1) * self.optimization_step_per_epoch + (step + 1) // gradient_accumulation_steps - 1)
+            accum_count += 1
+            if accum_count == gradient_accumulation_steps:
+                self.writer.set_step(self.writer.step + 1)
                 self.writer.add_scalar('lr', self.lr_scheduler.get_last_lr()[0])
                 self.writer.add_scalar('loss', loss_value)
                 self.writer.add_scalar('progress', current_step / self.total_step)
 
                 self.optimizer.step()
                 self.optimizer.zero_grad()
+                accum_count = 0
                 if self.lr_scheduler is not None:
                     self.lr_scheduler.step()
 
