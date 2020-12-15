@@ -119,22 +119,22 @@ Make sure you are in the virtual environment of this project when you run `confi
 
 ```
 $ git clone https://github.com/ku-nlp/JumanDIC
-$ configure --corpus-dir /somewhere/kwdlc/KWDLC/knp \
+$ kyoto configure --corpus-dir /somewhere/kwdlc/KWDLC/knp \
 --data-dir /somewhere/kwdlc \
 --juman-dic-dir /somewhere/JumanDIC/dic
 created Makefile at /somewhere/kwdlc
-$ configure --corpus-dir /somewhere/kc/KyotoCorpus/knp \
+$ kyoto configure --corpus-dir /somewhere/kc/KyotoCorpus/knp \
 --data-dir /somewhere/kc \
 --juman-dic-dir /somewhere/JumanDIC/dic
 created Makefile at /somewhere/kc
 $ cd /somewhere/kwdlc && make -i
 $ cd /somewhere/kc && make -i
-$ idsplit --corpus-dir /somewhere/kwdlc/knp \
+$ kyoto idsplit --corpus-dir /somewhere/kwdlc/knp \
 --output-dir /somewhere/kwdlc \
 --train /somewhere/kwdlc/KWDLC/id/split_for_pas/train.id \
 --valid /somewhere/kwdlc/KWDLC/id/split_for_pas/dev.id \
 --test /somewhere/kwdlc/KWDLC/id/split_for_pas/test.id
-$ idsplit --corpus-dir /somewhere/kc/knp \
+$ kyoto idsplit --corpus-dir /somewhere/kc/knp \
 --output-dir /somewhere/kc \
 --train /somewhere/kc/KyotoCorpus/id/split_for_pas/train.full.id \
 --valid /somewhere/kc/KyotoCorpus/id/split_for_pas/dev.full.id \
