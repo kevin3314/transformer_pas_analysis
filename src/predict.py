@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 from typing import List, Optional, TextIO
 
-from kyoto_reader import Document, Argument
+from kyoto_reader import Document, Argument, BaseArgument
 from pyknp import BList
 
 from prediction.prediction_writer import PredictionKNPWriter
@@ -39,18 +39,18 @@ def draw_tree(document: Document,
         blist.draw_tag_tree(fh=string, show_pos=False)
         tree_strings = string.getvalue().rstrip('\n').split('\n')
     assert len(tree_strings) == len(blist.tag_list())
-    all_midasis = [m.midasi for m in document.mentions.values()]
+    all_targets = [m.core for m in document.mentions.values()]
     tid2mention = {mention.tid: mention for mention in document.mentions.values() if mention.sid == sid}
-    for bp in document[sid].bp_list():
+    for bp in document[sid].bps:
         tree_strings[bp.tid] += '  '
         if is_pas_target(bp, verbal=True, nominal=True):
             arguments = document.get_arguments(bp)
             for case in cases:
-                args = arguments.get(case, [])
+                args: List[BaseArgument] = arguments.get(case, [])
                 targets = set()
                 for arg in args:
-                    target = arg.midasi
-                    if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                    target = str(arg)
+                    if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                         target += str(arg.dtid)
                     targets.add(target)
                 if html:
@@ -62,8 +62,8 @@ def draw_tree(document: Document,
             args = document.get_arguments(bp).get('ノ', [])
             targets = set()
             for arg in args:
-                target = arg.midasi
-                if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                target = str(arg)
+                if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                     target += str(arg.dtid)
                 targets.add(target)
             if html:
@@ -77,8 +77,8 @@ def draw_tree(document: Document,
                 tgt_mentions = [tgt for tgt in document.get_siblings(src_mention) if tgt.dtid < src_mention.dtid]
                 targets = set()
                 for tgt_mention in tgt_mentions:
-                    target = tgt_mention.midasi
-                    if all_midasis.count(tgt_mention.midasi) > 1:
+                    target = tgt_mention.core
+                    if all_targets.count(tgt_mention.core) > 1:
                         target += str(tgt_mention.dtid)
                     targets.add(target)
                 for eid in src_mention.eids:

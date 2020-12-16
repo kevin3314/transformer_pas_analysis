@@ -359,7 +359,7 @@ class Scorer:
                 writer.write('<h3 class="obi1">')
                 for sid, sentence in document_gold.sid2sentence.items():
                     writer.write(sid + ' ')
-                    writer.write(''.join(bnst.midasi for bnst in sentence.bnst_list()))
+                    writer.write(str(sentence))
                     writer.write('<br>')
                 writer.write('</h3>\n')
                 writer.write('<table>')
@@ -446,7 +446,7 @@ class Scorer:
             blist.draw_tag_tree(fh=string, show_pos=False)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(blist.tag_list())
-        all_midasis = [m.midasi for m in document.mentions.values()]
+        all_targets = [m.core for m in document.mentions.values()]
         tid2predicate = {predicate.tid: predicate for predicate in predicates if predicate.sid == sid}
         tid2mention = {mention.tid: mention for mention in mentions if mention.sid == sid}
         tid2bridging = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
@@ -466,12 +466,12 @@ class Scorer:
                     elif result in Scorer.DEPTYPE2ANALYSIS.values():
                         color = 'blue'
                     elif result == 'wrong':
-                        if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
+                        if any(isinstance(arg, Argument) or str(arg) in self.relax_exophors for arg in args):
                             color = 'red'
                     targets = set()
                     for arg in args:
-                        target = arg.midasi
-                        if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                        target = str(arg)
+                        if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                             target += str(arg.dtid)
                         targets.add(target)
                     if html:
@@ -490,12 +490,12 @@ class Scorer:
                 elif result in Scorer.DEPTYPE2ANALYSIS.values():
                     color = 'blue'
                 elif result == 'wrong':
-                    if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
+                    if any(isinstance(arg, Argument) or str(arg) in self.relax_exophors for arg in args):
                         color = 'red'
                 targets = set()
                 for arg in args:
-                    target = arg.midasi
-                    if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                    target = str(arg)
+                    if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                         target += str(arg.dtid)
                     targets.add(target)
                 if html:
@@ -509,8 +509,8 @@ class Scorer:
                     document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
                 for tgt_mention in tgt_mentions_relaxed:
-                    target: str = tgt_mention.midasi
-                    if all_midasis.count(target) > 1:
+                    target: str = tgt_mention.core
+                    if all_targets.count(target) > 1:
                         target += str(tgt_mention.dtid)
                     targets.add(target)
                 for eid in src_mention.eids:
