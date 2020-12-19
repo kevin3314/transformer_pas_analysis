@@ -2,13 +2,13 @@ import io
 import sys
 import logging
 import argparse
-import textwrap
 from pathlib import Path
 from typing import List, Dict, Set, Union, Optional, TextIO
 from collections import OrderedDict
 
 from pyknp import BList
 from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
+from jinja2 import Template, Environment, FileSystemLoader
 
 from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 from utils.constants import CASE2YOMI
@@ -345,81 +345,43 @@ class Scorer:
             destination.write(text)
 
     def write_html(self, output_file: Union[str, Path]):
-        if isinstance(output_file, str):
-            output_file = Path(output_file)
-        with output_file.open('w') as writer:
-            writer.write('<html lang="ja">\n')
-            writer.write(self._html_header())
-            writer.write('<body>\n')
-            writer.write('<h2>Bert Result</h2>\n')
-            writer.write('<pre>\n')
-            for doc_id in self.doc_ids:
-                document_pred = self.did2document_pred[doc_id]
-                document_gold = self.did2document_gold[doc_id]
-                writer.write('<h3 class="obi1">')
-                for sid, sentence in document_gold.sid2sentence.items():
-                    writer.write(sid + ' ')
-                    writer.write(str(sentence))
-                    writer.write('<br>')
-                writer.write('</h3>\n')
-                writer.write('<table>')
-                writer.write('<tr>\n<th>gold</th>\n')
-                writer.write('<th>prediction</th>\n</tr>')
+        data = []
+        for doc_id in self.doc_ids:
+            document_gold = self.did2document_gold[doc_id]
+            document_pred = self.did2document_pred[doc_id]
 
-                writer.write('<tr>')
-                # gold
-                writer.write('<td><pre>\n')
-                for sid in document_gold.sid2sentence.keys():
+            gold_tree = ''
+            for sid in document_gold.sid2sentence.keys():
+                with io.StringIO() as string:
                     self._draw_tree(sid,
                                     self.did2predicates_gold[doc_id],
                                     self.did2mentions_gold[doc_id],
                                     self.did2bridgings_gold[doc_id],
                                     document_gold,
-                                    fh=writer)
-                    writer.write('\n')
-                writer.write('</pre>')
-                # prediction
-                writer.write('<td><pre>\n')
-                for sid in document_pred.sid2sentence.keys():
+                                    fh=string)
+                    gold_tree += string.getvalue()
+
+            pred_tree = ''
+            for sid in document_pred.sid2sentence.keys():
+                with io.StringIO() as string:
                     self._draw_tree(sid,
                                     self.did2predicates_pred[doc_id],
                                     self.did2mentions_pred[doc_id],
                                     self.did2bridgings_pred[doc_id],
                                     document_pred,
-                                    fh=writer)
-                    writer.write('\n')
-                writer.write('</pre>\n</tr>\n')
+                                    fh=string)
+                    pred_tree += string.getvalue()
+            data.append((document_gold.sentences, gold_tree, pred_tree))
 
-                writer.write('</table>\n')
-            writer.write('</pre>\n')
-            writer.write('</body>\n')
-            writer.write('</html>\n')
+        env = Environment(loader=FileSystemLoader('.'))
+        template: Template = env.get_template('result/template.html')
 
-    @staticmethod
-    def _html_header():
-        return textwrap.dedent('''
-        <head>
-        <meta charset="utf-8" />
-        <title>Bert Result</title>
-        <style type="text/css">
-        td {
-            font-size: 11pt;
-            border: 1px solid #606060;
-            vertical-align: top;
-            margin: 5pt;
-        }
-        .obi1 {
-            background-color: pink;
-            font-size: 12pt;
-        }
-        pre {
-            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
-            GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
-            white-space: pre;
-        }
-        </style>
-        </head>
-        ''')
+        rendered = template.render({'data': data})
+
+        if isinstance(output_file, str):
+            output_file = Path(output_file)
+        with output_file.open('w') as writer:
+            writer.write(str(rendered))
 
     def _draw_tree(self,
                    sid: str,
@@ -597,7 +559,8 @@ def main():
     documents_gold = list(reader_gold.process_all_documents())
 
     assert set(args.case_string.split(',')) <= set(CASE2YOMI.keys())
-    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
+    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" ' \
+          'option instead'
     assert 'ノ' not in args.case_string.split(','), msg
     scorer = Scorer(documents_pred, documents_gold,
                     target_cases=args.case_string.split(','),
