@@ -575,7 +575,7 @@ def main():
                         help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='case strings separated by ","')
-    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
+    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人,不特定:物',
                         help='exophor strings separated by ","')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
