@@ -36,8 +36,7 @@ def api():
     html_string = textwrap.dedent('''
         <style type="text/css">
         pre {
-            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
-            GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
+            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", sans-serif;
             white-space: pre;
         }
         </style>
