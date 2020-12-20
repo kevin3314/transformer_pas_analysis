@@ -1,17 +1,17 @@
-import io
-import sys
-import logging
 import argparse
+import io
+import logging
+import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import List, Dict, Set, Union, Optional, TextIO
-from collections import OrderedDict
 
-from pyknp import BList
-from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 from jinja2 import Template, Environment, FileSystemLoader
+from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention, BasePhrase
+from pyknp import BList
 
-from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 from utils.constants import CASE2YOMI
+from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -54,36 +54,27 @@ class Scorer:
                 for n in ('１', '２', '３', '４', '５', '６', '７', '８', '９', '１０', '１１'):
                     self.relax_exophors[exophor + n] = exophor
 
-        self.did2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2bridgings_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2bridgings_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
-        self.did2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
+        self.did2predicates_pred: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2predicates_gold: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2bridgings_pred: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2bridgings_gold: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2mentions_pred: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2mentions_gold: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
-            document_pred = self.did2document_pred[doc_id]
-            document_gold = self.did2document_gold[doc_id]
-            for predicate_pred in document_pred.get_predicates():
-                if is_pas_target(predicate_pred,
-                                 verbal=(pas_target in ('pred', 'all')),
-                                 nominal=(pas_target in ('noun', 'all'))):
-                    self.did2predicates_pred[doc_id].append(predicate_pred)
-                if self.bridging and is_bridging_target(predicate_pred):
-                    self.did2bridgings_pred[doc_id].append(predicate_pred)
-            for predicate_gold in document_gold.get_predicates():
-                if is_pas_target(predicate_gold,
-                                 verbal=(pas_target in ('pred', 'all')),
-                                 nominal=(pas_target in ('noun', 'all'))):
-                    self.did2predicates_gold[doc_id].append(predicate_gold)
-                if self.bridging and is_bridging_target(predicate_gold):
-                    self.did2bridgings_gold[doc_id].append(predicate_gold)
-
-            for mention_pred in document_pred.mentions.values():
-                if is_coreference_target(mention_pred):
-                    self.did2mentions_pred[doc_id].append(mention_pred)
-            for mention_gold in document_gold.mentions.values():
-                if is_coreference_target(mention_gold):
-                    self.did2mentions_gold[doc_id].append(mention_gold)
+            for bp in self.did2document_pred[doc_id].bp_list():
+                if is_pas_target(bp, verbal=(pas_target in ('pred', 'all')), nominal=(pas_target in ('noun', 'all'))):
+                    self.did2predicates_pred[doc_id].append(bp)
+                if self.bridging and is_bridging_target(bp):
+                    self.did2bridgings_pred[doc_id].append(bp)
+                if self.coreference and is_coreference_target(bp):
+                    self.did2mentions_pred[doc_id].append(bp)
+            for bp in self.did2document_gold[doc_id].bp_list():
+                if is_pas_target(bp, verbal=(pas_target in ('pred', 'all')), nominal=(pas_target in ('noun', 'all'))):
+                    self.did2predicates_gold[doc_id].append(bp)
+                if self.bridging and is_bridging_target(bp):
+                    self.did2bridgings_gold[doc_id].append(bp)
+                if self.coreference and is_coreference_target(bp):
+                    self.did2mentions_gold[doc_id].append(bp)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
@@ -99,7 +90,7 @@ class Scorer:
         dtid2predicate_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2predicates_pred[doc_id]}
         dtid2predicate_gold: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2predicates_gold[doc_id]}
 
-        for dtid in range(len(document_pred.tag_list())):
+        for dtid in range(len(document_pred.bp_list())):
             if dtid in dtid2predicate_pred:
                 predicate_pred = dtid2predicate_pred[dtid]
                 arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
@@ -179,9 +170,9 @@ class Scorer:
         dtid2anaphor_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_pred[doc_id]}
         dtid2anaphor_gold: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_gold[doc_id]}
 
-        for dtid in range(len(document_pred.tag_list())):
+        for dtid in range(len(document_pred.bp_list())):
             if dtid in dtid2anaphor_pred:
-                anaphor_pred: Predicate = dtid2anaphor_pred[dtid]
+                anaphor_pred = dtid2anaphor_pred[dtid]
                 antecedents_pred: List[BaseArgument] = \
                     self._filter_args(document_pred.get_arguments(anaphor_pred, relax=False)['ノ'], anaphor_pred)
             else:
@@ -230,10 +221,14 @@ class Scorer:
                 self.measures_bridging[analysis].denom_gold += 1
 
     def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
-        dtid2mention_pred: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_pred[doc_id]}
-        dtid2mention_gold: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_gold[doc_id]}
+        dtid2mention_pred: Dict[int, Mention] = {bp.dtid: document_pred.mentions[bp.dtid]
+                                                 for bp in self.did2mentions_pred[doc_id]
+                                                 if bp.dtid in document_pred.mentions}
+        dtid2mention_gold: Dict[int, Mention] = {bp.dtid: document_gold.mentions[bp.dtid]
+                                                 for bp in self.did2mentions_gold[doc_id]
+                                                 if bp.dtid in document_gold.mentions}
 
-        for dtid in range(len(document_pred.tag_list())):
+        for dtid in range(len(document_pred.bp_list())):
             if dtid in dtid2mention_pred:
                 src_mention_pred = dtid2mention_pred[dtid]
                 tgt_mentions_pred = \
@@ -381,9 +376,9 @@ class Scorer:
 
     def _draw_tree(self,
                    sid: str,
-                   predicates: List[Predicate],
-                   mentions: List[Mention],
-                   anaphors: List[Predicate],
+                   predicates: List[BasePhrase],
+                   mentions: List[BasePhrase],
+                   anaphors: List[BasePhrase],
                    document: Document,
                    fh: Optional[TextIO] = None,
                    html: bool = True
@@ -392,9 +387,9 @@ class Scorer:
 
         Args:
             sid (str): 出力対象の文ID
-            predicates (List[Predicate]): document に含まれる全ての述語
-            mentions (List[Mention]): document に含まれる全ての mention
-            anaphors (List[Predicate]): document に含まれる全ての橋渡し照応詞
+            predicates (List[BasePhrase]): document に含まれる全ての述語
+            mentions (List[BasePhrase]): document に含まれる全ての mention
+            anaphors (List[BasePhrase]): document に含まれる全ての橋渡し照応詞
             document (Document): sid が含まれる文書
             fh (Optional[TextIO]): 出力ストリーム
             html (bool): html 形式で出力するかどうか
@@ -405,9 +400,10 @@ class Scorer:
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(blist.tag_list())
         all_targets = [m.core for m in document.mentions.values()]
-        tid2predicate = {predicate.tid: predicate for predicate in predicates if predicate.sid == sid}
-        tid2mention = {mention.tid: mention for mention in mentions if mention.sid == sid}
-        tid2bridging = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
+        tid2predicate: Dict[int, BasePhrase] = {predicate.tid: predicate for predicate in predicates
+                                                if predicate.sid == sid}
+        tid2mention: Dict[int, BasePhrase] = {mention.tid: mention for mention in mentions if mention.sid == sid}
+        tid2bridging: Dict[int, BasePhrase] = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
         for tid in range(len(tree_strings)):
             tree_strings[tid] += '  '
             if tid in tid2predicate:
@@ -462,20 +458,22 @@ class Scorer:
                     tree_strings[tid] += f'{",".join(targets)}:ノ '
 
             if self.coreference and tid in tid2mention:
-                src_mention = tid2mention[tid]
-                tgt_mentions_relaxed = self._filter_mentions(
-                    document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
-                for tgt_mention in tgt_mentions_relaxed:
-                    target: str = tgt_mention.core
-                    if all_targets.count(target) > 1:
-                        target += str(tgt_mention.dtid)
-                    targets.add(target)
-                for eid in src_mention.eids:
-                    entity = document.entities[eid]
-                    if entity.exophor in self.relax_exophors.values():
-                        targets.add(entity.exophor)
-                result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
+                src_dtid = tid2mention[tid].dtid
+                if src_dtid in document.mentions:
+                    src_mention = document.mentions[src_dtid]
+                    tgt_mentions_relaxed = self._filter_mentions(
+                        document.get_siblings(src_mention, relax=True), src_mention)
+                    for tgt_mention in tgt_mentions_relaxed:
+                        target: str = tgt_mention.core
+                        if all_targets.count(target) > 1:
+                            target += str(tgt_mention.dtid)
+                        targets.add(target)
+                    for eid in src_mention.eids:
+                        entity = document.entities[eid]
+                        if entity.exophor in self.relax_exophors.values():
+                            targets.add(entity.exophor)
+                result = self.comp_result.get((document.doc_id, src_dtid, '='), None)
                 result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
                 if html:
                     tree_strings[tid] += f'<font color="{result2color[result]}">＝:{",".join(targets)}</font>'
