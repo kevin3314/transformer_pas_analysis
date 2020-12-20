@@ -345,7 +345,7 @@ class Scorer:
             destination.write(text)
 
     def write_html(self, output_file: Union[str, Path]):
-        data = []
+        data: List[tuple] = []
         for doc_id in self.doc_ids:
             document_gold = self.did2document_gold[doc_id]
             document_pred = self.did2document_pred[doc_id]
@@ -374,14 +374,10 @@ class Scorer:
             data.append((document_gold.sentences, gold_tree, pred_tree))
 
         env = Environment(loader=FileSystemLoader('.'))
-        template: Template = env.get_template('result/template.html')
+        template: Template = env.get_template('src/template.html')
 
-        rendered = template.render({'data': data})
-
-        if isinstance(output_file, str):
-            output_file = Path(output_file)
-        with output_file.open('w') as writer:
-            writer.write(str(rendered))
+        with Path(output_file).open('wt') as f:
+            f.write(template.render({'data': data}))
 
     def _draw_tree(self,
                    sid: str,

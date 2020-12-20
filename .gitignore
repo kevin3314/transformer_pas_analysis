@@ -140,8 +140,7 @@ cython_debug/
 config
 data
 !tests/data
-result/*
-!result/template.html
+result/
 log
 
 *.ini
