@@ -394,6 +394,9 @@ class Scorer:
             fh (Optional[TextIO]): 出力ストリーム
             html (bool): html 形式で出力するかどうか
         """
+        result2color = {anal: 'blue' for anal in Scorer.DEPTYPE2ANALYSIS.values()}
+        result2color.update({'overt': 'green', 'wrong': 'red', None: 'gray'})
+        result2color_coref = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
         blist: BList = document.sid2sentence[sid].blist
         with io.StringIO() as string:
             blist.draw_tag_tree(fh=string, show_pos=False)
@@ -413,23 +416,15 @@ class Scorer:
                     args = arguments[case]
                     if case == 'ガ':
                         args += arguments['判ガ']
-                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
-                    color: str = 'gray'
-                    if result == 'overt':
-                        color = 'green'
-                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
-                        color = 'blue'
-                    elif result == 'wrong':
-                        if any(isinstance(arg, Argument) or str(arg) in self.relax_exophors for arg in args):
-                            color = 'red'
                     targets = set()
                     for arg in args:
                         target = str(arg)
                         if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                             target += str(arg.dtid)
                         targets.add(target)
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
                     if html:
-                        tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                        tree_strings[tid] += f'<font color="{result2color[result]}">{",".join(targets)}:{case}</font> '
                     else:
                         tree_strings[tid] += f'{",".join(targets)}:{case} '
 
@@ -437,23 +432,15 @@ class Scorer:
                 anaphor = tid2bridging[tid]
                 arguments = document.get_arguments(anaphor)
                 args = arguments['ノ'] + arguments['ノ？']
-                result = self.comp_result.get((document.doc_id, anaphor.dtid, 'ノ'), None)
-                color: str = 'gray'
-                if result == 'overt':
-                    color = 'green'
-                elif result in Scorer.DEPTYPE2ANALYSIS.values():
-                    color = 'blue'
-                elif result == 'wrong':
-                    if any(isinstance(arg, Argument) or str(arg) in self.relax_exophors for arg in args):
-                        color = 'red'
                 targets = set()
                 for arg in args:
                     target = str(arg)
                     if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                         target += str(arg.dtid)
                     targets.add(target)
+                result = self.comp_result.get((document.doc_id, anaphor.dtid, 'ノ'), None)
                 if html:
-                    tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:ノ</font> '
+                    tree_strings[tid] += f'<font color="{result2color[result]}">{",".join(targets)}:ノ</font> '
                 else:
                     tree_strings[tid] += f'{",".join(targets)}:ノ '
 
@@ -474,9 +461,8 @@ class Scorer:
                         if entity.exophor in self.relax_exophors.values():
                             targets.add(entity.exophor)
                 result = self.comp_result.get((document.doc_id, src_dtid, '='), None)
-                result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
                 if html:
-                    tree_strings[tid] += f'<font color="{result2color[result]}">＝:{",".join(targets)}</font>'
+                    tree_strings[tid] += f'<font color="{result2color_coref[result]}">＝:{",".join(targets)}</font>'
                 else:
                     tree_strings[tid] += '＝:' + ','.join(targets)
 
