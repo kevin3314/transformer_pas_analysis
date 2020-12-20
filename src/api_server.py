@@ -35,12 +35,6 @@ def api():
 
     html_string = textwrap.dedent('''
         <style type="text/css">
-        td {
-            font-size: 11pt;
-            border: 1px solid #606060;
-            vertical-align: top;
-            margin: 5pt;
-        }
         pre {
             font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
             GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
