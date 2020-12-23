@@ -235,7 +235,7 @@ class PredictionKNPWriter:
                         self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")
                         continue
                 prediction_bp: BasePhrase = dmid2bp[prediction_dmid]
-                rels.append(RelTag(relation, prediction_bp.midasi, prediction_bp.sid, prediction_bp.tid))
+                rels.append(RelTag(relation, prediction_bp.core, prediction_bp.sid, prediction_bp.tid))
 
         return ''.join(rel.to_string() for rel in rels)
 
@@ -275,7 +275,7 @@ class PredictionKNPWriter:
             if args:
                 arg: BaseArgument = args[0]
                 items[1] = dtype2caseflag[arg.dep_type]  # フラグ (C/N/O/D/E/U)
-                items[2] = arg.midasi  # 見出し
+                items[2] = str(arg)  # 見出し
                 if isinstance(arg, Argument):
                     items[3] = str(sid2index[pas.sid] - sid2index[arg.sid])  # N文前
                     items[4] = str(arg.tid)  # tag id

@@ -1,17 +1,17 @@
-import io
-import sys
-import logging
 import argparse
-import textwrap
+import io
+import logging
+import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import List, Dict, Set, Union, Optional, TextIO
-from collections import OrderedDict
 
+from jinja2 import Template, Environment, FileSystemLoader
+from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention, BasePhrase
 from pyknp import BList
-from kyoto_reader import KyotoReader, Document, Argument, SpecialArgument, BaseArgument, Predicate, Mention
 
-from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 from utils.constants import CASE2YOMI
+from utils.util import OrderedDefaultDict, is_pas_target, is_bridging_target, is_coreference_target
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -54,36 +54,27 @@ class Scorer:
                 for n in ('１', '２', '３', '４', '５', '６', '７', '８', '９', '１０', '１１'):
                     self.relax_exophors[exophor + n] = exophor
 
-        self.did2predicates_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2predicates_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2bridgings_pred: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2bridgings_gold: Dict[str, List[Predicate]] = OrderedDefaultDict(list)
-        self.did2mentions_pred: Dict[str, List[Mention]] = OrderedDefaultDict(list)
-        self.did2mentions_gold: Dict[str, List[Mention]] = OrderedDefaultDict(list)
+        self.did2predicates_pred: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2predicates_gold: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2bridgings_pred: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2bridgings_gold: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2mentions_pred: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
+        self.did2mentions_gold: Dict[str, List[BasePhrase]] = OrderedDefaultDict(list)
         for doc_id in self.doc_ids:
-            document_pred = self.did2document_pred[doc_id]
-            document_gold = self.did2document_gold[doc_id]
-            for predicate_pred in document_pred.get_predicates():
-                if is_pas_target(predicate_pred,
-                                 verbal=(pas_target in ('pred', 'all')),
-                                 nominal=(pas_target in ('noun', 'all'))):
-                    self.did2predicates_pred[doc_id].append(predicate_pred)
-                if self.bridging and is_bridging_target(predicate_pred):
-                    self.did2bridgings_pred[doc_id].append(predicate_pred)
-            for predicate_gold in document_gold.get_predicates():
-                if is_pas_target(predicate_gold,
-                                 verbal=(pas_target in ('pred', 'all')),
-                                 nominal=(pas_target in ('noun', 'all'))):
-                    self.did2predicates_gold[doc_id].append(predicate_gold)
-                if self.bridging and is_bridging_target(predicate_gold):
-                    self.did2bridgings_gold[doc_id].append(predicate_gold)
-
-            for mention_pred in document_pred.mentions.values():
-                if is_coreference_target(mention_pred):
-                    self.did2mentions_pred[doc_id].append(mention_pred)
-            for mention_gold in document_gold.mentions.values():
-                if is_coreference_target(mention_gold):
-                    self.did2mentions_gold[doc_id].append(mention_gold)
+            for bp in self.did2document_pred[doc_id].bp_list():
+                if is_pas_target(bp, verbal=(pas_target in ('pred', 'all')), nominal=(pas_target in ('noun', 'all'))):
+                    self.did2predicates_pred[doc_id].append(bp)
+                if self.bridging and is_bridging_target(bp):
+                    self.did2bridgings_pred[doc_id].append(bp)
+                if self.coreference and is_coreference_target(bp):
+                    self.did2mentions_pred[doc_id].append(bp)
+            for bp in self.did2document_gold[doc_id].bp_list():
+                if is_pas_target(bp, verbal=(pas_target in ('pred', 'all')), nominal=(pas_target in ('noun', 'all'))):
+                    self.did2predicates_gold[doc_id].append(bp)
+                if self.bridging and is_bridging_target(bp):
+                    self.did2bridgings_gold[doc_id].append(bp)
+                if self.coreference and is_coreference_target(bp):
+                    self.did2mentions_gold[doc_id].append(bp)
 
         for doc_id in self.doc_ids:
             document_pred = self.did2document_pred[doc_id]
@@ -99,7 +90,7 @@ class Scorer:
         dtid2predicate_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2predicates_pred[doc_id]}
         dtid2predicate_gold: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2predicates_gold[doc_id]}
 
-        for dtid in range(len(document_pred.tag_list())):
+        for dtid in range(len(document_pred.bp_list())):
             if dtid in dtid2predicate_pred:
                 predicate_pred = dtid2predicate_pred[dtid]
                 arguments_pred = document_pred.get_arguments(predicate_pred, relax=False)
@@ -179,9 +170,9 @@ class Scorer:
         dtid2anaphor_pred: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_pred[doc_id]}
         dtid2anaphor_gold: Dict[int, Predicate] = {pred.dtid: pred for pred in self.did2bridgings_gold[doc_id]}
 
-        for dtid in range(len(document_pred.tag_list())):
+        for dtid in range(len(document_pred.bp_list())):
             if dtid in dtid2anaphor_pred:
-                anaphor_pred: Predicate = dtid2anaphor_pred[dtid]
+                anaphor_pred = dtid2anaphor_pred[dtid]
                 antecedents_pred: List[BaseArgument] = \
                     self._filter_args(document_pred.get_arguments(anaphor_pred, relax=False)['ノ'], anaphor_pred)
             else:
@@ -230,10 +221,14 @@ class Scorer:
                 self.measures_bridging[analysis].denom_gold += 1
 
     def _evaluate_coref(self, doc_id: str, document_pred: Document, document_gold: Document):
-        dtid2mention_pred: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_pred[doc_id]}
-        dtid2mention_gold: Dict[int, Mention] = {ment.dtid: ment for ment in self.did2mentions_gold[doc_id]}
+        dtid2mention_pred: Dict[int, Mention] = {bp.dtid: document_pred.mentions[bp.dtid]
+                                                 for bp in self.did2mentions_pred[doc_id]
+                                                 if bp.dtid in document_pred.mentions}
+        dtid2mention_gold: Dict[int, Mention] = {bp.dtid: document_gold.mentions[bp.dtid]
+                                                 for bp in self.did2mentions_gold[doc_id]
+                                                 if bp.dtid in document_gold.mentions}
 
-        for dtid in range(len(document_pred.tag_list())):
+        for dtid in range(len(document_pred.bp_list())):
             if dtid in dtid2mention_pred:
                 src_mention_pred = dtid2mention_pred[dtid]
                 tgt_mentions_pred = \
@@ -345,87 +340,45 @@ class Scorer:
             destination.write(text)
 
     def write_html(self, output_file: Union[str, Path]):
-        if isinstance(output_file, str):
-            output_file = Path(output_file)
-        with output_file.open('w') as writer:
-            writer.write('<html lang="ja">\n')
-            writer.write(self._html_header())
-            writer.write('<body>\n')
-            writer.write('<h2>Bert Result</h2>\n')
-            writer.write('<pre>\n')
-            for doc_id in self.doc_ids:
-                document_pred = self.did2document_pred[doc_id]
-                document_gold = self.did2document_gold[doc_id]
-                writer.write('<h3 class="obi1">')
-                for sid, sentence in document_gold.sid2sentence.items():
-                    writer.write(sid + ' ')
-                    writer.write(''.join(bnst.midasi for bnst in sentence.bnst_list()))
-                    writer.write('<br>')
-                writer.write('</h3>\n')
-                writer.write('<table>')
-                writer.write('<tr>\n<th>gold</th>\n')
-                writer.write('<th>prediction</th>\n</tr>')
+        data: List[tuple] = []
+        for doc_id in self.doc_ids:
+            document_gold = self.did2document_gold[doc_id]
+            document_pred = self.did2document_pred[doc_id]
 
-                writer.write('<tr>')
-                # gold
-                writer.write('<td><pre>\n')
-                for sid in document_gold.sid2sentence.keys():
+            gold_tree = ''
+            for sid in document_gold.sid2sentence.keys():
+                with io.StringIO() as string:
                     self._draw_tree(sid,
                                     self.did2predicates_gold[doc_id],
                                     self.did2mentions_gold[doc_id],
                                     self.did2bridgings_gold[doc_id],
                                     document_gold,
-                                    fh=writer)
-                    writer.write('\n')
-                writer.write('</pre>')
-                # prediction
-                writer.write('<td><pre>\n')
-                for sid in document_pred.sid2sentence.keys():
+                                    fh=string)
+                    gold_tree += string.getvalue()
+
+            pred_tree = ''
+            for sid in document_pred.sid2sentence.keys():
+                with io.StringIO() as string:
                     self._draw_tree(sid,
                                     self.did2predicates_pred[doc_id],
                                     self.did2mentions_pred[doc_id],
                                     self.did2bridgings_pred[doc_id],
                                     document_pred,
-                                    fh=writer)
-                    writer.write('\n')
-                writer.write('</pre>\n</tr>\n')
+                                    fh=string)
+                    pred_tree += string.getvalue()
+            data.append((document_gold.sentences, gold_tree, pred_tree))
 
-                writer.write('</table>\n')
-            writer.write('</pre>\n')
-            writer.write('</body>\n')
-            writer.write('</html>\n')
+        env = Environment(loader=FileSystemLoader('.'))
+        template: Template = env.get_template('src/template.html')
 
-    @staticmethod
-    def _html_header():
-        return textwrap.dedent('''
-        <head>
-        <meta charset="utf-8" />
-        <title>Bert Result</title>
-        <style type="text/css">
-        td {
-            font-size: 11pt;
-            border: 1px solid #606060;
-            vertical-align: top;
-            margin: 5pt;
-        }
-        .obi1 {
-            background-color: pink;
-            font-size: 12pt;
-        }
-        pre {
-            font-family: "ＭＳ ゴシック", "Osaka-Mono", "Osaka-等幅", "さざなみゴシック", "Sazanami Gothic", DotumChe,
-            GulimChe, BatangChe, MingLiU, NSimSun, Terminal;
-            white-space: pre;
-        }
-        </style>
-        </head>
-        ''')
+        with Path(output_file).open('wt') as f:
+            f.write(template.render({'data': data}))
 
     def _draw_tree(self,
                    sid: str,
-                   predicates: List[Predicate],
-                   mentions: List[Mention],
-                   anaphors: List[Predicate],
+                   predicates: List[BasePhrase],
+                   mentions: List[BasePhrase],
+                   anaphors: List[BasePhrase],
                    document: Document,
                    fh: Optional[TextIO] = None,
                    html: bool = True
@@ -434,22 +387,26 @@ class Scorer:
 
         Args:
             sid (str): 出力対象の文ID
-            predicates (List[Predicate]): document に含まれる全ての述語
-            mentions (List[Mention]): document に含まれる全ての mention
-            anaphors (List[Predicate]): document に含まれる全ての橋渡し照応詞
+            predicates (List[BasePhrase]): document に含まれる全ての述語
+            mentions (List[BasePhrase]): document に含まれる全ての mention
+            anaphors (List[BasePhrase]): document に含まれる全ての橋渡し照応詞
             document (Document): sid が含まれる文書
             fh (Optional[TextIO]): 出力ストリーム
             html (bool): html 形式で出力するかどうか
         """
+        result2color = {anal: 'blue' for anal in Scorer.DEPTYPE2ANALYSIS.values()}
+        result2color.update({'overt': 'green', 'wrong': 'red', None: 'gray'})
+        result2color_coref = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
         blist: BList = document.sid2sentence[sid].blist
         with io.StringIO() as string:
             blist.draw_tag_tree(fh=string, show_pos=False)
             tree_strings = string.getvalue().rstrip('\n').split('\n')
         assert len(tree_strings) == len(blist.tag_list())
-        all_midasis = [m.midasi for m in document.mentions.values()]
-        tid2predicate = {predicate.tid: predicate for predicate in predicates if predicate.sid == sid}
-        tid2mention = {mention.tid: mention for mention in mentions if mention.sid == sid}
-        tid2bridging = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
+        all_targets = [m.core for m in document.mentions.values()]
+        tid2predicate: Dict[int, BasePhrase] = {predicate.tid: predicate for predicate in predicates
+                                                if predicate.sid == sid}
+        tid2mention: Dict[int, BasePhrase] = {mention.tid: mention for mention in mentions if mention.sid == sid}
+        tid2bridging: Dict[int, BasePhrase] = {anaphor.tid: anaphor for anaphor in anaphors if anaphor.sid == sid}
         for tid in range(len(tree_strings)):
             tree_strings[tid] += '  '
             if tid in tid2predicate:
@@ -459,23 +416,15 @@ class Scorer:
                     args = arguments[case]
                     if case == 'ガ':
                         args += arguments['判ガ']
-                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
-                    color: str = 'gray'
-                    if result == 'overt':
-                        color = 'green'
-                    elif result in Scorer.DEPTYPE2ANALYSIS.values():
-                        color = 'blue'
-                    elif result == 'wrong':
-                        if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
-                            color = 'red'
                     targets = set()
                     for arg in args:
-                        target = arg.midasi
-                        if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                        target = str(arg)
+                        if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                             target += str(arg.dtid)
                         targets.add(target)
+                    result = self.comp_result.get((document.doc_id, predicate.dtid, case), None)
                     if html:
-                        tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:{case}</font> '
+                        tree_strings[tid] += f'<font color="{result2color[result]}">{",".join(targets)}:{case}</font> '
                     else:
                         tree_strings[tid] += f'{",".join(targets)}:{case} '
 
@@ -483,44 +432,37 @@ class Scorer:
                 anaphor = tid2bridging[tid]
                 arguments = document.get_arguments(anaphor)
                 args = arguments['ノ'] + arguments['ノ？']
-                result = self.comp_result.get((document.doc_id, anaphor.dtid, 'ノ'), None)
-                color: str = 'gray'
-                if result == 'overt':
-                    color = 'green'
-                elif result in Scorer.DEPTYPE2ANALYSIS.values():
-                    color = 'blue'
-                elif result == 'wrong':
-                    if any(isinstance(arg, Argument) or arg.midasi in self.relax_exophors for arg in args):
-                        color = 'red'
                 targets = set()
                 for arg in args:
-                    target = arg.midasi
-                    if all_midasis.count(arg.midasi) > 1 and isinstance(arg, Argument):
+                    target = str(arg)
+                    if all_targets.count(str(arg)) > 1 and isinstance(arg, Argument):
                         target += str(arg.dtid)
                     targets.add(target)
+                result = self.comp_result.get((document.doc_id, anaphor.dtid, 'ノ'), None)
                 if html:
-                    tree_strings[tid] += f'<font color="{color}">{",".join(targets)}:ノ</font> '
+                    tree_strings[tid] += f'<font color="{result2color[result]}">{",".join(targets)}:ノ</font> '
                 else:
                     tree_strings[tid] += f'{",".join(targets)}:ノ '
 
             if self.coreference and tid in tid2mention:
-                src_mention = tid2mention[tid]
-                tgt_mentions_relaxed = self._filter_mentions(
-                    document.get_siblings(src_mention, relax=True), src_mention)
                 targets = set()
-                for tgt_mention in tgt_mentions_relaxed:
-                    target: str = tgt_mention.midasi
-                    if all_midasis.count(target) > 1:
-                        target += str(tgt_mention.dtid)
-                    targets.add(target)
-                for eid in src_mention.eids:
-                    entity = document.entities[eid]
-                    if entity.exophor in self.relax_exophors.values():
-                        targets.add(entity.exophor)
-                result = self.comp_result.get((document.doc_id, src_mention.dtid, '='), None)
-                result2color = {'correct': 'blue', 'wrong': 'red', None: 'gray'}
+                src_dtid = tid2mention[tid].dtid
+                if src_dtid in document.mentions:
+                    src_mention = document.mentions[src_dtid]
+                    tgt_mentions_relaxed = self._filter_mentions(
+                        document.get_siblings(src_mention, relax=True), src_mention)
+                    for tgt_mention in tgt_mentions_relaxed:
+                        target: str = tgt_mention.core
+                        if all_targets.count(target) > 1:
+                            target += str(tgt_mention.dtid)
+                        targets.add(target)
+                    for eid in src_mention.eids:
+                        entity = document.entities[eid]
+                        if entity.exophor in self.relax_exophors.values():
+                            targets.add(entity.exophor)
+                result = self.comp_result.get((document.doc_id, src_dtid, '='), None)
                 if html:
-                    tree_strings[tid] += f'<font color="{result2color[result]}">＝:{",".join(targets)}</font>'
+                    tree_strings[tid] += f'<font color="{result2color_coref[result]}">＝:{",".join(targets)}</font>'
                 else:
                     tree_strings[tid] += '＝:' + ','.join(targets)
 
@@ -575,7 +517,7 @@ def main():
                         help='perform bridging anaphora resolution')
     parser.add_argument('--case-string', type=str, default='ガ,ヲ,ニ,ガ２',
                         help='case strings separated by ","')
-    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人',
+    parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人,不特定:物',
                         help='exophor strings separated by ","')
     parser.add_argument('--read-prediction-from-pas-tag', action='store_true', default=False,
                         help='use <述語項構造:> tag instead of <rel > tag in prediction files')
@@ -597,7 +539,8 @@ def main():
     documents_gold = list(reader_gold.process_all_documents())
 
     assert set(args.case_string.split(',')) <= set(CASE2YOMI.keys())
-    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
+    msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" ' \
+          'option instead'
     assert 'ノ' not in args.case_string.split(','), msg
     scorer = Scorer(documents_pred, documents_gold,
                     target_cases=args.case_string.split(','),

@@ -1,10 +1,14 @@
 import sys
+import json
 import pytest
 from pathlib import Path
 
 import torch
+from kyoto_reader import KyotoReader
+from kyoto_reader import ALL_CASES, ALL_COREFS
 
-sys.path.append(str(Path(__file__).parent.parent / 'src'))
+here = Path(__file__).parent
+sys.path.append(str(here.parent / 'src'))
 
 INF = 2 ** 10
 
@@ -62,3 +66,25 @@ def fixture_input_tensor():
         ]
     )
     yield input_tensor
+
+
+@pytest.fixture()
+def fixture_documents_pred():
+    reader = KyotoReader(here / 'data' / 'pred',
+                         target_cases=ALL_CASES,
+                         target_corefs=ALL_COREFS)
+    yield reader.process_all_documents()
+
+
+@pytest.fixture()
+def fixture_documents_gold():
+    reader = KyotoReader(here / 'data' / 'gold',
+                         target_cases=ALL_CASES,
+                         target_corefs=ALL_COREFS)
+    yield reader.process_all_documents()
+
+
+@pytest.fixture()
+def fixture_scores():
+    with here.joinpath('data/score/0.json').open() as f:
+        yield json.load(f)

@@ -5,7 +5,7 @@
 import sys; sys.path.append('src')
 # from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, NamedTuple
+from typing import List, NamedTuple
 
 from pyknp import Tag
 from kyoto_reader import KyotoReader, Document, Sentence, Predicate
@@ -23,7 +23,7 @@ class Example(NamedTuple):
 
     def __str__(self):
         sentence: Sentence = self.document[self.predicate.sid]
-        return f'{sentence.sid}, {sentence}【{self.predicate.midasi}】, ' \
+        return f'{sentence.sid}, {sentence}【{self.predicate}】, ' \
                f'{"/".join(k + (":" + v if v is not True else "") for k, v in self._feats().items())}'
 
     def _feats(self):

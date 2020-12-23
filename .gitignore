@@ -139,7 +139,7 @@ cython_debug/
 
 config
 data
-!src/tests/data
+!tests/data
 result
 log
 

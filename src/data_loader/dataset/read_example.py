@@ -50,8 +50,8 @@ class PasExample:
         head_dmids = []
         for sentence in document:
             process: bool = process_all or (sentence is last_sent)
-            head_dmids += [bp.dmid for bp in sentence.bp_list()]
-            for bp in sentence.bp_list():
+            head_dmids += [bp.dmid for bp in sentence.bps]
+            for bp in sentence.bps:
                 for mrph in bp.mrph_list():
                     self.words.append(mrph.midasi)
                     self.dtids.append(bp.dtid)
@@ -111,7 +111,7 @@ class PasExample:
         for arg in args:
             if isinstance(arg, Argument):
                 if arg.dmid not in candidates:
-                    logger.debug(f'argument: {arg.midasi} in {self.doc_id} is not in candidates and ignored')
+                    logger.debug(f'argument: {arg} in {self.doc_id} is not in candidates and ignored')
                     continue
                 string = str(arg.dmid)
                 if arg.dep_type == 'overt':
@@ -123,7 +123,7 @@ class PasExample:
                     string += '%O'
             # exophor
             else:
-                string = arg.midasi
+                string = str(arg)
             arg_strings.append(string)
         return arg_strings
 
@@ -141,7 +141,7 @@ class PasExample:
                         if document.entities[eid].is_special]
             for mention in tgt_mentions:
                 if mention.dmid not in candidates:
-                    logger.debug(f'mention: {mention.midasi} in {self.doc_id} is not in candidates and ignored')
+                    logger.debug(f'mention: {mention} in {self.doc_id} is not in candidates and ignored')
                     continue
                 ment_strings.append(str(mention.dmid))
             for exophor in exophors:
