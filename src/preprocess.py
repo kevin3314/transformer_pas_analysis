@@ -10,10 +10,18 @@ from collections import defaultdict
 from tqdm import tqdm
 from pyknp import BList
 from kyoto_reader import KyotoReader
-from transformers import BertTokenizer
+from tokenizer import BartSPMTokenizeHandler, BertTokenizeHandler, T5TokenizeHandler, MBartTokenizerHandler, TokenizeHandlerMeta
 
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
+
+ARC2TOKENIZER_INFO = {
+    'bert': (BertTokenizeHandler, 5),
+    # TODO: Provide real num of special tokens
+    't5': (T5TokenizeHandler, 5),
+    'bart': (BartSPMTokenizeHandler, 5),
+    'mbart': (MBartTokenizerHandler, 5)
+}
 
 def process(input_path: Path, output_path: Path, corpus: str) -> int:
     output_path.mkdir(exist_ok=True)
@@ -24,7 +32,7 @@ def process(input_path: Path, output_path: Path, corpus: str) -> int:
     return len(reader)
 
 
-def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokenizer: BertTokenizer):
+def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokenizer: TokenizeHandlerMeta):
     """
     各文書を，tokenize したあとの長さが max_subword_length 以下になるように複数の文書に分割する．
     1文に分割しても max_subword_length を超えるような長い文はそのまま出力する
@@ -43,8 +51,12 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                 if line.strip() == 'EOS':
                     blist = BList(buff)
                     did2sids[did].append(blist.sid)
+                    print(list(m.midasi for m in blist.mrph_list()))
+                    all_tokens, *_ = tokenizer.get_tokenized_tokens(list(m.midasi for m in blist.mrph_list()))
+                    print(all_tokens)
                     did2cumlens[did].append(
-                        did2cumlens[did][-1] + len(tokenizer.tokenize(' '.join(m.midasi for m in blist.mrph_list())))
+                        did2cumlens[did][-1] + len(all_tokens)
+                        # did2cumlens[did][-1] + len(tokenizer.tokenize(' '.join(m.midasi for m in blist.mrph_list())))
                     )
                     sid2knp[blist.sid] = buff
                     buff = ''
@@ -107,6 +119,8 @@ def process_commonsense(input_path: Path, output_path: Path) -> int:
 
 
 def main():
+    all_archs = list(set(arch for arch in ARC2TOKENIZER_INFO.keys()))
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--kwdlc', type=str, default=None,
                         help='path to directory where KWDLC data exists')
@@ -123,16 +137,16 @@ def main():
                              'longer than this will be truncated, and sequences shorter than this will be padded.')
     parser.add_argument('--exophors', '--exo', type=str, default='著者,読者,不特定:人,不特定:物',
                         help='exophor strings separated by ","')
-    parser.add_argument('--bert-path', type=str, required=True,
-                        help='path to pre-trained BERT model')
-    parser.add_argument('--bert-name', type=str, required=True,
-                        help='BERT model name')
+    parser.add_argument('--pretrained', type=str, required=True,
+                        help='Pretrained path. Pass full path to pretrained files or choice from PRETRAINED_PATH')
+    parser.add_argument('--arch', choices=all_archs, type=str, default='bert', help='transformer archtecture name')
     args = parser.parse_args()
 
     # make directories to save dataset
     args.out.mkdir(exist_ok=True)
     exophors = args.exophors.split(',')
-    tokenizer = BertTokenizer.from_pretrained(args.bert_path, do_lower_case=False, tokenize_chinese_chars=False)
+    tokenizer_class, num_special_token = ARC2TOKENIZER_INFO.get(args.arch)
+    tokenizer = tokenizer_class.from_pretrained(args.pretrained, do_lower_case=False, tokenize_chinese_chars=False)
 
     config_path: Path = args.out / 'config.json'
     if config_path.exists():
@@ -145,8 +159,8 @@ def main():
             'max_seq_length': args.max_seq_length,
             'exophors': exophors,
             'vocab_size': tokenizer.vocab_size,
-            'bert_name': args.bert_name,
-            'bert_path': args.bert_path,
+            'model_name': args.arch,
+            'pretrained_path': args.pretrained,
         }
     )
     if 'num_examples' not in config:
