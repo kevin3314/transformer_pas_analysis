@@ -142,6 +142,7 @@ data
 !tests/data
 result
 log
+.vscode/
 
 *.ini
 !*.example.ini
