@@ -504,7 +504,7 @@ class IterativeRefinementModel(nn.Module):
             losses.append(loss)
         loss = torch.stack(losses).mean()
 
-        return loss, *outputs
+        return (loss, *outputs)
 
 
 class FrozenIterativeRefinementModel(nn.Module):
@@ -561,7 +561,7 @@ class FrozenIterativeRefinementModel(nn.Module):
             losses.append(loss)
         loss = torch.stack(losses).mean()
 
-        return loss, *outputs
+        return (loss, *outputs)
 
 
 class SingleIterativeRefinementModel(nn.Module):
@@ -607,7 +607,7 @@ class SingleIterativeRefinementModel(nn.Module):
             losses.append(loss)
         loss = torch.stack(losses).mean()
 
-        return loss, *outputs
+        return (loss, *outputs)
 
 
 class AnnealingIterativeRefinementModel(nn.Module):
@@ -658,7 +658,7 @@ class AnnealingIterativeRefinementModel(nn.Module):
             losses.append(loss)
         loss = torch.stack(losses).mean()
 
-        return loss, *outputs
+        return (loss, *outputs)
 
 
 class WeightedIterativeRefinementModel(nn.Module):
@@ -701,7 +701,7 @@ class WeightedIterativeRefinementModel(nn.Module):
             losses.append(loss)
         loss = torch.stack(losses).mean()
 
-        return loss, *outputs
+        return (loss, *outputs)
 
 
 class OvertGivenIterativeRefinementModel(nn.Module):
@@ -745,7 +745,7 @@ class OvertGivenIterativeRefinementModel(nn.Module):
             losses.append(loss)
         loss = torch.stack(losses).mean()
 
-        return loss, *outputs
+        return (loss, *outputs)
 
 
 class OvertGivenConditionalModel(nn.Module):

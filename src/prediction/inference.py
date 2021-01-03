@@ -60,7 +60,7 @@ class Inference:
             else:
                 raise ValueError(f'unexpected output shape: {output.shape}')
 
-        return avg_loss, *predictions
+        return (avg_loss, *predictions)
 
     def _prepare_model(self, state_dict: dict):
         self.model.load_state_dict(state_dict)
