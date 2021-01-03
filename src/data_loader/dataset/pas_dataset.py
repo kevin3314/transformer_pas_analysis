@@ -14,7 +14,15 @@ from transformers import BertTokenizer
 from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
 from .read_example import PasExample
+from tokenizer import BertTokenizeHandler, BartSPMTokenizeHandler, T5TokenizeHandler, MBartTokenizerHandler, TokenizeHandlerMeta
 from utils.constants import TASK_ID
+
+MODEL2TOKENIZER = {
+    'bert': BertTokenizeHandler,
+    'bart': BartSPMTokenizeHandler,
+    't5': T5TokenizeHandler,
+    'mbart': MBartTokenizerHandler
+}
 
 
 class InputFeatures(NamedTuple):
@@ -55,7 +63,9 @@ class PASDataset(Dataset):
         special_tokens = self.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
-        self.tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=False, tokenize_chinese_chars=False)
+        tokenizer_cls = MODEL2TOKENIZER[dataset_config['model_name']]
+        self.tokenizer = tokenizer_cls.from_pretrained(dataset_config['pretrained_path'], do_lower_case=False,
+                                                       tokenize_chinese_chars=False)
         self.max_seq_length: int = max_seq_length
         self.bert_path: Path = Path(bert_path)
         documents = list(self.reader.process_all_documents())
@@ -120,7 +130,7 @@ class PASDataset(Dataset):
         num_special_tokens = len(self.special_to_index)
         num_relations = len(self.target_cases) + int(self.bridging) + int(self.coreference)
 
-        tokens = example.tokens
+        tokens, tok_to_orig_index, orig_to_tok_index, is_intermediate_list = self.tokenizer.get_tokenized_tokens(example.words)
         tok_to_orig_index = example.tok_to_orig_index
         orig_to_tok_index = example.orig_to_tok_index
 
@@ -131,11 +141,11 @@ class PASDataset(Dataset):
         deps: List[List[int]] = []
 
         # subword loop
-        for token, orig_index in zip(tokens, tok_to_orig_index):
+        for orig_index, is_intermediate in zip(tok_to_orig_index, is_intermediate_list):
             segment_ids.append(0)
 
             # subsequent subword or [CLS] token or [SEP] token
-            if token.startswith("##") or orig_index is None:
+            if is_intermediate or orig_index is None:
                 arguments_set.append([[] for _ in range(num_relations)])
                 overts_set.append([[] for _ in range(num_relations)])
                 candidates_set.append([[] for _ in range(num_relations)])
@@ -196,7 +206,7 @@ class PASDataset(Dataset):
 
         # Zero-pad up to the sequence length (except for special tokens).
         while len(input_ids) < max_seq_length - num_special_tokens:
-            input_ids.append(0)
+            input_ids.append(self.tokenizer.pad_id)
             input_mask.append(False)
             segment_ids.append(0)
             arguments_set.append([[] for _ in range(num_relations)])
