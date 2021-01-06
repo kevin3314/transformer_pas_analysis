@@ -41,6 +41,8 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
     did2cumlens: Dict[str, List[int]] = {}
     sid2knp: Dict[str, str] = {}
 
+    max_all_tokens_len = 0
+
     for knp_file in input_dir.glob('*.knp'):
         with knp_file.open() as fin:
             did = knp_file.stem
@@ -51,9 +53,8 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                 if line.strip() == 'EOS':
                     blist = BList(buff)
                     did2sids[did].append(blist.sid)
-                    print(list(m.midasi for m in blist.mrph_list()))
                     all_tokens, *_ = tokenizer.get_tokenized_tokens(list(m.midasi for m in blist.mrph_list()))
-                    print(all_tokens)
+                    max_all_tokens_len = max(max_all_tokens_len, len(all_tokens))
                     did2cumlens[did].append(
                         did2cumlens[did][-1] + len(all_tokens)
                         # did2cumlens[did][-1] + len(tokenizer.tokenize(' '.join(m.midasi for m in blist.mrph_list())))
@@ -61,6 +62,9 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                     sid2knp[blist.sid] = buff
                     buff = ''
 
+    print(f"max_tokens_length per sentence -> {max_all_tokens_len}")
+    # if max_all_tokens_len > max_subword_length:
+    #     raise ValueError(f"max_tokens_length exceeded max_subword_length\n{max_all_tokens_len}>{max_subword_length}")
     for did, sids in did2sids.items():
         cum: List[int] = did2cumlens[did]
         end = 1
@@ -85,7 +89,7 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
 def process_kc(input_path: Path,
                output_path: Path,
                max_subword_length: int,
-               tokenizer: BertTokenizer,
+               tokenizer: TokenizeHandlerMeta,
                split: bool = False
                ) -> int:
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -180,7 +184,9 @@ def main():
         in_dir = Path(args.kc).resolve()
         out_dir: Path = args.out / 'kc_split'
         out_dir.mkdir(exist_ok=True)
-        max_subword_length = args.max_seq_length - len(exophors) - 4  # [CLS], [SEP], [NULL], [NA]
+        # Memo: special tokens ([SEP], </s>, en_XX, etc..) are handled by tokenizer in function
+        max_subword_length = args.max_seq_length - len(exophors) - 2  # [NULL], [NA]
+        print("max_subword_length ->", max_subword_length)
         num_examples_train = process_kc(in_dir / 'train', out_dir / 'train', max_subword_length, tokenizer, split=True)
         num_examples_valid = process_kc(in_dir / 'valid', out_dir / 'valid', max_subword_length, tokenizer, split=True)
         num_examples_test = process_kc(in_dir / 'test', out_dir / 'test', max_subword_length, tokenizer, split=True)

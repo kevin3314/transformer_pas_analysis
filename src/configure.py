@@ -39,6 +39,7 @@ def main() -> None:
                         help='path to dataset directory')
     parser.add_argument('-m', '--model', choices=all_models, default=all_models, nargs='*',
                         help='model name')
+    parser.add_argument('--pretrained_path', help='pretrained path')
     parser.add_argument('-e', '--epoch', type=int, default=[4], nargs='*',
                         help='number of training epochs')
     parser.add_argument('-b', '--batch-size', type=int, default=16,
@@ -94,6 +95,8 @@ def main() -> None:
     with data_root.joinpath('config.json').open() as f:
         dataset_config = json.load(f)
     exophors = dataset_config['exophors']
+    if args.pretrained_path:
+        dataset_config['pretrained_path'] = args.pretrained_path
     cases: List[str] = args.case_string.split(',') if args.case_string else []
     msg = '"ノ" found in case string. If you want to perform bridging anaphora resolution, specify "--bridging" option'
     assert 'ノ' not in cases, msg
@@ -106,7 +109,7 @@ def main() -> None:
         if 'IterativeRefinement' in model:
             items.append(refinement_iter)
         corpus2abbr = {'kwdlc': 'w', 'kc': 'n', 'fuman': 'f'}
-        items += [''.join(corpus2abbr[c] for c in args.corpus), f'{n_epoch}e', dataset_config['bert_name']]
+        items += [''.join(corpus2abbr[c] for c in args.corpus), f'{n_epoch}e', dataset_config['model_name']]
         if pas_targets:
             items.append(''.join(tgt[0] for tgt in ('overt', 'case', 'zero') if tgt in args.train_target))
         if 'pred' in pas_targets:
@@ -118,7 +121,7 @@ def main() -> None:
         if args.coreference:
             items.append('cr')
         if model in ('RefinementModel', 'RefinementModel2'):
-            items.append(f'{dataset_config["bert_name"]}{args.refinement_type}')
+            items.append(f'{dataset_config["model_name"]}{args.refinement_type}')
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
             items.append(conditional_model)
             if conditional_model in ('atn', 'catn'):
@@ -144,7 +147,7 @@ def main() -> None:
         arch = {
             'type': model,
             'args': {
-                'bert_model': dataset_config['bert_path'],
+                'pretrained_path': dataset_config['pretrained_path'],
                 'vocab_size': dataset_config['vocab_size'] + len(exophors) + 1 + int(args.coreference),
                 'dropout': args.dropout,
                 'num_case': len(cases) + int(args.bridging),
@@ -153,7 +156,7 @@ def main() -> None:
         }
         if model in ('RefinementModel', 'RefinementModel2'):
             arch['args'].update({'refinement_type': args.refinement_type,
-                                 'refinement_bert_model': dataset_config['bert_path']})
+                                 'refinement_bert_model': dataset_config['pretrained_path']})
         if 'IterativeRefinement' in model:
             arch['args'].update({'num_iter': refinement_iter})
         if 'ConditionalModel' in model or 'IterativeRefinement' in model:
@@ -172,7 +175,8 @@ def main() -> None:
                 'coreference': args.coreference,
                 'bridging': args.bridging,
                 'max_seq_length': dataset_config['max_seq_length'],
-                'bert_path': dataset_config['bert_path'],
+                'model_name': dataset_config['model_name'],
+                'pretrained_path': dataset_config['pretrained_path'],
                 'training': None,
                 'kc': None,
                 'train_targets': args.train_target,
@@ -212,7 +216,7 @@ def main() -> None:
                     'path': None,
                     'max_seq_length': dataset_config['max_seq_length'],
                     'num_special_tokens': len(exophors) + 1 + int(args.coreference),
-                    'bert_model': dataset_config['bert_path'],
+                    'bert_model': dataset_config['pretrained_path'],
                 },
             }
             train_commonsense_dataset = copy.deepcopy(commonsense_dataset)
