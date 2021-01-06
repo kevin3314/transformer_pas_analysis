@@ -43,7 +43,8 @@ class PASDataset(Dataset):
                  coreference: bool,
                  bridging: bool,
                  max_seq_length: int,
-                 bert_path: Union[str, Path],
+                 model_name: str,
+                 pretrained_path: Union[str, Path],
                  training: bool,
                  kc: bool,
                  train_targets: List[str],
@@ -63,11 +64,11 @@ class PASDataset(Dataset):
         special_tokens = self.target_exophors + ['NULL'] + (['NA'] if coreference else [])
         self.special_to_index: Dict[str, int] = {token: max_seq_length - i - 1 for i, token
                                                  in enumerate(reversed(special_tokens))}
-        tokenizer_cls = MODEL2TOKENIZER[dataset_config['model_name']]
-        self.tokenizer = tokenizer_cls.from_pretrained(dataset_config['pretrained_path'], do_lower_case=False,
+        tokenizer_cls = MODEL2TOKENIZER[model_name]
+        self.tokenizer = tokenizer_cls.from_pretrained(pretrained_path, do_lower_case=False,
                                                        tokenize_chinese_chars=False)
         self.max_seq_length: int = max_seq_length
-        self.bert_path: Path = Path(bert_path)
+        self.pretrained_path: Path = Path(pretrained_path)
         documents = list(self.reader.process_all_documents())
         self.documents: Optional[List[Document]] = documents if not training else None
 
@@ -85,7 +86,7 @@ class PASDataset(Dataset):
         bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
         for document in tqdm(documents, desc='processing documents'):
             hash_ = self._hash(document, path, self.target_cases, self.target_exophors, self.coreference, self.bridging,
-                               self.kc, self.pas_targets, self.train_targets, str(self.bert_path))
+                               self.kc, self.pas_targets, self.train_targets, str(self.pretrained_path))
             example_cache_path = bpa_cache_dir / hash_ / f'{document.doc_id}.pkl'
             if example_cache_path.exists() and load_cache:
                 with example_cache_path.open('rb') as f:
@@ -130,9 +131,10 @@ class PASDataset(Dataset):
         num_special_tokens = len(self.special_to_index)
         num_relations = len(self.target_cases) + int(self.bridging) + int(self.coreference)
 
-        tokens, tok_to_orig_index, orig_to_tok_index, is_intermediate_list = self.tokenizer.get_tokenized_tokens(example.words)
+        tokens = example.tokens
         tok_to_orig_index = example.tok_to_orig_index
         orig_to_tok_index = example.orig_to_tok_index
+        is_intermediate_list = example.is_intermediate_list
 
         segment_ids: List[int] = []
         arguments_set: List[List[List[int]]] = []

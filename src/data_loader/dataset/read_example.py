@@ -6,6 +6,7 @@ from transformers import BertTokenizer
 from kyoto_reader import Document, BasePhrase, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 from utils.util import is_pas_target, is_bridging_target, is_coreference_target
+from tokenizer import TokenizeHandlerMeta
 
 logger = logging.getLogger(__file__)
 
@@ -33,7 +34,7 @@ class PasExample:
              bridging: bool,
              kc: bool,
              pas_targets: List[str],
-             tokenizer: BertTokenizer,
+             tokenizer: TokenizeHandlerMeta,
              ) -> None:
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
@@ -78,7 +79,7 @@ class PasExample:
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
 
-        self.tokens, self.tok_to_orig_index, self.orig_to_tok_index = self._get_tokenized_tokens(self.words, tokenizer)
+        self.tokens, self.tok_to_orig_index, self.orig_to_tok_index, self.is_intermediate_list = tokenizer.get_tokenized_tokens(self.words)
 
     def _get_args(self,
                   dmid: int,
@@ -158,7 +159,7 @@ class PasExample:
 
     @staticmethod
     def _get_tokenized_tokens(words: List[str],
-                              tokenizer: BertTokenizer,
+                              tokenizer: TokenizeHandlerMeta,
                               ) -> Tuple[List[str], List[Optional[int]], List[int]]:
         all_tokens = []
         tok_to_orig_index: List[Optional[int]] = []

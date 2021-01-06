@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 # from transformers import BertModel
 from transformers import BertConfig
+from transformers import MBartForConditionalGeneration
 
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
 from .sub.mask import get_mask
@@ -27,7 +28,7 @@ class BaselineModel(nn.Module):
     """ベースライン"""
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -36,7 +37,7 @@ class BaselineModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -74,9 +75,61 @@ class BaselineModel(nn.Module):
         return loss, output
 
 
+class BaselineMBartModel(nn.Module):
+    """ベースライン"""
+
+    def __init__(self,
+                 pretrained_path: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 **_
+                 ) -> None:
+        super().__init__()
+
+        self.mbart: MBartForConditionalGeneration = MBartForConditionalGeneration.from_pretrained(pretrained_path)
+        self.mbart.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        mbart_hidden_size = self.mbart.config.hidden_size
+
+        self.l_prd = nn.Linear(mbart_hidden_size, mbart_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(mbart_hidden_size, mbart_hidden_size * self.num_case)
+        self.out = nn.Linear(mbart_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                **_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        mask = get_mask(attention_mask, ng_token_mask)
+        # (b, seq, hid)
+        result = self.mbart(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask, decoder_attention_mask=attention_mask, use_cache=False, return_dict=True, output_hidden_states=True)
+        sequence_output = result.decoder_hidden_states[-1]  # Decoder's last hidden state?
+
+        h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
+
+
 class RefinementModel(nn.Module):
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -86,7 +139,7 @@ class RefinementModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.baseline_model = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
+        self.baseline_model = BaselineModel(pretrained_path, vocab_size, dropout, num_case, coreference)
         args = (refinement_bert_model, vocab_size, dropout, num_case, coreference)
         if refinement_type == 1:
             self.refinement_layer = RefinementLayer1(*args)
@@ -117,7 +170,7 @@ class DuplicateModel(nn.Module):
     """RefinementModel の前段の logits を後段に与えないモデル"""
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -125,8 +178,8 @@ class DuplicateModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.baseline_model1 = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
-        self.baseline_model2 = BaselineModel(bert_model, vocab_size, dropout, num_case, coreference)
+        self.baseline_model1 = BaselineModel(pretrained_path, vocab_size, dropout, num_case, coreference)
+        self.baseline_model2 = BaselineModel(pretrained_path, vocab_size, dropout, num_case, coreference)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
@@ -150,7 +203,7 @@ class GoldDepModel(nn.Module):
     """係り受けの情報を方向なしで与える"""
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -158,7 +211,7 @@ class GoldDepModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -208,7 +261,7 @@ class MultitaskDepModel(nn.Module):
     """述語項構造解析と同時に構文解析も解く"""
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -216,7 +269,7 @@ class MultitaskDepModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -275,7 +328,7 @@ class CaseInteractionModel(nn.Module):
     """あるサブワード間の(例えば)ヲ格らしさを計算する際にガ格らしさやニ格らしさも加味する"""
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -283,7 +336,7 @@ class CaseInteractionModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -344,7 +397,7 @@ class CommonsenseModel(nn.Module):
     """常識推論データセットとマルチタスク"""
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -352,7 +405,7 @@ class CommonsenseModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -784,7 +837,7 @@ class OvertGivenConditionalModel(nn.Module):
 class CandidateAwareModel(nn.Module):
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -793,7 +846,7 @@ class CandidateAwareModel(nn.Module):
         super().__init__()
         atn_target = 'kv'
         self.num_case = num_case + int(coreference)
-        config = BertConfig.from_pretrained(bert_model)
+        config = BertConfig.from_pretrained(pretrained_path)
         self.rel_embeddings1 = nn.Embedding(2, int(config.hidden_size / config.num_attention_heads))
         self.rel_embeddings2 = nn.Embedding(2, int(config.hidden_size / config.num_attention_heads))
         kwargs = {'conditional_self_attention': True,
@@ -803,7 +856,7 @@ class CandidateAwareModel(nn.Module):
             kwargs['rel_embeddings1'] = self.rel_embeddings1
         if 'v' in atn_target:
             kwargs['rel_embeddings2'] = self.rel_embeddings2
-        self.bert: BertModel = BertModel.from_pretrained(bert_model, **kwargs)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path, **kwargs)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -858,7 +911,7 @@ class CorefCAModel(nn.Module):
     """
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -866,7 +919,7 @@ class CorefCAModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -932,7 +985,7 @@ class CoreferenceSeparatedModel(nn.Module):
     """
 
     def __init__(self,
-                 bert_model: str,
+                 pretrained_path: str,
                  vocab_size: int,
                  dropout: float,
                  num_case: int,
@@ -940,11 +993,11 @@ class CoreferenceSeparatedModel(nn.Module):
                  ) -> None:
         super().__init__()
 
-        self.bert: BertModel = BertModel.from_pretrained(bert_model)
+        self.bert: BertModel = BertModel.from_pretrained(pretrained_path)
         self.bert.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-        self.coreference_model: BaselineModel = BaselineModel(bert_model, vocab_size, dropout, 0, True)
+        self.coreference_model: BaselineModel = BaselineModel(pretrained_path, vocab_size, dropout, 0, True)
         dates = ('0623_214717', '0623_222941', '0623_230434', '0623_233957', '0624_001637')
         import random
         date = dates[random.randrange(len(dates))]
