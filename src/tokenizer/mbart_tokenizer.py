@@ -99,9 +99,11 @@ class MBartTokenizerHandler(MBartTokenizer, SpmMixin, TokenizeHandlerMeta):
         # </s> token
         all_tokens.append('</s>')
         tok_to_orig_index.append(None)
+        is_intermediate_list.append(True)
 
         # 'ja_XX' token
         all_tokens.append('ja_XX')
         tok_to_orig_index.append(None)
+        is_intermediate_list.append(True)
 
         return all_tokens, tok_to_orig_index, orig_to_tok_index, is_intermediate_list
