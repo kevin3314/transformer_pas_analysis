@@ -25,10 +25,10 @@ from typing import Optional
 import torch
 from torch import nn
 from transformers import BertPreTrainedModel
-from transformers.activations import gelu, gelu_new, swish
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.activations import gelu, gelu_new
+from transformers.activations import silu as swish
+from transformers.file_utils import add_start_docstrings
 from transformers.modeling_utils import prune_linear_layer
-from transformers.modeling_bert import BertPooler
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,19 @@ ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_
 
 BertLayerNorm = torch.nn.LayerNorm
 
+class BertPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
@@ -683,7 +696,6 @@ class BertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
