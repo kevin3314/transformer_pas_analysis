@@ -69,13 +69,13 @@ class PASDataset(Dataset):
                                                        tokenize_chinese_chars=False)
         self.max_seq_length: int = max_seq_length
         self.pretrained_path: Path = Path(pretrained_path)
-        documents = list(self.reader.process_all_documents())
+        documents = list(self.reader.process_all_documents(backend="multiprocessing"))
         self.documents: Optional[List[Document]] = documents if not training else None
 
         if self.kc and not training:
             assert kc_joined_path is not None
             reader = KyotoReader(Path(kc_joined_path), extract_nes=False)
-            self.joined_documents = list(reader.process_all_documents())
+            self.joined_documents = list(reader.process_all_documents(backend="multiprocessing"))
 
         self.examples = self._load(documents, str(path))
 
