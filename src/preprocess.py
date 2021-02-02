@@ -39,7 +39,7 @@ DocumentDivideUnit = namedtuple("DocumentDivideUnit", ["did", "idx", "start", "e
 def process(input_path: Path, output_path: Path, corpus: str) -> int:
     output_path.mkdir(exist_ok=True)
     reader = KyotoReader(input_path, extract_nes=False)
-    for document in tqdm(reader.process_all_documents(), desc=corpus, total=len(reader)):
+    for document in tqdm(reader.process_all_documents(backend="multiprocessing"), desc=corpus, total=len(reader)):
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
     return len(reader)
