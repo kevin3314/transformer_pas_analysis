@@ -1,27 +1,40 @@
 """Preprocess dataset."""
 import argparse
+from functools import partial
 import json
 import tempfile
 from pathlib import Path
 import _pickle as cPickle
 from typing import List, Dict
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+from multiprocessing import Pool
 
 from tqdm import tqdm
 from pyknp import BList
 from kyoto_reader import KyotoReader
-from tokenizer import BartSPMTokenizeHandler, BertTokenizeHandler, T5TokenizeHandler, MBartTokenizerHandler, TokenizeHandlerMeta
+from tokenizer import (
+    BartSPMTokenizeHandler,
+    BertTokenizeHandler,
+    BiBartTokenizeHandler,
+    T5TokenizeHandler,
+    MBartTokenizerHandler,
+    TokenizeHandlerMeta
+)
 
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
 
 
 ARC2TOKENIZER_INFO = {
-    'bert': (BertTokenizeHandler, 5),
+    'bert': BertTokenizeHandler,
     # TODO: Provide real num of special tokens
-    't5': (T5TokenizeHandler, 5),
-    'bart': (BartSPMTokenizeHandler, 5),
-    'mbart': (MBartTokenizerHandler, 5)
+    't5': T5TokenizeHandler,
+    'bart': BartSPMTokenizeHandler,
+    'bibart': BiBartTokenizeHandler,
+    'mbart': MBartTokenizerHandler
 }
+
+DocumentDivideUnit = namedtuple("DocumentDivideUnit", ["did", "idx", "start", "end"])
+
 
 def process(input_path: Path, output_path: Path, corpus: str) -> int:
     output_path.mkdir(exist_ok=True)
@@ -30,6 +43,26 @@ def process(input_path: Path, output_path: Path, corpus: str) -> int:
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
     return len(reader)
+
+
+def write_partial_document(
+    document_divide_unit: DocumentDivideUnit,
+    did2sids: Dict[str, List[str]],
+    sid2knp: Dict[str, str],
+    output_dir: Path
+):
+    """Write partial document
+
+    Args:
+        document_divide_unit (DocumentDivideUnit): Information for partial document to write
+        did2sid (Dict[str, List[str]])
+        sid2knp (Dict[str, str])
+        output_dir (Path):
+    """
+    did, idx, start, end = document_divide_unit
+    sids = did2sids[did]
+    with output_dir.joinpath(f'{did}-{idx:02}.knp').open('wt') as fout:
+        fout.write(''.join(sid2knp[sid] for sid in sids[start:end]))  # start から end まで書き出し
 
 
 def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokenizer: TokenizeHandlerMeta):
@@ -63,8 +96,10 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                     buff = ''
 
     print(f"max_tokens_length per sentence -> {max_all_tokens_len}")
+    # assert max_all_tokens_len <= max_subword_length
     # if max_all_tokens_len > max_subword_length:
     #     raise ValueError(f"max_tokens_length exceeded max_subword_length\n{max_all_tokens_len}>{max_subword_length}")
+    document_divide_unit_list = []
     for did, sids in did2sids.items():
         cum: List[int] = did2cumlens[did]
         end = 1
@@ -80,10 +115,22 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                 start += 1
                 if start == end - 1:
                     break
-            with output_dir.joinpath(f'{did}-{idx:02}.knp').open('wt') as fout:
-                fout.write(''.join(sid2knp[sid] for sid in sids[start:end]))  # start から end まで書き出し
+            document_divide_unit_list.append(
+                DocumentDivideUnit(did, idx, start, end)
+            )
+            # with output_dir.joinpath(f'{did}-{idx:02}.knp').open('wt') as fout:
+            #     fout.write(''.join(sid2knp[sid] for sid in sids[start:end]))  # start から end まで書き出し
             idx += 1
             end += 1
+
+    _write_partial_document = partial(
+        write_partial_document,
+        did2sids=did2sids,
+        sid2knp=sid2knp,
+        output_dir=output_dir
+    )
+    with Pool() as pool:
+        list(pool.imap(_write_partial_document, document_divide_unit_list))
 
 
 def process_kc(input_path: Path,
@@ -100,9 +147,10 @@ def process_kc(input_path: Path,
             split_kc(input_path, tmp_dir, max_subword_length, tokenizer)
             input_path = tmp_dir
 
+        print(list(input_path.iterdir()))
         output_path.mkdir(exist_ok=True)
         reader = KyotoReader(input_path, extract_nes=False, did_from_sid=False)
-        for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader)):
+        for document in tqdm(reader.process_all_documents(backend="multiprocessing"), desc='kc', total=len(reader)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
 
@@ -149,7 +197,7 @@ def main():
     # make directories to save dataset
     args.out.mkdir(exist_ok=True)
     exophors = args.exophors.split(',')
-    tokenizer_class, num_special_token = ARC2TOKENIZER_INFO.get(args.arch)
+    tokenizer_class = ARC2TOKENIZER_INFO.get(args.arch)
     tokenizer = tokenizer_class.from_pretrained(args.pretrained, do_lower_case=False, tokenize_chinese_chars=False)
 
     config_path: Path = args.out / 'config.json'
