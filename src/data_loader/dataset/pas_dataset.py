@@ -14,14 +14,22 @@ from transformers import BertTokenizer
 from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
 from .read_example import PasExample
-from tokenizer import BertTokenizeHandler, BartSPMTokenizeHandler, T5TokenizeHandler, MBartTokenizerHandler, TokenizeHandlerMeta
+from tokenizer import (
+    BertTokenizeHandler,
+    BartSPMTokenizeHandler,
+    BiBartTokenizeHandler,
+    T5TokenizeHandler,
+    MBartTokenizerHandler,
+    TokenizeHandlerMeta
+)
 from utils.constants import TASK_ID
 
 MODEL2TOKENIZER = {
     'bert': BertTokenizeHandler,
     'bart': BartSPMTokenizeHandler,
     't5': T5TokenizeHandler,
-    'mbart': MBartTokenizerHandler
+    'mbart': MBartTokenizerHandler,
+    'bibart': BiBartTokenizeHandler
 }
 
 
