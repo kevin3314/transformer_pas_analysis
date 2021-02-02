@@ -1,10 +1,11 @@
 from typing import Tuple
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 # from transformers import BertModel
-from transformers import BertConfig
-from transformers import MBartForConditionalGeneration
+from transformers import BertConfig, MBartConfig
+from transformers import BartForConditionalGeneration, MBartForConditionalGeneration
 
 from .sub.refinement_layer import RefinementLayer1, RefinementLayer2, RefinementLayer3
 from .sub.mask import get_mask
@@ -141,7 +142,9 @@ class BaselineBiBartModel(nn.Module):
         super().__init__()
 
         # BiBart is same as MBart; The only purpose for this is to distinguish them by name.
-        self.mbart: MBartForConditionalGeneration = MBartForConditionalGeneration.from_pretrained(pretrained_path)
+        hf_config_path: str = str(Path(pretrained_path, "config.json"))
+        config = MBartConfig.from_json_file(hf_config_path)
+        self.mbart: BartForConditionalGeneration = BartForConditionalGeneration.from_pretrained(pretrained_path, config=config)
         self.mbart.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 

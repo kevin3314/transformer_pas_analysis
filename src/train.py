@@ -22,6 +22,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
     # torch.backends.cudnn.deterministic = True
     # torch.autograd.set_detect_anomaly(True)
 
+    print("n_gpu", str(torch.cuda.device_count()))
     logger = config.get_logger('train')
 
     # setup data_loader instances
@@ -63,6 +64,7 @@ def main(config: ConfigParser, args: argparse.Namespace):
 
 
 if __name__ == '__main__':
+    print("n_gpu", str(torch.cuda.device_count()))
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', default=None, type=str,
                         help='config file path (default: None)')
