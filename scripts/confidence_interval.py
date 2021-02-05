@@ -66,6 +66,13 @@ def main():
             mlflow.log_metric(f"{column}.delta_minus", delta_m)
             mlflow.log_metric(f"{column}.lowers", lower)
 
+    mlflow.set_experiment(target + "_simple")
+    with mlflow.start_run(run_name=config_name):
+        for middle, column in zip(
+            middles, columns
+        ):
+            mlflow.log_metric(f"{column}.middle", middle)
+
 
 if __name__ == '__main__':
     main()
