@@ -1,11 +1,19 @@
+from pathlib import Path
 import sys
 
 import pandas as pd
+import mlflow
 import math
 from scipy import stats
 
 
 def main():
+    # Suppose that path name is result/experiment_name/aggregates..
+    # result/BaselineBiBartModel-wn-8e-bibart-cz-vpa-npa-cr/aggregates/eval_test/kwdlc_pred.csv
+    res_path = Path(sys.argv[1])
+    config_name = res_path.parts[1]
+    target = res_path.parts[-1].rstrip(".csv")
+
     df = pd.read_csv(sys.argv[1], sep=',')
 
     if len(df) == 1:
@@ -46,6 +54,17 @@ def main():
                                          orient='index',
                                          columns=columns)
     print(df_interval)
+
+    mlflow.set_experiment(target)
+    with mlflow.start_run(run_name=config_name):
+        for upper, delta_p, middle, delta_m, lower, column in zip(
+            uppers, deltas_plus, middles, deltas_minus, lowers, columns
+        ):
+            mlflow.log_metric(f"{column}.upper", upper)
+            mlflow.log_metric(f"{column}.delta_plus", delta_p)
+            mlflow.log_metric(f"{column}.middle", middle)
+            mlflow.log_metric(f"{column}.delta_minus", delta_m)
+            mlflow.log_metric(f"{column}.lowers", lower)
 
 
 if __name__ == '__main__':

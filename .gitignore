@@ -146,3 +146,4 @@ log
 
 *.ini
 !*.example.ini
+mlruns/
