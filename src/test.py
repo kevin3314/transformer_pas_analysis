@@ -155,6 +155,7 @@ def main(config, args):
 
 
 if __name__ == '__main__':
+    print("n_gpu", str(torch.cuda.device_count()))
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-r', '--resume', default=None, type=str,
