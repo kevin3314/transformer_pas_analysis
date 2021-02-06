@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Callable, Set
 
 import numpy as np
+import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score
 
