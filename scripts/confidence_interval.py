@@ -4,7 +4,15 @@ import sys
 import pandas as pd
 import mlflow
 import math
+import numpy as np
 from scipy import stats
+
+
+def _log_metric(key, value):
+    if value is None or np.isnan(value):
+        print(f"{key} is {str(value)}. Skip it.")
+        return
+    mlflow.log_metric(key, value)
 
 
 def main():
@@ -55,23 +63,55 @@ def main():
                                          columns=columns)
     print(df_interval)
 
-    mlflow.set_experiment(target)
-    with mlflow.start_run(run_name=config_name):
+    config_name = config_name.replace("_", "-")
+    # BaselineBiBartModel-wn-8e-bibart-cz-vpa-npa-cr-yomiuri-ja
+    config_components = config_name.split("-")
+
+    backbone_name = config_components[3]
+
+    # Get additional name
+    # TODO: This setting ignores refine/conditional/interative model
+    attr_names = ["debug", "cr", "bar", "npa", "vpa"]
+    idx = None
+    for attr in attr_names:
+        if attr not in config_components:
+            continue
+        idx = config_components.index(attr)
+        break
+    exp_settings = config_components[4:idx]
+    additional_names = config_components[idx+1:]
+    full_target = target + "-" + "-".join(exp_settings)
+
+    run_name = ""
+    run_name += backbone_name + "-"
+    run_name += "-".join(additional_names)
+    run_name = run_name.rstrip("-")
+    run_name += "-" + "-".join(config_components[:3])
+
+    full_target = full_target.replace("_", "-").rstrip("-")
+    run_name = run_name.replace("_", "-").rstrip("-")
+
+    print(full_target, run_name)
+    mlflow.set_experiment(full_target)
+    with mlflow.start_run(run_name=run_name):
         for upper, delta_p, middle, delta_m, lower, column in zip(
             uppers, deltas_plus, middles, deltas_minus, lowers, columns
         ):
-            mlflow.log_metric(f"{column}.upper", upper)
-            mlflow.log_metric(f"{column}.delta_plus", delta_p)
-            mlflow.log_metric(f"{column}.middle", middle)
-            mlflow.log_metric(f"{column}.delta_minus", delta_m)
-            mlflow.log_metric(f"{column}.lowers", lower)
+            _log_metric(f"{column}.upper", upper)
+            _log_metric(f"{column}.delta_plus", delta_p)
+            _log_metric(f"{column}.middle", middle)
+            _log_metric(f"{column}.delta_minus", delta_m)
+            _log_metric(f"{column}.lowers", lower)
 
-    mlflow.set_experiment(target + "_simple")
-    with mlflow.start_run(run_name=config_name):
+    simple_target = target + "-simple-" + "-".join(exp_settings)
+    simple_target = simple_target.replace("_", "-").rstrip("-")
+    mlflow.set_experiment(simple_target)
+    print(simple_target, run_name)
+    with mlflow.start_run(run_name=run_name):
         for middle, column in zip(
             middles, columns
         ):
-            mlflow.log_metric(f"{column}.middle", middle)
+            _log_metric(f"{column}.middle", middle)
 
 
 if __name__ == '__main__':
