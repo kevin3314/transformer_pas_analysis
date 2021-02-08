@@ -76,6 +76,61 @@ class BaselineModel(nn.Module):
         return loss, output
 
 
+class BaselineBartModel(nn.Module):
+    """ベースライン"""
+
+    def __init__(self,
+                 pretrained_path: str,
+                 vocab_size: int,
+                 dropout: float,
+                 num_case: int,
+                 coreference: bool,
+                 **_
+                 ) -> None:
+        """Japanese Bart Architecture is same as mBART.
+        Only for naming.
+        """
+        super().__init__()
+
+        self.mbart: MBartForConditionalGeneration = MBartForConditionalGeneration.from_pretrained(pretrained_path)
+        self.mbart.resize_token_embeddings(vocab_size)
+        self.dropout = nn.Dropout(dropout)
+
+        self.num_case = num_case + int(coreference)
+        mbart_hidden_size = self.mbart.config.hidden_size
+
+        self.l_prd = nn.Linear(mbart_hidden_size, mbart_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(mbart_hidden_size, mbart_hidden_size * self.num_case)
+        self.out = nn.Linear(mbart_hidden_size, 1, bias=False)
+
+    def forward(self,
+                input_ids: torch.Tensor,       # (b, seq)
+                attention_mask: torch.Tensor,  # (b, seq)
+                segment_ids: torch.Tensor,     # (b, seq)
+                ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
+                target: torch.Tensor,          # (b, seq, case, seq)
+                **_
+                ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
+        batch_size, sequence_len = input_ids.size()
+        mask = get_mask(attention_mask, ng_token_mask)
+        # (b, seq, hid)
+        result = self.mbart(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask, decoder_attention_mask=attention_mask, use_cache=False, return_dict=True, output_hidden_states=True)
+        sequence_output = result.decoder_hidden_states[-1]  # Decoder's last hidden state?
+
+        h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_a = self.l_arg(self.dropout(sequence_output))  # (b, seq, case*hid)
+        h_p = h_p.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_a = h_a.view(batch_size, sequence_len, self.num_case, -1)  # (b, seq, case, hid)
+        h_pa = torch.tanh(self.dropout(h_p.unsqueeze(2) + h_a.unsqueeze(1)))  # (b, seq, seq, case, hid)
+        # -> (b, seq, seq, case, 1) -> (b, seq, seq, case) -> (b, seq, case, seq)
+        output = self.out(h_pa).squeeze(-1).transpose(2, 3).contiguous()
+        output += (~mask).float() * -1024.0
+
+        loss = cross_entropy_pas_loss(output, target)
+
+        return loss, output
+
+
 class BaselineMBartModel(nn.Module):
     """ベースライン"""
 
