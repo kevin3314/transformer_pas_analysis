@@ -147,3 +147,5 @@ log
 *.ini
 !*.example.ini
 mlruns/
+
+.envrc
