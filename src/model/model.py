@@ -197,9 +197,9 @@ class BaselineBiBartModel(nn.Module):
         super().__init__()
 
         # BiBart is same as MBart; The only purpose for this is to distinguish them by name.
-        hf_config_path: str = str(Path(pretrained_path, "config.json"))
-        config = MBartConfig.from_json_file(hf_config_path)
-        self.mbart: BartForConditionalGeneration = BartForConditionalGeneration.from_pretrained(pretrained_path, config=config)
+        # hf_config_path: str = str(Path(pretrained_path, "config.json"))
+        # config = MBartConfig.from_json_file(hf_config_path)
+        self.mbart: BartForConditionalGeneration = BartForConditionalGeneration.from_pretrained(pretrained_path)
         self.mbart.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
