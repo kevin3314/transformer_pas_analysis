@@ -86,32 +86,40 @@ def main():
     run_name += backbone_name + "-"
     run_name += "-".join(additional_names)
     run_name = run_name.rstrip("-")
-    run_name += "-" + "-".join(config_components[:3])
+    run_name += "-" + "-".join(config_components[:3] + "-" + config_components[4])
 
     full_target = full_target.replace("_", "-").rstrip("-")
     run_name = run_name.replace("_", "-").rstrip("-")
 
-    print(full_target, run_name)
-    mlflow.set_experiment(full_target)
-    with mlflow.start_run(run_name=run_name):
-        for upper, delta_p, middle, delta_m, lower, column in zip(
-            uppers, deltas_plus, middles, deltas_minus, lowers, columns
-        ):
-            _log_metric(f"{column}.upper", upper)
-            _log_metric(f"{column}.delta_plus", delta_p)
-            _log_metric(f"{column}.middle", middle)
-            _log_metric(f"{column}.delta_minus", delta_m)
-            _log_metric(f"{column}.lowers", lower)
+    targets = [full_target]
+    run_names = [run_name]
+    for (_target, _run_name) in zip(targets, run_names):
+        print("Experiment Name:", _target)
+        print("Run name:", _run_name)
+        mlflow.set_experiment(_target)
+        with mlflow.start_run(run_name=_run_name):
+            for upper, delta_p, middle, delta_m, lower, column in zip(
+                uppers, deltas_plus, middles, deltas_minus, lowers, columns
+            ):
+                _log_metric(f"{column}.upper", upper)
+                _log_metric(f"{column}.delta_plus", delta_p)
+                _log_metric(f"{column}.middle", middle)
+                _log_metric(f"{column}.delta_minus", delta_m)
+                _log_metric(f"{column}.lowers", lower)
 
     simple_target = target + "-simple-" + "-".join(exp_settings)
     simple_target = simple_target.replace("_", "-").rstrip("-")
-    mlflow.set_experiment(simple_target)
-    print(simple_target, run_name)
-    with mlflow.start_run(run_name=run_name):
-        for middle, column in zip(
-            middles, columns
-        ):
-            _log_metric(f"{column}.middle", middle)
+    targets = [simple_target]
+    run_names = [run_name]
+    for (_target, _run_name) in zip(targets, run_names):
+        mlflow.set_experiment(_target)
+        print("Experiment Name:", _target)
+        print("Run name:", _run_name)
+        with mlflow.start_run(run_name=_run_name):
+            for middle, column in zip(
+                middles, columns
+            ):
+                _log_metric(f"{column}.middle", middle)
 
 
 if __name__ == '__main__':
