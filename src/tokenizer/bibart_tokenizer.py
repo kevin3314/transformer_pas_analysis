@@ -65,18 +65,17 @@ class BiBartTokenizeHandler(BiBartTokenizer, SpmMixin, TokenizeHandlerMeta):
         word_index = -1
         is_before_special = False
 
-        sentence = " ".join(words)
-        tokenized_sentence = self.tokenize(sentence)
+        tokens = [token for word in words for token in self.tokenize(word)]
 
         # # <s> token
         # all_tokens.append('<s>')
         # tok_to_orig_index.append(None)
         # is_intermediate_list.append(True)
 
-        if len(words) != _count_special_token(tokenized_sentence):
-            tokenized_sentence = _fix_wierd_tokenize(words, tokenized_sentence)
+        if len(words) != _count_special_token(tokens):
+            tokens = _fix_wierd_tokenize(words, tokens)
 
-        for word in tokenized_sentence:
+        for word in tokens:
             if word == SPM_SPECIAL_TOKEN:
                 # Single '▁'
                 assert not is_before_special
