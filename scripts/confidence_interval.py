@@ -86,7 +86,7 @@ def main():
     run_name += backbone_name + "-"
     run_name += "-".join(additional_names)
     run_name = run_name.rstrip("-")
-    run_name += "-" + "-".join(config_components[:3] + "-" + config_components[4])
+    run_name += "-" + "-".join(config_components[:3]) + "-" + config_components[4]
 
     full_target = full_target.replace("_", "-").rstrip("-")
     run_name = run_name.replace("_", "-").rstrip("-")
