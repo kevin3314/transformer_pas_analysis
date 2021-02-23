@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import os
 import logging
 from logging import Logger
@@ -13,7 +14,7 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 from kyoto_reader import KyotoReader, Document, ALL_EXOPHORS
 
-from .read_example import PasExample
+from .read_example import PasExample, PasExampleForEncDec
 from tokenizer import (
     BertTokenizeHandler,
     BartSPMTokenizeHandler,
@@ -37,6 +38,18 @@ class InputFeatures(NamedTuple):
     input_ids: List[int]
     input_mask: List[bool]
     segment_ids: List[int]
+    arguments_set: List[List[List[int]]]
+    overt_mask: List[List[List[int]]]
+    ng_token_mask: List[List[List[bool]]]
+    deps: List[List[int]]
+
+
+@dataclass
+class InputFeaturesForEncDec:
+    input_ids: List[int]
+    attention_mask: List[bool]
+    decoder_input_ids: List[int]
+    decoder_attention_mask: List[bool]
     arguments_set: List[List[List[int]]]
     overt_mask: List[List[List[int]]]
     ng_token_mask: List[List[List[bool]]]
@@ -331,3 +344,162 @@ class PASDataset(Dataset):
         deps = np.array(feature.deps)                    # (seq, seq)
         task = np.array(TASK_ID['pa'])                   # ()
         return input_ids, attention_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask
+
+
+class PASDatasetForEncDec(Dataset):
+    """Variant of PASDataset for encoder decoder architecture.
+
+    Example:
+        Special tokens in mBART is like:
+        Input to encoder: <s> hogehoge..</s>..hogehoge..</s><en_XX>
+        Input to decoder: <en_XX> <s> hogehoge..</s> ..hogehoge..</s>
+
+        Due to special tokens corrensponding with expohora/none, default shift function
+        does not work.
+    Args:
+        Dataset ([type]):
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _convert_example_to_feature(
+        self,
+        example: PasExampleForEncDec
+    ) -> InputFeaturesForEncDec:
+        """Convert PasExample to InputFeaturesForEncDec
+
+        Args:
+            example (PasExampleForEncDec): Example to convert
+
+        Returns:
+            InputFeaturesForEncDec: Result of batch
+        """
+
+        vocab_size = self.tokenizer.vocab_size
+        max_seq_length = self.max_seq_length
+        num_special_tokens = len(self.special_to_index)
+        num_relations = len(self.target_cases) + int(self.bridging) + int(self.coreference)
+
+        enc_tokens = example.enc_tokens
+        dec_tokens = example.dec_tokens
+        dec_tok_to_orig_index = example.dec_tok_to_orig_index
+        dec_orig_to_tok_index = example.dec_orig_to_tok_index
+        dec_is_intermediate_list = example.dec_is_intermediate_list
+
+        arguments_set: List[List[List[int]]] = []
+        candidates_set: List[List[List[int]]] = []
+        overts_set: List[List[List[int]]] = []
+        deps: List[List[int]] = []
+
+        # subword loop
+        for orig_index, is_intermediate in zip(dec_tok_to_orig_index, dec_is_intermediate_list):
+            # subsequent subword or [CLS] token or [SEP] token
+            if is_intermediate or orig_index is None:
+                arguments_set.append([[] for _ in range(num_relations)])
+                overts_set.append([[] for _ in range(num_relations)])
+                candidates_set.append([[] for _ in range(num_relations)])
+                deps.append([0] * max_seq_length)
+                continue
+
+            arguments: List[List[int]] = [[] for _ in range(num_relations)]
+            overts: List[List[int]] = [[] for _ in range(num_relations)]
+            for i, (rel, arg_strings) in enumerate(example.arguments_set[orig_index].items()):
+                for arg_string in arg_strings:
+                    # arg_string: 著者, 8%C, 15%O, 2, NULL, ...
+                    flag = None
+                    if arg_string[-2:] in ('%C', '%N', '%O'):
+                        flag = arg_string[-1]
+                        arg_string = arg_string[:-2]
+                    if arg_string in self.special_to_index:
+                        tok_index = self.special_to_index[arg_string]
+                    else:
+                        tok_index = dec_orig_to_tok_index[int(arg_string)]
+                    if rel in self.target_cases:
+                        if arg_string in self.target_exophors and 'zero' not in self.train_targets:
+                            continue
+                        if flag == 'C':
+                            overts[i].append(tok_index)
+                        if (flag == 'C' and 'overt' not in self.train_targets) or \
+                           (flag == 'N' and 'case' not in self.train_targets) or \
+                           (flag == 'O' and 'zero' not in self.train_targets):
+                            continue
+                    arguments[i].append(tok_index)
+
+            arguments_set.append(arguments)
+            overts_set.append(overts)
+
+            ddep = example.ddeps[orig_index]
+            deps.append([(0 if idx is None or ddep != example.dtids[idx] else 1) for idx in dec_tok_to_orig_index])
+            deps[-1] += [0] * (max_seq_length - len(dec_tok_to_orig_index))
+
+            # arguments_set が空のもの (助詞など) には candidates を設定しない
+            candidates: List[List[int]] = []
+            for case, arg_strings in example.arguments_set[orig_index].items():
+                if arg_strings:
+                    if case != '=':
+                        cands = [dec_orig_to_tok_index[dmid] for dmid in example.arg_candidates_set[orig_index]]
+                        specials = self.target_exophors + ['NULL']
+                    else:
+                        cands = [dec_orig_to_tok_index[dmid] for dmid in example.ment_candidates_set[orig_index]]
+                        specials = self.target_exophors + ['NA']
+                    cands += [self.special_to_index[special] for special in specials]
+                else:
+                    cands = []
+                candidates.append(cands)
+            candidates_set.append(candidates)
+
+        input_ids = self.tokenizer.convert_tokens_to_ids(enc_tokens)
+        decoder_input_ids = self.tokenizer.convert_tokens_to_ids(dec_tokens)
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real tokens are attended to.
+        attention_mask = [True] * len(input_ids)
+        decoder_attention_mask = [True] * len(decoder_input_ids)
+
+        # Zero-pad up to the sequence length (except for special tokens).
+        # On encoder-side
+        while len(input_ids) < max_seq_length:
+            input_ids.append(self.tokenizer.pad_id)
+            attention_mask.append(False)
+
+        # On encoder-side
+        while len(decoder_input_ids) < max_seq_length - num_special_tokens:
+            decoder_input_ids.append(self.tokenizer.pad_id)
+            decoder_attention_mask.append(False)
+            arguments_set.append([[] for _ in range(num_relations)])
+            overts_set.append([[] for _ in range(num_relations)])
+            candidates_set.append([[] for _ in range(num_relations)])
+            deps.append([0] * max_seq_length)
+
+        # add special tokens
+        for i in range(num_special_tokens):
+            decoder_input_ids.append(vocab_size + i)
+            decoder_attention_mask.append(True)
+            arguments_set.append([[] for _ in range(num_relations)])
+            overts_set.append([[] for _ in range(num_relations)])
+            candidates_set.append([[] for _ in range(num_relations)])
+            deps.append([0] * max_seq_length)
+
+        assert len(input_ids) == max_seq_length
+        assert len(attention_mask) == max_seq_length
+        assert len(decoder_input_ids) == max_seq_length
+        assert len(decoder_attention_mask) == max_seq_length
+        assert len(arguments_set) == max_seq_length
+        assert len(overts_set) == max_seq_length
+        assert len(candidates_set) == max_seq_length
+        assert len(deps) == max_seq_length
+
+        feature = InputFeaturesForEncDec(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            arguments_set=[[[int(x in args) for x in range(max_seq_length)] for args in arguments]
+                           for arguments in arguments_set],
+            overt_mask=[[[(x in overt) for x in range(max_seq_length)] for overt in overts]
+                           for overts in overts_set],
+            ng_token_mask=[[[(x in cands) for x in range(max_seq_length)] for cands in candidates]
+                           for candidates in candidates_set],  # False -> mask, True -> keep
+            deps=deps,
+        )
+
+        return feature
