@@ -42,6 +42,23 @@ def main(config: ConfigParser, args: argparse.Namespace):
     # get function handles of metrics
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
+    # freeze encoder's parameters if args.freeze_encoder is true
+    frozen_parameters = []
+    not_frozen_parameters = []
+    if args.freeze_encoder:
+        for name, p in model.named_parameters:
+            if "encoder" in name:
+                p.requires_grad = False
+                frozen_parameters.append(name)
+            else:
+                not_frozen_parameters.append(name)
+
+        # Log frozen/not frozen parameters
+        logger.info("Following parameters are frozen.")
+        logger.info(frozen_parameters)
+        logger.info("Following parameters are not frozen.")
+        logger.info(not_frozen_parameters)
+
     # build optimizer, learning rate scheduler
     trainable_named_params = filter(lambda x: x[1].requires_grad, model.named_parameters())
     no_decay = ('bias', 'LayerNorm.weight')
@@ -74,5 +91,7 @@ if __name__ == '__main__':
                         help='indices of GPUs to enable (default: "")')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed for initialization')
+    parser.add_argument("-f", '--freeze_encoder', action='store_true',
+                        help='Freeze encoder during training')
     parsed_args = parser.parse_args()
     main(ConfigParser.from_args(parsed_args), parsed_args)
