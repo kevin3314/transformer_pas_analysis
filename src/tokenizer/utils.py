@@ -34,9 +34,28 @@ class EncDecTokenizeHandlerMeta(TokenizeHandlerMeta):
 
 
 class SpmMixin:
-    def get_encoder_tokenized_tokens(
-            self, words: List[str]
-    ) -> Tuple[List[str], List[Optional[int]], List[int]]:
+    def tokenize_content_words(
+        self,
+        words: List[str],
+        all_tokens: List[str],
+        tok_to_orig_index: List[int],
+        orig_to_tok_index: List[int],
+        is_intermediate_list: List[bool],
+        remove_alone_special: bool = False
+    ) -> None:
+        """Process on words and append to several lists.
+
+        If remove_alone_special, single "▁" is removed except head one.
+        This option is for mBART, which does not employ morpheme split.
+
+        Args:
+            words (List[str]): Word to process.
+            all_tokens (List[str]): Tokens, including special ones.
+            tok_to_orig_index (List[int]): List from token idx to original word idx.
+            orig_to_tok_index (List[int]): List from original words idx to token.
+            is_intermediate_list (List[bool]): List of whether token in idx is intermediate or not
+            remove_alone_special (bool): Remove alone special token or not.
+        """
         SPM_SPECIAL_TOKEN = "▁"
 
         def _count_special_token(words):
@@ -77,24 +96,25 @@ class SpmMixin:
                         break
             return result
 
-        all_tokens = []
-        tok_to_orig_index = []
-        orig_to_tok_index = []
         word_index = -1
         is_before_special = False
+        tokens = [token for word in words for token in self.tokenize(word)]
 
-        sentence = " ".join(words)
-        tokenized_sentence = self.tokenize(sentence)
+        if len(words) != _count_special_token(tokens):
+            tokens = _fix_wierd_tokenize(words, tokens)
 
-        if len(words) != _count_special_token(tokenized_sentence):
-            tokenized_sentence = _fix_wierd_tokenize(words, tokenized_sentence)
-
-        for word in tokenized_sentence:
+        for i, word in enumerate(tokens):
             if word == SPM_SPECIAL_TOKEN:
                 # Single '▁'
                 assert not is_before_special
                 is_before_special = True
+
+                # If remove_alone_special and index is not 0, skip it
+                if remove_alone_special or i != 0:
+                    continue
                 tok_to_orig_index.append(None)
+                is_intermediate_list.append(True)
+
             elif is_before_special or word.startswith(SPM_SPECIAL_TOKEN):
                 # Token after single '▁' or '▁word'
                 # Head word
@@ -102,17 +122,14 @@ class SpmMixin:
                 word_index += 1
                 orig_to_tok_index.append(len(all_tokens))
                 tok_to_orig_index.append(word_index)
+                is_intermediate_list.append(False)
             else:
                 is_before_special = False
                 tok_to_orig_index.append(word_index)
+                is_intermediate_list.append(True)
+
+            # Unless (remove_alone_special and index is not 0), append token
             all_tokens.append(word)
-
-        assert (len(words) -
-                1 == word_index), f"{len(words) - 1} != {word_index}\n{words}"
-
-        is_intermediate_list = self.check_intermediate_tokens(all_tokens)
-
-        return all_tokens, tok_to_orig_index, orig_to_tok_index, is_intermediate_list
 
     # TODO: fix this function somehow
     # Example: '今日　は　雨　です' -> ['▁', '今日', '▁', 'は', '▁', '雨', '▁', 'です']
