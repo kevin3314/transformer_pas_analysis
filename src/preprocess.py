@@ -86,7 +86,7 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                 if line.strip() == 'EOS':
                     blist = BList(buff)
                     did2sids[did].append(blist.sid)
-                    all_tokens, *_ = tokenizer.get_tokenized_tokens(list(m.midasi for m in blist.mrph_list()))
+                    all_tokens, *_ = tokenizer.get_encoder_tokenized_tokens(list(m.midasi for m in blist.mrph_list()))
                     max_all_tokens_len = max(max_all_tokens_len, len(all_tokens))
                     did2cumlens[did].append(
                         did2cumlens[did][-1] + len(all_tokens)

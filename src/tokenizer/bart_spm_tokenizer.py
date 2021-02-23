@@ -3,10 +3,10 @@ from typing import Tuple, List, Optional
 from transformers import BartSPMTokenizer
 import mojimoji
 
-from .utils import SpmMixin, TokenizeHandlerMeta
+from .utils import SpmMixin, EncDecTokenizeHandlerMeta
 
 
-class BartSPMTokenizeHandler(BartSPMTokenizer, SpmMixin, TokenizeHandlerMeta):
+class BartSPMTokenizeHandler(BartSPMTokenizer, SpmMixin, EncDecTokenizeHandlerMeta):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pad_id = self._convert_token_to_id(self.pad_token)
@@ -15,7 +15,7 @@ class BartSPMTokenizeHandler(BartSPMTokenizer, SpmMixin, TokenizeHandlerMeta):
     def pad_id(self) -> int:
         return self._pad_id
 
-    def get_tokenized_tokens(
+    def get_encoder_tokenized_tokens(
             self, words: List[str]
     ) -> Tuple[List[str], List[Optional[int]], List[int]]:
         """TODO: Insert </s> between each sentences.
@@ -112,3 +112,9 @@ class BartSPMTokenizeHandler(BartSPMTokenizer, SpmMixin, TokenizeHandlerMeta):
         assert (len(words) -
                 1 == word_index), f"{len(words) - 1} != {word_index}\n{words}"
         return all_tokens, tok_to_orig_index, orig_to_tok_index, is_intermediate_list
+
+    def get_decoder_tokenized_tokens(
+        self,
+        words: List[str]
+    ) -> Tuple[List[str], List[Optional[int]], List[int]]:
+        return self.get_encoder_tokenized_tokens(words)

@@ -3,10 +3,10 @@ from typing import Tuple, List, Optional
 from transformers import MBartTokenizer
 import mojimoji
 
-from .utils import SpmMixin, TokenizeHandlerMeta
+from .utils import SpmMixin, EncDecTokenizeHandlerMeta
 
 
-class MBartTokenizerHandler(MBartTokenizer, SpmMixin, TokenizeHandlerMeta):
+class MBartTokenizerHandler(MBartTokenizer, SpmMixin, EncDecTokenizeHandlerMeta):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, src_lang='ja_XX', **kwargs)
         self._pad_id = self._convert_token_to_id(self.pad_token)
@@ -15,7 +15,7 @@ class MBartTokenizerHandler(MBartTokenizer, SpmMixin, TokenizeHandlerMeta):
     def pad_id(self) -> int:
         return self._pad_id
 
-    def get_tokenized_tokens(
+    def get_encoder_tokenized_tokens(
             self, words: List[str]
     ) -> Tuple[List[str], List[Optional[int]], List[int]]:
         SPM_SPECIAL_TOKEN = "▁"
@@ -106,3 +106,9 @@ class MBartTokenizerHandler(MBartTokenizer, SpmMixin, TokenizeHandlerMeta):
         is_intermediate_list.append(True)
 
         return all_tokens, tok_to_orig_index, orig_to_tok_index, is_intermediate_list
+
+    def get_decoder_tokenized_tokens(
+        self,
+        words: List[str]
+    ) -> Tuple[List[str], List[Optional[int]], List[int]]:
+        return self.get_encoder_tokenized_tokens(words)

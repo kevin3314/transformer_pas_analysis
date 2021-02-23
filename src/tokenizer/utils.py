@@ -6,7 +6,7 @@ import mojimoji
 
 class TokenizeHandlerMeta(ABC):
     @abstractmethod
-    def get_tokenized_tokens(
+    def get_encoder_tokenized_tokens(
             self, words: List[str]
     ) -> Tuple[List[str], List[Optional[int]], List[int]]:
         pass
@@ -25,8 +25,16 @@ class TokenizeHandlerMeta(ABC):
         pass
 
 
+class EncDecTokenizeHandlerMeta(TokenizeHandlerMeta):
+    @abstractmethod
+    def get_decoder_tokenized_tokens(
+            self, words: List[str]
+    ) -> Tuple[List[str], List[Optional[int]], List[int]]:
+        pass
+
+
 class SpmMixin:
-    def get_tokenized_tokens(
+    def get_encoder_tokenized_tokens(
             self, words: List[str]
     ) -> Tuple[List[str], List[Optional[int]], List[int]]:
         SPM_SPECIAL_TOKEN = "▁"

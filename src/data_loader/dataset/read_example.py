@@ -79,7 +79,7 @@ class PasExample:
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
 
-        self.tokens, self.tok_to_orig_index, self.orig_to_tok_index, self.is_intermediate_list = tokenizer.get_tokenized_tokens(self.words)
+        self.tokens, self.tok_to_orig_index, self.orig_to_tok_index, self.is_intermediate_list = tokenizer.get_encoder_tokenized_tokens(self.words)
 
     def _get_args(self,
                   dmid: int,

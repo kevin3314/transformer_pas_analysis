@@ -14,7 +14,7 @@ class BertTokenizeHandler(BertTokenizer, TokenizeHandlerMeta):
     def pad_id(self) -> int:
         return self._pad_id
 
-    def get_tokenized_tokens(
+    def get_encoder_tokenized_tokens(
             self, words: List[str]
     ) -> Tuple[List[str], List[Optional[int]], List[int]]:
         all_tokens = []
