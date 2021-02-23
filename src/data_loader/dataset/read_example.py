@@ -6,7 +6,7 @@ from transformers import BertTokenizer
 from kyoto_reader import Document, BasePhrase, BaseArgument, Argument, SpecialArgument, UNCERTAIN
 
 from utils.util import is_pas_target, is_bridging_target, is_coreference_target
-from tokenizer import TokenizeHandlerMeta
+from tokenizer import TokenizeHandlerMeta, EncDecTokenizeHandlerMeta
 
 logger = logging.getLogger(__file__)
 
@@ -26,16 +26,16 @@ class PasExample:
         self.ddeps: List[int] = []  # dmid -> dmid which has dep
         self.doc_id: str = ''
 
-    def load(self,
-             document: Document,
-             cases: List[str],
-             exophors: List[str],
-             coreference: bool,
-             bridging: bool,
-             kc: bool,
-             pas_targets: List[str],
-             tokenizer: TokenizeHandlerMeta,
-             ) -> None:
+    def _load(
+        self,
+        document: Document,
+        cases: List[str],
+        exophors: List[str],
+        coreference: bool,
+        bridging: bool,
+        kc: bool,
+        pas_targets: List[str]
+    ):
         self.doc_id = document.doc_id
         process_all = (kc is False) or (document.doc_id.split('-')[-1] == '00')
         last_sent = document.sentences[-1] if len(document) > 0 else None
@@ -79,6 +79,25 @@ class PasExample:
                     self.arg_candidates_set.append(arg_candidates)
                     self.ment_candidates_set.append(ment_candidates)
 
+    def load(self,
+             document: Document,
+             cases: List[str],
+             exophors: List[str],
+             coreference: bool,
+             bridging: bool,
+             kc: bool,
+             pas_targets: List[str],
+             tokenizer: TokenizeHandlerMeta,
+             ) -> None:
+        self._load(
+            document,
+            cases,
+            exophors,
+            coreference,
+            bridging,
+            kc,
+            pas_targets
+        )
         self.tokens, self.tok_to_orig_index, self.orig_to_tok_index, self.is_intermediate_list = tokenizer.get_encoder_tokenized_tokens(self.words)
 
     def _get_args(self,
@@ -189,3 +208,32 @@ class PasExample:
             pad = ' ' * (5 - len(word)) * 2
             string += f'{i:02} {word}{pad}({" ".join(f"{case}:{arg}" for case, arg in args.items())})\n'
         return string
+
+
+class PasExampleForEncDec(PasExample):
+    """Variant of PasExample for encoder-decoder arch.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def load(self,
+             document: Document,
+             cases: List[str],
+             exophors: List[str],
+             coreference: bool,
+             bridging: bool,
+             kc: bool,
+             pas_targets: List[str],
+             tokenizer: EncDecTokenizeHandlerMeta,
+             ) -> None:
+        self._load(
+            document,
+            cases,
+            exophors,
+            coreference,
+            bridging,
+            kc,
+            pas_targets
+        )
+        self.enc_tokens, self.enc_tok_to_orig_index, self.enc_orig_to_tok_index, self.enc_is_intermediate_list = tokenizer.get_encoder_tokenized_tokens(self.words)
+        self.dec_tokens, self.dec_tok_to_orig_index, self.dec_orig_to_tok_index, self.dec_is_intermediate_list = tokenizer.get_decoder_tokenized_tokens(self.words)
