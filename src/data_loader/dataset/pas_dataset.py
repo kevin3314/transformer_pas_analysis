@@ -495,11 +495,23 @@ class PASDatasetForEncDec(Dataset):
             decoder_attention_mask=decoder_attention_mask,
             arguments_set=[[[int(x in args) for x in range(max_seq_length)] for args in arguments]
                            for arguments in arguments_set],
-            overt_mask=[[[(x in overt) for x in range(max_seq_length)] for overt in overts]
-                           for overts in overts_set],
+            overt_mask=[[[(x in overt) for x in range(max_seq_length)] for overt in overts] for overts in overts_set],
             ng_token_mask=[[[(x in cands) for x in range(max_seq_length)] for cands in candidates]
                            for candidates in candidates_set],  # False -> mask, True -> keep
             deps=deps,
         )
 
         return feature
+
+    def __getitem__(self, idx) -> tuple:
+        feature = self._convert_example_to_feature(self.examples[idx])
+        input_ids = np.array(feature.input_ids)          # (seq)
+        attention_mask = np.array(feature.attention_mask)    # (seq)
+        decoder_input_ids = np.array(feature.decoder_input_ids)              # (seq)
+        decoder_attention_mask = np.array(feature.decoder_attention_mask)    # (seq)
+        arguments_ids = np.array(feature.arguments_set)  # (seq, case, seq)
+        overt_mask = np.array(feature.overt_mask)        # (seq, case, seq)
+        ng_token_mask = np.array(feature.ng_token_mask)  # (seq, case, seq)
+        deps = np.array(feature.deps)                    # (seq, seq)
+        task = np.array(TASK_ID['pa'])                   # ()
+        return input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, ng_token_mask, arguments_ids, deps, task, overt_mask
