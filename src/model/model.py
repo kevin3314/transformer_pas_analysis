@@ -106,15 +106,38 @@ class BaselineBartModel(nn.Module):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
+                decoder_input_ids: torch.Tensor,       # (b, seq)
+                decoder_attention_mask: torch.Tensor,  # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
-        mask = get_mask(attention_mask, ng_token_mask)
+        mask = get_mask(decoder_attention_mask, ng_token_mask)
+
         # (b, seq, hid)
-        result = self.mbart(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask, decoder_attention_mask=attention_mask, use_cache=False, return_dict=True, output_hidden_states=True)
+        result = None
+        if decoder_input_ids is not None or decoder_attention_mask is not None:
+            assert decoder_input_ids is not None and decoder_attention_mask is not None
+            result = self.mbart(
+                input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                use_cache=False,
+                return_dict=True,
+                output_hidden_states=True
+            )
+        else:
+            result = self.mbart(
+                input_ids,
+                decoder_input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=attention_mask,
+                use_cache=False,
+                return_dict=True,
+                output_hidden_states=True
+            )
         sequence_output = result.decoder_hidden_states[-1]  # Decoder's last hidden state?
 
         h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
@@ -158,15 +181,38 @@ class BaselineMBartModel(nn.Module):
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
+                decoder_input_ids: torch.Tensor,       # (b, seq)
+                decoder_attention_mask: torch.Tensor,  # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
-        mask = get_mask(attention_mask, ng_token_mask)
+        mask = get_mask(decoder_attention_mask, ng_token_mask)
+
         # (b, seq, hid)
-        result = self.mbart(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask, decoder_attention_mask=attention_mask, use_cache=False, return_dict=True, output_hidden_states=True)
+        result = None
+        if decoder_input_ids is not None or decoder_attention_mask is not None:
+            assert decoder_input_ids is not None and decoder_attention_mask is not None
+            result = self.mbart(
+                input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                use_cache=False,
+                return_dict=True,
+                output_hidden_states=True
+            )
+        else:
+            result = self.mbart(
+                input_ids,
+                decoder_input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=attention_mask,
+                use_cache=False,
+                return_dict=True,
+                output_hidden_states=True
+            )
         sequence_output = result.decoder_hidden_states[-1]  # Decoder's last hidden state?
 
         h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
@@ -199,29 +245,52 @@ class BaselineBiBartModel(nn.Module):
         # BiBart is same as MBart; The only purpose for this is to distinguish them by name.
         # hf_config_path: str = str(Path(pretrained_path, "config.json"))
         # config = MBartConfig.from_json_file(hf_config_path)
-        self.mbart: BartForConditionalGeneration = BartForConditionalGeneration.from_pretrained(pretrained_path)
-        self.mbart.resize_token_embeddings(vocab_size)
+        self.bart: BartForConditionalGeneration = BartForConditionalGeneration.from_pretrained(pretrained_path)
+        self.bart.resize_token_embeddings(vocab_size)
         self.dropout = nn.Dropout(dropout)
 
         self.num_case = num_case + int(coreference)
-        mbart_hidden_size = self.mbart.config.hidden_size
+        bart_hidden_size = self.bart.config.hidden_size
 
-        self.l_prd = nn.Linear(mbart_hidden_size, mbart_hidden_size * self.num_case)
-        self.l_arg = nn.Linear(mbart_hidden_size, mbart_hidden_size * self.num_case)
-        self.out = nn.Linear(mbart_hidden_size, 1, bias=False)
+        self.l_prd = nn.Linear(bart_hidden_size, bart_hidden_size * self.num_case)
+        self.l_arg = nn.Linear(bart_hidden_size, bart_hidden_size * self.num_case)
+        self.out = nn.Linear(bart_hidden_size, 1, bias=False)
 
     def forward(self,
                 input_ids: torch.Tensor,       # (b, seq)
                 attention_mask: torch.Tensor,  # (b, seq)
-                segment_ids: torch.Tensor,     # (b, seq)
+                decoder_input_ids: torch.Tensor,       # (b, seq)
+                decoder_attention_mask: torch.Tensor,  # (b, seq)
                 ng_token_mask: torch.Tensor,   # (b, seq, case, seq)
                 target: torch.Tensor,          # (b, seq, case, seq)
                 **_
                 ) -> Tuple[torch.Tensor, ...]:  # (), (b, seq, case, seq)
         batch_size, sequence_len = input_ids.size()
-        mask = get_mask(attention_mask, ng_token_mask)
+        mask = get_mask(decoder_attention_mask, ng_token_mask)
+
         # (b, seq, hid)
-        result = self.mbart(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask, decoder_attention_mask=attention_mask, use_cache=False, return_dict=True, output_hidden_states=True)
+        result = None
+        if decoder_input_ids is not None or decoder_attention_mask is not None:
+            assert decoder_input_ids is not None and decoder_attention_mask is not None
+            result = self.bart(
+                input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+                use_cache=False,
+                return_dict=True,
+                output_hidden_states=True
+            )
+        else:
+            result = self.bart(
+                input_ids,
+                decoder_input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=attention_mask,
+                use_cache=False,
+                return_dict=True,
+                output_hidden_states=True
+            )
         sequence_output = result.decoder_hidden_states[-1]  # Decoder's last hidden state?
 
         h_p = self.l_prd(self.dropout(sequence_output))  # (b, seq, case*hid)
