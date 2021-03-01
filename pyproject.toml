@@ -11,7 +11,7 @@ torch = "1.6.0"
 transformers = "4.1.1"
 pyknp = { git = "https://github.com/ku-nlp/pyknp.git", branch = "master" }
 textformatting = { git = "https://github.com/ku-nlp/python-textformatting.git", branch = "master" }
-kyoto-reader = { git = "https://github.com/ku-nlp/kyoto-reader.git", branch = "master" }
+kyoto-reader = "2.1.0"
 numpy = "^1.18"
 tqdm = "^4.43"
 flask = "^1.1"

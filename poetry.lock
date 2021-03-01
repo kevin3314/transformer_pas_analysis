@@ -765,7 +765,7 @@ description = "A KWDLC and KyotoCorpus parser"
 name = "kyoto-reader"
 optional = false
 python-versions = "!=3.7.0,!=3.7.1,>=3.7"
-version = "2.0.1"
+version = "2.1.0"
 
 [package.dependencies]
 jaconv = "*"
@@ -774,11 +774,6 @@ pyknp = "*"
 
 [package.extras]
 testing = ["pytest"]
-
-[package.source]
-reference = "master"
-type = "git"
-url = "https://github.com/ku-nlp/kyoto-reader.git"
 
 [[package]]
 category = "main"
@@ -1883,7 +1878,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["pytest (>=3.5,<3.7.3 || >3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pytest-cov", "jaraco.test (>=3.2.0)", "jaraco.itertools", "func-timeout", "pytest-black (>=0.3.7)", "pytest-mypy"]
 
 [metadata]
-content-hash = "60982781dcf002170d55e6e834e0152601bff176fa87ad0b1a7e0441a4ebfe56"
+content-hash = "a3dc67e5718d30ad20cba1a9ab403bfc7a3c33392c9c5e48fb89b15ed7ad42c2"
 python-versions = "^3.7.2"
 
 [metadata.files]
@@ -2240,7 +2235,9 @@ jupyterlab-server = [
     {file = "jupyterlab_server-1.2.0-py3-none-any.whl", hash = "sha256:55d256077bf13e5bc9e8fbd5aac51bef82f6315111cec6b712b9a5ededbba924"},
     {file = "jupyterlab_server-1.2.0.tar.gz", hash = "sha256:5431d9dde96659364b7cc877693d5d21e7b80cea7ae3959ecc2b87518e5f5d8c"},
 ]
-kyoto-reader = []
+kyoto-reader = [
+    {file = "kyoto-reader-2.1.0.zip", hash = "sha256:0c9779f147420e95837297a2fd761624b410e61b7f382aa4e71d13719030cbcf"},
+]
 mako = [
     {file = "Mako-1.1.4.tar.gz", hash = "sha256:17831f0b7087c313c0ffae2bcbbd3c1d5ba9eeac9c38f2eb7b50e8c99fe9d5ab"},
 ]
