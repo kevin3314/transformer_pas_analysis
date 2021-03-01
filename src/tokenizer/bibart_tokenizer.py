@@ -1,7 +1,6 @@
 from typing import Tuple, List, Optional
 
 from transformers import BiBartTokenizer
-import mojimoji
 
 from .utils import EncDecTokenizeHandlerMeta, SpmMixin
 

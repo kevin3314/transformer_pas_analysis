@@ -5,7 +5,7 @@ import json
 import tempfile
 from pathlib import Path
 import _pickle as cPickle
-from typing import List, Dict
+from typing import List, Dict, Union
 from collections import defaultdict, namedtuple
 from multiprocessing import Pool
 
@@ -18,7 +18,8 @@ from tokenizer import (
     BiBartTokenizeHandler,
     T5TokenizeHandler,
     MBartTokenizerHandler,
-    TokenizeHandlerMeta
+    TokenizeHandlerMeta,
+    EncDecTokenizeHandlerMeta
 )
 
 from data_loader.dataset.commonsense_dataset import CommonsenseExample
@@ -39,7 +40,7 @@ DocumentDivideUnit = namedtuple("DocumentDivideUnit", ["did", "idx", "start", "e
 def process(input_path: Path, output_path: Path, corpus: str) -> int:
     output_path.mkdir(exist_ok=True)
     reader = KyotoReader(input_path, extract_nes=False)
-    for document in tqdm(reader.process_all_documents(backend="multiprocessing"), desc=corpus, total=len(reader)):
+    for document in tqdm(reader.process_all_documents(), desc=corpus, total=len(reader)):
         with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
             cPickle.dump(document, f)
     return len(reader)
@@ -65,7 +66,12 @@ def write_partial_document(
         fout.write(''.join(sid2knp[sid] for sid in sids[start:end]))  # start から end まで書き出し
 
 
-def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokenizer: TokenizeHandlerMeta):
+def split_kc(
+    input_dir: Path,
+    output_dir: Path,
+    max_subword_length: int,
+    tokenizer: Union[TokenizeHandlerMeta, EncDecTokenizeHandlerMeta]
+):
     """
     各文書を，tokenize したあとの長さが max_subword_length 以下になるように複数の文書に分割する．
     1文に分割しても max_subword_length を超えるような長い文はそのまま出力する
@@ -86,10 +92,20 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                 if line.strip() == 'EOS':
                     blist = BList(buff)
                     did2sids[did].append(blist.sid)
-                    all_tokens, *_ = tokenizer.get_encoder_tokenized_tokens(list(m.midasi for m in blist.mrph_list()))
-                    max_all_tokens_len = max(max_all_tokens_len, len(all_tokens))
+                    current_all_token_length = 0
+                    midasi_list = list(m.midasi for m in blist.mrph_list())
+                    if isinstance(tokenizer, EncDecTokenizeHandlerMeta):
+                        enc_tokens, *_ = tokenizer.get_encoder_tokenized_tokens(midasi_list)
+                        dec_tokens, *_ = tokenizer.get_decoder_tokenized_tokens(midasi_list)
+                        current_all_token_length = max(
+                            len(enc_tokens), len(dec_tokens)
+                        )
+                    else:
+                        enc_tokens, *_ = tokenizer.get_encoder_tokenized_tokens(midasi_list)
+                        current_all_token_length = len(enc_tokens)
+                    max_all_tokens_len = max(max_all_tokens_len, current_all_token_length)
                     did2cumlens[did].append(
-                        did2cumlens[did][-1] + len(all_tokens)
+                        did2cumlens[did][-1] + current_all_token_length
                         # did2cumlens[did][-1] + len(tokenizer.tokenize(' '.join(m.midasi for m in blist.mrph_list())))
                     )
                     sid2knp[blist.sid] = buff
@@ -99,7 +115,6 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
     # assert max_all_tokens_len <= max_subword_length
     # if max_all_tokens_len > max_subword_length:
     #     raise ValueError(f"max_tokens_length exceeded max_subword_length\n{max_all_tokens_len}>{max_subword_length}")
-    document_divide_unit_list = []
     for did, sids in did2sids.items():
         cum: List[int] = did2cumlens[did]
         end = 1
@@ -115,28 +130,16 @@ def split_kc(input_dir: Path, output_dir: Path, max_subword_length: int, tokeniz
                 start += 1
                 if start == end - 1:
                     break
-            document_divide_unit_list.append(
-                DocumentDivideUnit(did, idx, start, end)
-            )
-            # with output_dir.joinpath(f'{did}-{idx:02}.knp').open('wt') as fout:
-            #     fout.write(''.join(sid2knp[sid] for sid in sids[start:end]))  # start から end まで書き出し
+            with output_dir.joinpath(f'{did}-{idx:02}.knp').open('wt') as fout:
+                fout.write(''.join(sid2knp[sid] for sid in sids[start:end]))  # start から end まで書き出し
             idx += 1
             end += 1
-
-    _write_partial_document = partial(
-        write_partial_document,
-        did2sids=did2sids,
-        sid2knp=sid2knp,
-        output_dir=output_dir
-    )
-    with Pool() as pool:
-        list(pool.imap(_write_partial_document, document_divide_unit_list))
 
 
 def process_kc(input_path: Path,
                output_path: Path,
                max_subword_length: int,
-               tokenizer: TokenizeHandlerMeta,
+               tokenizer: Union[TokenizeHandlerMeta, EncDecTokenizeHandlerMeta],
                split: bool = False
                ) -> int:
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -150,7 +153,7 @@ def process_kc(input_path: Path,
         print(list(input_path.iterdir()))
         output_path.mkdir(exist_ok=True)
         reader = KyotoReader(input_path, extract_nes=False, did_from_sid=False)
-        for document in tqdm(reader.process_all_documents(backend="multiprocessing"), desc='kc', total=len(reader)):
+        for document in tqdm(reader.process_all_documents(), desc='kc', total=len(reader)):
             with output_path.joinpath(document.doc_id + '.pkl').open(mode='wb') as f:
                 cPickle.dump(document, f)
 
