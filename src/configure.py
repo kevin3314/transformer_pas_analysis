@@ -74,6 +74,7 @@ def main() -> None:
                         help='you can skip saving of initial checkpoints, which reduces writing overhead')
     parser.add_argument('--corpus', choices=['kwdlc', 'kc', 'fuman'], default=['kwdlc', 'kc'], nargs='*',
                         help='corpus to use in training')
+    parser.add_argument('--is-encoder-decoder', action='store_true', help='Model is encoder-decoder or not')
     parser.add_argument('--train-target', choices=['overt', 'case', 'zero'], default=['case', 'zero'], nargs='*',
                         help='dependency type to train')
     parser.add_argument('--pas-target', choices=['none', 'pred', 'noun', 'all'], default=['pred'], nargs='*',
@@ -166,8 +167,14 @@ def main() -> None:
             if conditional_model == 'atn':
                 arch['args'].update({'atn_target': atn_target})
 
+        dataset_cls_name: str = ''
+        if args.is_encoder_decoder:
+            dataset_cls_name = "PASDatasetForEncDec"
+        else:
+            dataset_cls_name = "PASDataset"
+
         dataset = {
-            'type': 'PASDataset',
+            'type': dataset_cls_name,
             'args': {
                 'path': None,
                 'cases': cases,
@@ -231,8 +238,14 @@ def main() -> None:
             test_commonsense_dataset['args']['path'] = str(data_root / 'commonsense' / 'test.pkl')
             test_datasets['commonsense'] = test_commonsense_dataset
 
+        dataloader_cls_name: str = ''
+        if args.is_encoder_decoder:
+            dataloader_cls_name = "PASDataForEncDecLoader"
+        else:
+            dataloader_cls_name = "PASDataLoader"
+
         data_loader = {
-            'type': 'PASDataLoader',
+            'type': dataloader_cls_name,
             'args': {
                 'batch_size': args.batch_size,
                 'shuffle': None,
