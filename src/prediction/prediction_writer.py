@@ -11,7 +11,7 @@ from pyknp import KNP
 from kyoto_reader import Document, Pas, BaseArgument, Argument, SpecialArgument, BasePhrase
 
 from data_loader.dataset import PASDataset
-from data_loader.dataset.read_example import PasExample
+from data_loader.dataset.read_example import PasExample, PasExampleForEncDec
 
 
 class PredictionKNPWriter:
@@ -30,7 +30,7 @@ class PredictionKNPWriter:
                  logger: Logger,
                  use_knp_overt: bool = True,
                  ) -> None:
-        self.examples: List[PasExample] = dataset.examples
+        self.examples: List[Union[PasExample, PasExampleForEncDec]] = dataset.examples
         self.cases: List[str] = dataset.target_cases
         self.bridging: bool = dataset.bridging
         self.coreference: bool = dataset.coreference
@@ -128,7 +128,7 @@ class PredictionKNPWriter:
 
     def _rewrite_rel(self,
                      knp_lines: List[str],
-                     example: PasExample,
+                     example: Union[PasExample, PasExampleForEncDec],
                      arguments_set: List[List[int]],  # (max_seq_len, cases)
                      document: Document,
                      ) -> List[str]:
@@ -199,7 +199,7 @@ class PredictionKNPWriter:
 
     def _rel_string(self,
                     bp: BasePhrase,
-                    example: PasExample,
+                    example: Union[PasExample, PasExampleForEncDec],
                     arguments_set: List[List[int]],  # (max_seq_len, cases)
                     document: Document,
                     overt_dict: Dict[str, int],
@@ -209,7 +209,13 @@ class PredictionKNPWriter:
         assert len(example.arguments_set) == len(dmid2bp)
         for mrph in bp.mrph_list():
             dmid: int = document.mrph2dmid[mrph]
-            token_index: int = example.orig_to_tok_index[dmid]
+            token_index: int = 0
+            if isinstance(example, PasExampleForEncDec):
+                token_index: int = example.dec_orig_to_tok_index[dmid]
+            elif isinstance(example, PasExample):
+                token_index: int = example.orig_to_tok_index[dmid]
+            else:
+                raise NotImplementedError(f"example should be instance of PasExample or PasExampleForEncDec. Got {type(example)}")
             arguments: List[int] = arguments_set[token_index]
             # 助詞などの非解析対象形態素については gold_args が空になっている
             # inference時、解析対象形態素は ['NULL'] となる
@@ -229,7 +235,12 @@ class PredictionKNPWriter:
                     continue
                 else:
                     # normal
-                    prediction_dmid = example.tok_to_orig_index[argument]
+                    if isinstance(example, PasExampleForEncDec):
+                        prediction_dmid = example.dec_tok_to_orig_index[argument]
+                    elif isinstance(example, PasExample):
+                        prediction_dmid = example.tok_to_orig_index[argument]
+                    else:
+                        raise NotImplementedError(f"example should be instance of PasExample or PasExampleForEncDec. Got {type(example)}")
                     if prediction_dmid is None:
                         # [SEP] or [CLS]
                         self.logger.warning("Choose [SEP] as an argument. Tentatively, change it to NULL.")

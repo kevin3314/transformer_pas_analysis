@@ -25,7 +25,7 @@ class PASDataLoader(DataLoader):
         super().__init__(**init_kwargs)
 
 
-class PASDatasetForEncDecLoader(DataLoader):
+class PASDataForEncDecLoader(DataLoader):
     def __init__(self,
                  dataset: PASDatasetForEncDec,
                  batch_size: int,

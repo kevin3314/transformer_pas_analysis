@@ -73,7 +73,7 @@ class PASDataset(Dataset):
                  logger=None,
                  kc_joined_path: Optional[str] = None,
                  ) -> None:
-        self.reader = KyotoReader(Path(path), extract_nes=False)
+        self.reader = KyotoReader(Path(path), extract_nes=False, n_jobs=4)
         self.target_cases: List[str] = [c for c in cases if c in self.reader.target_cases and c != 'ノ']
         self.target_exophors: List[str] = [e for e in exophors if e in ALL_EXOPHORS]
         self.coreference: bool = coreference
@@ -346,7 +346,7 @@ class PASDataset(Dataset):
         return input_ids, attention_mask, segment_ids, ng_token_mask, arguments_ids, deps, task, overt_mask
 
 
-class PASDatasetForEncDec(Dataset):
+class PASDatasetForEncDec(PASDataset):
     """Variant of PASDataset for encoder decoder architecture.
 
     Example:
@@ -361,6 +361,40 @@ class PASDatasetForEncDec(Dataset):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def _load(self, documents: List[Document], path: str) -> List[PasExampleForEncDec]:
+        examples: List[PasExampleForEncDec] = []
+        load_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ and 'BPA_OVERWRITE_CACHE' not in os.environ)
+        save_cache: bool = ('BPA_DISABLE_CACHE' not in os.environ)
+        bpa_cache_dir: Path = Path(os.environ.get('BPA_CACHE_DIR', f'/data/{os.environ["USER"]}/bpa_cache'))
+        for document in tqdm(documents, desc='processing documents'):
+            hash_ = self._hash(document, path, self.target_cases, self.target_exophors, self.coreference, self.bridging,
+                               self.kc, self.pas_targets, self.train_targets, str(self.pretrained_path))
+            example_cache_path = bpa_cache_dir / hash_ / f'{document.doc_id}.pkl'
+            if example_cache_path.exists() and load_cache:
+                with example_cache_path.open('rb') as f:
+                    example = cPickle.load(f)
+            else:
+                example = PasExampleForEncDec()
+                example.load(document,
+                             cases=self.target_cases,
+                             exophors=self.target_exophors,
+                             coreference=self.coreference,
+                             bridging=self.bridging,
+                             kc=self.kc,
+                             pas_targets=self.pas_targets,
+                             tokenizer=self.tokenizer)
+                if save_cache:
+                    example_cache_path.parent.mkdir(exist_ok=True, parents=True)
+                    with example_cache_path.open('wb') as f:
+                        cPickle.dump(example, f)
+
+            # ignore too long document
+            if len(example.tokens) > self.max_seq_length - len(self.special_to_index):
+                continue
+
+            examples.append(example)
+        return examples
 
     def _convert_example_to_feature(
         self,
